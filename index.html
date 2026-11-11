@@ -136,6 +136,32 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(190px,1fr) au
 
 #tip{position:fixed;z-index:60;pointer-events:none;background:#3b3127;color:#fdf7ec;font-size:13px;line-height:1.4;padding:7px 10px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.25);max-width:300px;opacity:0;transition:opacity .12s}
 #tip b{color:#f0b183}
+
+/* Narrow screens (phone, tablet portrait): stack the board so the room is full width
+   with the map's aspect ratio, then the panels below it. Desktop (>=801px) is unchanged. */
+@media (max-width: 800px) {
+  html, body { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
+  body { height: auto; }
+  header { flex-shrink: 0; }
+  #howbtn { margin-left: 0; }
+  .pill, #preset { min-height: 44px; padding: 8px 14px; font-size: 15px; }
+  #evbtns .pill, .acts .pill { min-height: 44px; }
+  .toggle { font-size: 15px; min-height: 44px; }
+  .toggle input { width: 20px; height: 20px; }
+  main { display: flex; flex-direction: column; flex: none; overflow: visible; min-height: 0; }
+  .dash { overflow: visible; flex: none; min-height: auto; }
+  #mapcard { grid-column: auto; grid-row: auto; width: 100%; order: 0; }
+  main > .dash { order: 1; }
+  #strip { display: flex; flex-direction: column; gap: 8px; order: 2; overflow: visible; }
+  #actcard, #logcard { grid-column: auto; grid-row: auto; overflow: visible; min-height: auto; }
+  #mapwrap { flex: none; width: 100%; }
+  #cv { max-width: 100%; }
+  #pnote { white-space: normal; }
+  #log { overflow: visible; flex: none; }
+  #log li { white-space: normal; }
+  #sel { overflow: visible; flex: none; min-height: auto; }
+  #furncard, #furn { overflow: visible; }
+}
 </style></head><body>
 <header>
  <div class="brand"><svg width="25" height="25" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="64" r="21" fill="#c0693f"/><ellipse cx="22" cy="40" rx="9" ry="11" fill="#c0693f"/><ellipse cx="40" cy="22" rx="9" ry="11" fill="#c0693f"/><ellipse cx="61" cy="22" rx="9" ry="11" fill="#c0693f"/><ellipse cx="79" cy="40" rx="9" ry="11" fill="#c0693f"/></svg>Whisker Hall</div>
@@ -1506,8 +1532,26 @@ function newColony(seed) {
 const SIDE_MAX = 430;
 const sideMin = w => (w < 1200 ? 190 : w < 1500 ? 200 : 236);
 let fitted = null;
+function isNarrow() { return window.matchMedia('(max-width: 800px)').matches; }
+function applyCanvas(w, h) {
+  dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  W = w; H = h; S = w / sim.map.W; bg = null;
+}
 function fitCanvas() {
   const main = document.querySelector('main'), card = $('mapcard'), wrap = $('mapwrap');
+  const aspect = sim.map.W / sim.map.H;
+  if (isNarrow()) {
+    // Full width of the room card; height follows the map aspect. The page scrolls for the panels.
+    const cs = getComputedStyle(card);
+    const availW = Math.max(120, Math.floor(card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)));
+    const w = availW, h = Math.round(w / aspect);
+    const key = 'n,' + w + ',' + h;
+    if (key === fitted) return w;
+    fitted = key;
+    main.style.gridTemplateColumns = '';
+    applyCanvas(w, h);
+    return w;
+  }
   const cs = getComputedStyle(card), gap = parseFloat(getComputedStyle(main).rowGap) || 0;
   const outer = e => { const m = getComputedStyle(e); return e.offsetHeight + parseFloat(m.marginTop) + parseFloat(m.marginBottom); };
   const above = [...card.children].filter(e => e !== wrap).reduce((t, e) => t + outer(e), 0);
@@ -1515,15 +1559,13 @@ function fitCanvas() {
   const frame = 2 * gap + (card.offsetWidth - card.clientWidth) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   const SIDE_MIN = sideMin(main.clientWidth);
   const roomy = Math.max(240, main.clientWidth - 2 * parseFloat(getComputedStyle(main).paddingLeft) - frame - 2 * SIDE_MIN);
-  const aspect = sim.map.W / sim.map.H;
   const w = Math.round(Math.min(availH * aspect, roomy)), h = Math.round(w / aspect);
   const side = Math.round(Math.min(SIDE_MAX, SIDE_MIN + Math.max(0, roomy - w) / 2));
   const key = [w, h, side].join(',');
   if (key === fitted) return w;                              // already laid out this way: touch nothing
   fitted = key;
   main.style.gridTemplateColumns = side + 'px auto ' + side + 'px';
-  dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px';
-  W = w; H = h; S = w / sim.map.W; bg = null;
+  applyCanvas(w, h);
   return w;
 }
 // One pass is enough, but the dashboards can rewrap as their width changes, so confirm it settled.
