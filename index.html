@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Whisker Hall · cat shelter game</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='62' r='22' fill='%23c0693f'/%3E%3Ccircle cx='24' cy='36' r='10' fill='%23c0693f'/%3E%3Ccircle cx='42' cy='22' r='10' fill='%23c0693f'/%3E%3Ccircle cx='60' cy='22' r='10' fill='%23c0693f'/%3E%3Ccircle cx='77' cy='36' r='10' fill='%23c0693f'/%3E%3C/svg%3E">
+<style>
+/* Warm shelter palette: sand ground, cream cards, terracotta accent. */
+:root{--bg:#f3ead9;--card:#fffdf7;--ink:#3b3127;--soft:#7a6a58;--line:#e5d8c2;--accent:#c0693f;--accent-d:#9d5230;
+ --tintA:#f7ebdc;--tintB:#faf4e9;--warm:#f0e2cb;
+ --c-rest:#7f93ad;--c-need:#5c9a62;--c-solo:#c49a4e;--c-friend:#d9739a;--c-host:#cf4a42;--c-flee:#e2863a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.4 "Nunito","Avenir Next","Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg);
+ height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ---------- top bar ---------- */
+header{flex:none;background:var(--card);border-bottom:1px solid var(--line);box-shadow:0 1px 5px rgba(90,60,30,.09);
+ display:flex;flex-wrap:wrap;align-items:center;gap:6px 13px;padding:6px 12px;position:relative}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:17px;white-space:nowrap}
+#clock{font-weight:800;font-size:15px;background:var(--warm);border-radius:999px;padding:4px 12px;min-width:136px;text-align:center;font-variant-numeric:tabular-nums}
+.grp{display:flex;gap:5px;align-items:center}
+.sep{width:1px;height:20px;background:var(--line);flex:none}
+.tlab{font-size:13px;color:var(--soft);font-weight:700}
+.pill{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap}
+.pill:hover{border-color:var(--accent);background:var(--tintA)}
+.pill.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.pill:disabled{opacity:.42;cursor:not-allowed;background:#fff}
+.pill.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.pill.primary:hover{background:var(--accent-d)}
+#spslider{width:104px;accent-color:var(--accent);cursor:pointer}
+#spread{font-size:13px;color:var(--soft);white-space:nowrap;font-variant-numeric:tabular-nums}#spread b{color:var(--ink)}
+@media (max-width:1500px){#spread{display:none}}
+#preset{font:inherit;font-size:13px;font-weight:700;padding:5px 9px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+.toggle{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-weight:700;font-size:13px;white-space:nowrap}
+.toggle input{accent-color:var(--accent);width:15px;height:15px}
+#howbtn{margin-left:auto}
+#howpop{position:absolute;right:10px;top:calc(100% + 4px);z-index:50;width:min(430px,92vw);background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;box-shadow:0 10px 30px rgba(90,60,30,.22);font-size:13px;line-height:1.5}
+#howpop[hidden]{display:none}#howpop h2{margin:0 0 6px;font-size:14px}#howpop ol{margin:6px 0 8px;padding-left:19px}
+#keys{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:8px 0}
+#howpop .soft{color:var(--soft);margin:0 0 8px}
+kbd{font:700 13px/1 ui-monospace,Menlo,monospace;background:#fff;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:2px 5px;white-space:nowrap}
+
+/* ---------- the board: dashboards left and right of the world, a strip beneath ----------
+   The middle column is sized to the canvas exactly, so no space is wasted around the room:
+   leftover width belongs to the dashboards, leftover height to the strip. */
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(190px,1fr) auto minmax(200px,1fr);
+ grid-template-rows:minmax(0,1fr) 146px;gap:8px;padding:8px}
+/* The strip is a fixed band so a long log cannot eat into the room; it scrolls inside instead. */
+@media (min-height:950px){main{grid-template-rows:minmax(0,1fr) 178px}}
+.dash{display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;overflow:hidden}
+/* The room takes the full height of the middle column; the strip's two cards sit under the side dashboards,
+   so the bottom band no longer shrinks the room on short (e.g. 1280x720/800) screens. */
+#strip{display:contents}
+#mapcard{grid-column:2;grid-row:1/-1}
+#actcard{grid-column:1;grid-row:2;overflow:auto;min-height:0}
+#logcard{grid-column:3;grid-row:2;overflow:auto;min-height:0}
+.dash{grid-row:1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:8px 11px;min-width:0}
+.card h2{margin:0 0 6px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--accent-d);display:flex;align-items:center;gap:7px}
+.card h2 .aside{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:600;color:var(--soft);font-size:13px}
+
+/* the world */
+#mapcard{padding:7px 8px;display:flex;flex-direction:column;min-height:0}
+#mapcard>*{flex:none}
+#pnote{font-size:13px;line-height:1.3;color:var(--soft);margin:0 0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pnote b{color:var(--ink)}
+#evchips{position:absolute;left:9px;top:8px;max-width:calc(100% - 18px);display:flex;flex-wrap:wrap;gap:5px;align-items:center;pointer-events:none}
+.evchip{font-size:13px;font-weight:700;background:var(--tintA);border:1px solid var(--accent);border-radius:999px;padding:2px 9px;white-space:nowrap}
+#mapwrap{flex:1 1 0;min-height:0;display:flex;align-items:center;justify-content:center}
+#mapstage{position:relative;line-height:0}
+#cv{display:block;border-radius:7px;cursor:pointer}
+#evbanner{position:absolute;left:50%;top:8px;transform:translate(-50%,-8px);max-width:min(540px,90%);display:flex;gap:9px;align-items:center;background:rgba(255,253,247,.97);border:2px solid var(--accent);border-radius:12px;padding:7px 13px;font-size:13px;line-height:1.35;box-shadow:0 6px 20px rgba(90,60,30,.22);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+#evbanner.show{opacity:1;transform:translate(-50%,0)}#evbanner.eff{border-color:#5c9a62}#evbanner .ei{display:flex;flex:none}
+.evi{vertical-align:-2px;margin-right:3px}
+#evbtns .pill{display:flex;align-items:center;justify-content:center;gap:3px}
+
+/* pulse */
+#pcv{display:block;width:100%;height:42px;border-radius:6px;background:var(--tintB)}
+#pstats{display:flex;flex-wrap:wrap;gap:3px 11px;margin-top:5px;font-size:13px;color:var(--soft)}#pstats b{color:var(--ink)}
+
+/* events */
+#evbtns{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px}
+#evbtns .pill{padding:5px 3px;text-align:center}
+
+/* room key, two columns down the left dashboard */
+#furncard{min-height:0;display:flex;flex-direction:column}
+#furn{display:grid;grid-template-columns:1fr 1fr;gap:3px 9px;font-size:13px;color:var(--soft);overflow-y:auto;min-height:0}
+#furn span{display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden}
+#furn canvas{width:17px;height:17px;flex:none}
+
+/* selected cat */
+#sel{overflow-y:auto;min-height:0;flex:1 1 0} /* the All cats list is gone; the selected-cat panel takes the column */
+#sel .name{font-size:18px;font-weight:800;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.badge{font-size:13px;font-weight:800;background:var(--accent);color:#fff;border-radius:999px;padding:1px 8px}
+.meta{color:var(--soft);font-size:13px;margin:1px 0 6px}
+.now{display:flex;align-items:flex-start;gap:7px;background:var(--tintA);border-radius:8px;padding:6px 9px;font-weight:700;margin-bottom:7px}
+.now .ring{margin-top:3px}
+.appr{display:block;font-size:13px;font-weight:600;color:var(--soft);margin-top:1px}
+.bars{display:grid;grid-template-columns:auto 1fr;gap:3px 9px;align-items:center;font-size:13px;margin-bottom:7px}
+.bar{height:7px;border-radius:999px;background:var(--warm);overflow:hidden}.bar>i{display:block;height:100%;border-radius:999px;transition:width .4s ease}
+.pers{display:grid;grid-template-columns:auto minmax(40px,1fr);gap:2px 8px;align-items:center;margin-bottom:7px;font-size:13px}
+/* Two traits per row only when the dashboard is wide enough for both labels in full. */
+.pers .bar>i{background:#bfa483}
+.sub{font-size:13px;font-weight:800;color:var(--soft);margin:7px 0 4px;display:flex;align-items:center}
+.sub .q{cursor:help;color:var(--soft);font-weight:700;margin-left:4px}
+#affinity{list-style:none;margin:3px 0 0;padding:0 3px 0 0;max-height:142px;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
+#affinity li{display:grid;grid-template-columns:minmax(0,1fr) 48px 40px auto;gap:5px;align-items:center;font-size:13px;cursor:pointer}
+#affinity .bn{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#affinity .dv{position:relative;height:7px;background:var(--warm);border-radius:4px}#affinity .dv:after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:#b09c82}
+#affinity .dv i{position:absolute;top:0;bottom:0;border-radius:4px}
+#affinity .bv{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+#affinity .bf{text-align:right;color:var(--soft);white-space:nowrap}
+
+
+/* the strip: your cat's controls, and the running log */
+#actcard{display:flex;flex-direction:column;overflow:hidden}
+#actrow{display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px}
+.acts{display:flex;flex-wrap:wrap;gap:4px}
+.acts .pill{padding:4px 7px;font-size:13px}
+.acts .pill kbd{font-size:13px;padding:1px 4px;margin-right:4px}
+#ctrlbtn{flex:none}
+#logcard{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;overflow:hidden;min-height:0;flex:1}
+#log li{font-size:13px;padding:2px 7px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#log li:nth-child(odd){background:var(--tintB)}
+#log li .t{color:var(--soft);font-variant-numeric:tabular-nums;margin-right:7px}
+#log li.me{font-weight:800}#log li.host .m{color:#b23a30}
+#log li.ev .m{color:var(--accent-d);font-weight:700}#log li.eff{background:#eef5e9 !important}#log li.eff .m{color:#4a7340}
+
+/* legend chips live in the top bar */
+#legend{display:grid;grid-template-columns:1fr 1fr;gap:3px 9px;font-size:13px;color:var(--soft);margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.lg{display:flex;align-items:center;gap:5px;cursor:default}
+.ring{width:12px;height:12px;border-radius:50%;border:3px solid;display:inline-block;flex:none}
+#affleg{display:none;align-items:center;gap:4px;font-size:13px;color:var(--soft)}#affleg i{display:inline-block;width:13px;height:4px;border-radius:2px;margin-left:3px}
+#affleg.on{display:inline-flex}
+#hidden{position:absolute;left:9px;bottom:8px;max-width:calc(100% - 18px);font-size:13px;line-height:1.3;color:var(--soft);background:rgba(255,253,247,.86);border-radius:6px;padding:2px 8px;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hidden:empty{display:none}
+
+#tip{position:fixed;z-index:60;pointer-events:none;background:#3b3127;color:#fdf7ec;font-size:13px;line-height:1.4;padding:7px 10px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.25);max-width:300px;opacity:0;transition:opacity .12s}
+#tip b{color:#f0b183}
+</style></head><body>
+<header>
+ <div class="brand"><svg width="25" height="25" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="64" r="21" fill="#c0693f"/><ellipse cx="22" cy="40" rx="9" ry="11" fill="#c0693f"/><ellipse cx="40" cy="22" rx="9" ry="11" fill="#c0693f"/><ellipse cx="61" cy="22" rx="9" ry="11" fill="#c0693f"/><ellipse cx="79" cy="40" rx="9" ry="11" fill="#c0693f"/></svg>Whisker Hall</div>
+ <div id="clock">Day 1 06:00</div>
+ <button class="pill" id="pause">❚❚ Pause</button>
+ <div class="grp" id="speeds"><span class="tlab">Speed</span><button class="pill" data-sp="0.5">0.5×</button><button class="pill on" data-sp="1">1×</button><button class="pill" data-sp="2">2×</button><button class="pill" data-sp="4">4×</button></div>
+ <input type="range" id="spslider" min="0" max="1000" step="1" aria-label="Speed (0.25× to 16×)">
+ <div id="spread"><b id="spx">1×</b> · <span id="sps">4 sim-s per s</span> · <span id="spf">1 sim-hour ≈ 15 real min</span></div>
+ <span class="sep"></span>
+ <select id="preset" aria-label="Scenario"></select>
+ <button class="pill primary" id="newcol">✦ New colony</button>
+ <span class="sep"></span>
+ <label class="toggle"><input type="checkbox" id="showaffinity"> Affinity lines</label>
+ <label class="toggle"><input type="checkbox" id="showall"> All labels</label>
+ <span id="affleg" data-tip="Lines from the selected cat to every other cat. Green = likes, red = dislikes; thicker = stronger. Affinity runs from −1 to +1, grows with friendly contact and fades with a ~5-day half-life."><i style="background:#4e9163"></i>likes <i style="background:#c9433f"></i>dislikes</span>
+ <button class="pill" id="howbtn" aria-expanded="false">? How to play</button>
+ <div id="howpop" role="dialog" hidden><h2>How to play</h2>
+  <ol><li>Pick a <b>Scenario</b> in the top bar; the line above the room says what to watch.</li>
+  <li>Click a cat to inspect it; press <kbd>C</kbd> or double-click to take control.</li>
+  <li>Act with the buttons under the room, or the keys below.</li></ol>
+  <div id="keys">
+   <span><kbd>WASD</kbd> <kbd>↑←↓→</kbd></span><span>move · <kbd>Shift</kbd> run</span>
+   <span><kbd>1</kbd>–<kbd>5</kbd></span><span>greet · groom · play · hiss · swat</span>
+   <span><kbd>E</kbd> <kbd>Z</kbd> <kbd>H</kbd> <kbd>G</kbd></span><span>eat · sleep · hide · self-groom</span>
+   <span><kbd>C</kbd> / dbl-click</span><span>take or release control</span>
+   <span><kbd>Space</kbd> · <kbd>−</kbd> <kbd>+</kbd></span><span>pause · slower / faster</span></div>
+  <p class="soft">Your speed and scenario are remembered on this browser.</p><button class="pill" id="howclose">Close</button></div>
+</header>
+<main>
+ <div class="dash">
+  <section class="card"><h2>Shelter pulse <span class="aside">24 h</span></h2><canvas id="pcv"></canvas><div id="pstats"></div></section>
+  <section class="card" id="evcard"><h2>Events</h2><div id="evbtns"></div><label class="toggle" data-tip="Noise, visitors, birds, the vacuum and newcomers arrive on their own. Feeding always runs on schedule (07:30 &amp; 17:00)."><input type="checkbox" id="evrandom" checked> Random events</label></section>
+  <section class="card" id="furncard"><h2>Key</h2><div id="legend"></div><div id="furn"></div></section>
+ </div>
+ <section class="card" id="mapcard">
+  <div id="pnote"></div>
+  <div id="mapwrap"><div id="mapstage"><canvas id="cv"></canvas><div id="evchips"></div><div id="hidden"></div><div id="evbanner" aria-live="polite"></div></div></div>
+ </section>
+ <div class="dash">
+  <section class="card" id="sel"></section>
+ </div>
+ <div id="strip">
+  <section class="card" id="actcard"><h2>Your cat <span class="aside" id="actsHead"></span></h2>
+   <div id="actrow"><button class="pill primary" id="ctrlbtn"></button><div class="acts"></div></div>
+  </section>
+  <section class="card" id="logcard"><h2>What just happened</h2><ul id="log"></ul></section>
+ </div>
+</main>
+<div id="tip"></div>
+<script>
+/* Numeric helpers with no simulation knowledge: PRNG, normal draws, clamping, Gaussian kernel, normal CDF, Cholesky factorisation. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory();
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['util'] = api;
+})(typeof self !== 'undefined' ? self : null, function () {
+'use strict';
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnorm = r => Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
+const clamp = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+const gauss = (x, m, s) => Math.exp(-0.5 * ((x - m) / s) ** 2);
+function normCdf(z) { const t = 1 / (1 + 0.2316419 * Math.abs(z)); const d = 0.3989423 * Math.exp(-z * z / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+function cholesky(A) { const n = A.length, L = A.map(r => r.map(() => 0)); for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s = A[i][j]; for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k]; L[i][j] = i === j ? Math.sqrt(Math.max(s, 1e-9)) : s / L[j][j]; } return L; }
+
+// sim stress (0..1) -> Kessler & Turner (1997) Cat-Stress-Score 1..7; gamma from config cssGamma (anchor documented there)
+const toCSS = (stress, gamma = 0.622) => 1 + 6 * Math.pow(clamp(stress), gamma);
+
+return { toCSS, mulberry32, rnorm, clamp, gauss, normCdf, cholesky };
+});
+
+/* The vocabulary of the simulation: tile types, action names, world-event definitions and the sets that group them. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory();
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['terms'] = api;
+})(typeof self !== 'undefined' ? self : null, function () {
+'use strict';
+
+const T = { FLOOR: 0, WALL: 1, BOWL: 2, WATER: 3, LITTER: 4, BED: 5, PERCH: 6, HIDE: 7, WINDOW: 8, DOOR: 9, SCRATCH: 10, TOY: 11, OBST: 12 };
+const TNAME = Object.keys(T).reduce((o, k) => (o[T[k]] = k, o), {});
+const A = { SLEEP: 'sleep', REST: 'rest', GROOM: 'groom', EXPLORE: 'explore', EAT: 'eat', DRINK: 'drink', LITTER: 'litter', HIDE: 'hide', PERCH: 'perch', WINDOW: 'window', SCRATCH: 'scratch', TOY: 'toy', SEEKH: 'seek_human',
+  ZOOM: 'zoom', AVOID: 'avoid', SNIFF: 'sniff', ALLOGROOM: 'allogroom', PLAY: 'play', STALK: 'stalk', CHASE: 'chase', HISS: 'hiss', FIGHT: 'fight', FLEE: 'flee', WAIT: 'wait_food' };
+const EVDEF = { // world events: icon, name, one-line expected effect, measure-after (s), shown-active (s)
+  noise: { icon: '💥', name: 'Loud noise', hint: 'Cats startle: some freeze, flee or hide; stress spikes, then fades', evalS: 30, durS: 60 },
+  feed: { icon: '🔔', name: 'Feeding bell', hint: 'Cats converge on the bowls; dominant cats first, others queue', evalS: 600, durS: 900 },
+  visit: { icon: '🧑', name: 'Visitor', hint: 'Friendly cats approach; shy cats keep away or hide', evalS: 300, durS: 300 },
+  vacuum: { icon: '🌀', name: 'Vacuum pass', hint: 'Cats near the vacuum scatter; stress rises nearby', evalS: 180, durS: 180 },
+  bird: { icon: '🐦', name: 'Bird at the window', hint: 'Cats rush to the window to watch', evalS: 120, durS: 300 },
+  newcomer: { icon: '🌱', name: 'Newcomer arrives', hint: 'The new cat hides and is stressed; this fades over days', evalS: 3600, durS: 3600 } };
+// Movement intent of each targeted action. APPROACH: move to the target first, the action's effect starts only on arrival
+// (contact, or the action's stated range). AWAY: move away from the source, and towards a hiding spot when afraid enough.
+const APPROACH = new Set([A.SNIFF, A.ALLOGROOM, A.PLAY, A.STALK, A.CHASE, A.FIGHT, A.SEEKH, A.TOY, A.EAT, A.DRINK, A.LITTER]);
+const AWAY = new Set([A.FLEE, A.AVOID, A.HIDE]);
+const RANDOM_EV = new Set(['noise', 'visit', 'sit', 'bird', 'toy', 'vacuum', 'newcomer']);
+const SOCIAL = new Set([A.SNIFF, A.ALLOGROOM, A.PLAY, A.STALK, A.CHASE, A.HISS, A.FIGHT, A.FLEE, A.AVOID]);
+const HOSTILE = new Set([A.STALK, A.CHASE, A.HISS, A.FIGHT]);
+const INACTIVE = new Set([A.SLEEP, A.REST, A.HIDE, A.PERCH]); // lying-around states (perch/hide = resting there)
+const ICON = { zoom: '💨', sleep: '💤', rest: '😌', groom: '👅', explore: '🐾', eat: '🍽️', drink: '💧', litter: '🚽', hide: '📦', perch: '🗼', window: '🐦', scratch: '🪵', toy: '🧶', seek_human: '🙋', sniff: '👃', allogroom: '💕', play: '🎾', stalk: '👀', chase: '💨', hiss: '😾', fight: '⚔️', flee: '🏃', avoid: '🙈', wait_food: '⏳' };
+
+return { T, TNAME, A, EVDEF, RANDOM_EV, SOCIAL, HOSTILE, INACTIVE, ICON, APPROACH, AWAY };
+});
+
+/* Settings data: engine defaults and the default furniture counts of a room. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory();
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['config'] = api;
+})(typeof self !== 'undefined' ? self : null, function () {
+'use strict';
+
+const DEFAULTS = {
+  seed: 1, dt: 2,              // seconds per tick (configurable)
+  tile: 0.05,                   // metres per tile (5 cm)
+  W: 260, H: 160, partitionX: 180, // 13 m x 8 m footprint: main room ~69 m^2 + quiet room ~29 m^2 (~7.5 m^2/cat for 13 cats; ASV min 1.7)
+  nCats: 12, nachshon: true,
+  startHour: 6,
+  // newcomer habituation (novelty in sim.js): fastShare of it fades over ~fastDays, the rest over ~slowDays. Kessler & Turner 1997:
+  // Cat-Stress-Score falls most over days 1-4, but group-housed cats are still above settled cats after two weeks.
+  // amp: newcomer baseline elevation, x(0.3+N). Re-anchored (was 0.3 / 0.65 / 3) so that, through toCSS below, newcomer
+  // Cat-Stress-Scores follow Kessler & Turner 1997 (Anim Welf 6:243, Fig 1a/1b): per-cat weekly median CSS > 3 in 75% of cats
+  // in week 1 and 35% in week 2, > 4 in 24% then 4%; and Broadley et al. 2014 (JFMS 16:137): median CSS 3.9 before day 4, 3.1 after.
+  habit: { amp: 0.8, fastShare: 0.75, fastDays: 3, slowDays: 14 },
+  // Sim stress (0..1) -> Kessler & Turner Cat-Stress-Score (1..7): CSS = 1 + 6 * stress^gamma (see util.toCSS, the only copy).
+  // gamma puts the sim's settled residents (mean stress ~0.12) at CSS 2.6, the mean/median of established shelter cats in
+  // Kessler & Turner 1997 (daily means 1.8-3.5). The power form is an ASSUMPTION (CSS is ordinal); only the anchor is sourced.
+  cssGamma: 0.622,
+  senseM: 2.5, proxM: 1.5, proxGain: 0, proxCooldownS: 300, // proximity bonus for friendly approaches (see REALISM.md)
+   contactM: 0.45, speeds: { walk: 0.5, trot: 1.0, run: 2.5 }, // m/s
+  // Cat movement: three speed tiers (m/s) and the tier each action moves at. Run = zoomies, pounce/chase, fight, escape;
+  // walk = going somewhere on purpose (food, litter, a friend); creep = idle exploring, stalking. (`speeds` is for people.)
+  // How stimuli weaken with distance (docs/BEHAVIOR-MODEL.md, "Distance weighting"). Social/visual stimuli: weight
+  // 1 / (1 + (d/d0)^2), zero beyond the sense cutoff. Sound: level falls 6 dB per doubling of distance (inverse square),
+  // minus wallDb through the partition, mapped to 0..1 between the hearing and startle thresholds. Food has no falloff.
+  stimulus: { catD0M: 2.5, humanD0M: 2.5, threatD0M: 3.5, humanCutM: 4, vacuumCutM: 5,
+    noiseDb: 90, vacuumDb: 75, hearDb: 40, startleDb: 65, wallDb: 15 },  // source levels at 1 m
+  speedTier: { fast: 2.5, normal: 0.5, slow: 0.25 },
+  actionSpeed: { avoid: 'slow', zoom: 'fast', chase: 'fast', fight: 'fast', flee: 'fast', toy: 'fast', hide: 'normal', play: 'normal', sniff: 'normal', allogroom: 'normal',
+    seek_human: 'normal', eat: 'normal', drink: 'normal', litter: 'normal', sleep: 'normal', rest: 'normal', perch: 'normal', window: 'normal', scratch: 'normal',
+    wait_food: 'normal', groom: 'normal', hiss: 'slow', stalk: 'slow', explore: 'slow' },
+  feedTimes: [8, 17], cleanDelayH: 0.5, pickupH: null, // hours after a meal that staff lift leftovers (null = food stays down until eaten)
+  // turnover: null = closed colony. Default is the validation suite's open-colony setting (validation/conditions.js `turnover`):
+  // intake 1/day up to 16 cats, adoption 1/28 per cat-day (~4-week stay; assumption, see conditions.js). Closed-colony checks set turnover: null.
+  turnover: { intakePerDay: 1, cap: 16, adoptPerCatDay: 1 / 28 },
+  rates: { noise: 3, visit: 2.5, bird: 5, toy: 1, vacuum: 0.7 }, // expected events per day
+  // Coefficients calibrated against observed colonies rather than chosen for feel. They are
+  // settings, not literals buried in the scoring, so `node calibrate.js` can sweep them and
+  // REALISM.md can say which measurement each one answers to.
+  tune: {
+    allogroomBase: 3.0,   // sets how often cats groom each other (van den Bos: ~10 bouts/cat/day)
+    sleepStressBase: 0.5, // asleep, stress relaxes toward 50% of the waking baseline (assumption: rest in safety settles a cat; STR02)
+    stressIrritation: 2.0, // irritation gained per hour per unit of stress above 0.2 (Ellis 2009: stress lowers tolerance; STR16)
+    fleeN: 1.0,           // anxious cats run sooner; centred on N=0.5 so the colony flee rate is unchanged (Feline Five N; PER03/PER11)
+    affilA: 1.0,          // agreeable cats start more friendly bids; centred on A=0.5 so the colony rate is unchanged (Feline Five A; PER06)
+    affAccept: 1.0,       // gain in affinity per tick of contact the other cat takes up (see accepts())
+    groomRank: 1.6,       // allogrooming is a rank behaviour as well as an affiliative one: higher-ranking
+                          // cats groom more (van den Bos 1998), on top of the within-pair down-rank term
+    playYouth: 1.2,       // social play is a young cat's game and falls away through adulthood; zero at
+                          // about 3.5 years, strongly positive in kittens, negative in old cats
+    groomAffinity: 1.6,   // how strongly cats prefer grooming the friends they already have
+    groomBoutS: 290,      // longest a welcome grooming bout runs (mean interaction 103.9 s)
+    playBoutS: 140,        // the same for play
+    familiarCalm: 0.9,
+    bullyGain: 0.3,       // chase/hiss urge toward a cat that is timid toward this one (its fear of us), x aggressor dominance (assumption; timid cats targeted in colonies, Bradshaw 2012 - unverified)    // hostile-score drop for a fully familiar pair (assumption)
+    strangerHostile: 0.5, // extra hostile-score for a pair that has never met, fading to 0 at familiarN meetings (assumption; shape from Levine et al. 2005)
+    familiarN: 25,        // meetings until a pair counts as familiar (assumption; ~4 days at the sim's ~6 meetings/pair/day)
+    grudgeHalfH: 24,      // half-life of negative affinity, h (assumption; bonds keep 120 h)
+    fearLossMax: 4,       // each lost fight lengthens fear's 24 h half-life by a day, up to 5 days (assumption)
+    souredP: 0.024,       // chance per tick that a grooming bout turns tense (34.9% of interactions)
+    affiliativeDist: 0.15,// how much distance discourages a friendly approach (84.3% start > 0.5 m apart)
+    withdrawM: 3.0,       // how far a rebuffed cat takes itself (69.9% of interactions end with one moving off)
+    toyBase: -3.0,        // appetite for object play; ~5-10 min/day for adults (estimate, see BEHAVIOR-MODEL.md)
+    respondFriendly: 2.5, // pull to answer a friendly bid in kind (sniff->sniff, groom->groom, play->play); target 60-85% answered
+    // An unwanted friendly bid. `unwantedBase` is the offset that makes a content, sociable cat with a
+    // friend rate an approach at 0 unwanted; the pressure it does build is split three ways, so the
+    // options compete instead of stacking: it pushes towards threatening and towards walking off, and
+    // takes the same weight off answering in kind.
+    unwantedBase: 0.3,   // offset of the unwantedness sum (clamped to 0..3)
+    unwantedHiss: 1.0,    // how much of it pushes towards a hiss or swat
+    unwantedAvoid: 1.45,   // how much towards getting up and leaving
+    unwantedRespond: 0.2, // how much it takes off answering in kind
+    respondAvoid: -2.2,   // how far below a plain answer walking away sits
+    respondHiss: -1.55,    // and threatening
+    swatGap: 0.9,         // and how much further down a swat is than a hiss: sets how often a rebuff lands as a blow
+    avoidBase: -1.5,      // baseline appetite for calmly removing oneself from another cat
+    avoidM: 2.0,          // how far off a cat takes itself when it walks away (1-3 m)
+    avoidPerchP: 0.3,     // chance a walk-away ends on a perch or in a hide box rather than just stopping
+    respondFlee: 4.0,     // pull to bolt from a friendly approach, scaled by fear of the asker: nothing at all between cats that are easy with each other
+    fearApproachFear: 0.15, // a friendly approach from a cat this feared can still be fled from
+    escalateP: 0.07,      // chance per tick a hissed-at instigator presses on (chase or swat) instead of giving up
+    respondCommitS: 10,   // a friendly bid cannot interrupt an action younger than this (hostile ones always can)
+    respondRepeatS: 30,   // the same bid from the same cat forces at most one re-decision per this many seconds
+    fleeHideStress: 0.6,  // a fleeing cat this stressed (or afraid of its pursuer) runs for a hide box / perch, not just away
+    fleeBreakM: 4,        // how far a fleeing cat runs before it feels clear
+    chaseBase: -1.8,     // appetite for running another cat off; the clearest expression of rank
+    hissBase: -2.45,      // baseline appetite for threatening
+    fightBase: -3.2,      // and for actually swatting; the gap sets threats per fight
+    partingP: 0.41,        // chance a finished bout ends with one cat getting up and going
+    partingFleeP: 0.25,   // and, of those, the chance it leaves at a run (12% of interactions)
+    seekHumanBase: -0.3,  // appetite for going over to a person
+    freshFoodPull: 1.5,   // how strongly a fresh meal draws the whole colony to the bowls
+    seekCheckS: 600,      // ASSUMPTION: a hungry cat checks an empty bowl ~10 min outside meal times, then gives up
+    seekRefractS: 5400,   // ASSUMPTION: and does not re-check for ~1.5 h (waiting is entrained to meal times, not continuous)
+    missedMealH: 16,      // ASSUMPTION: no meal for longer than the overnight gap (17h->8h = 15h) counts as a missed meal
+    dailyRation: 24 / 7,  // food per cat per day, split over the day's meals, in hunger units: a maintenance ration = daily hunger accrual (h/7 per hour) (NRC 2006: shelters feed to maintenance)
+    zoomBase: -2.7,
+    zoomRefractoryS: 28800, // a cat that has just had a burst will not have another for hours       // appetite for a sudden burst of running; rare, and keyed to each cat's energy
+    approachM: 5,         // how far off a cat will spot a friend worth crossing the room for
+    approachS: 90,        // how long it may spend getting there before giving up
+    tetherS: 150,         // how long a pair stays in company after a welcome exchange
+    tetherM: 0.3,         // and how far apart they drift while it lasts
+  },
+};
+// ---------- map ----------
+// layout 'two-room' (default): 13 x 8 m footprint = main communal room (~69 m^2) + quiet room (~29 m^2) joined by a 1.2 m doorway.
+// layout 'single': one W x H room (used by validation / experiments to vary space per cat).
+// cfg.counts overrides furniture counts; cfg.windows=false removes windows (boring room).
+const DEFAULT_COUNTS = { bowl: 7, water: 4, litter: 7, perch: 6, bed: 8, hide: 8, scratch: 5 };
+
+return { DEFAULTS, DEFAULT_COUNTS };
+});
+
+/* Room layout: builds the grid and station list from a config, and answers walkability and distance-field queries over it. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory(node ? require('./util.js') : root.WH['util'], node ? require('./terms.js') : root.WH['terms'], node ? require('./config.js') : root.WH['config']);
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['map'] = api;
+})(typeof self !== 'undefined' ? self : null, function (U, C, CFG) {
+'use strict';
+
+const { mulberry32 } = U, { T } = C, { DEFAULT_COUNTS } = CFG;
+function buildMap(cfg) {
+  const { W, H } = cfg, grid = new Uint8Array(W * H), stations = [], prng = mulberry32(12345 + (cfg.mapSeed || 0)), two = cfg.layout !== 'single', PX = two ? cfg.partitionX : W;
+  const K = Object.assign({}, DEFAULT_COUNTS, cfg.counts || {});
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2) grid[y * W + x] = T.WALL;
+  const rect = (type, x, y, w, h, extra) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) grid[j * W + i] = type; if (type !== T.WALL && type !== T.OBST && type !== T.DOOR) { const s = Object.assign({ id: stations.length, type, x, y, w, h, cx: x + w / 2, cy: y + h / 2, cap: 1 }, extra || {}); stations.push(s); return s; } };
+  const dx0 = Math.round(Math.min(PX, W) * 0.45) - 10, dw = 20; // door (humans only)
+  if (two) { rect(T.WALL, PX, 2, 4, 66); rect(T.WALL, PX, 92, 4, H - 94); }
+  rect(T.DOOR, dx0, H - 2, dw, 2);
+  if (cfg.windows !== false) { const ww = Math.min(80, Math.round(PX * 0.45)); rect(T.WINDOW, Math.round(PX * 0.22), 2, ww, 6, { cap: ww >= 60 ? 4 : 2, elevated: true }); if (two) rect(T.WINDOW, PX + 16, 2, 40, 6, { cap: 2, elevated: true }); }
+  if (W * H > 20000) { rect(T.OBST, Math.round(PX * 0.2), Math.round(H * 0.65), 24, 8); rect(T.OBST, Math.round(PX * 0.72), Math.round(H * 0.24), 24, 8); } // benches 1.2 x 0.4 m
+  let clear = 7;
+  const ok = (x, y, w, h) => { if (x < 3 || y < 9 || x + w > W - 3 || y + h > H - 3) return false; for (let j = y - clear; j < y + h + clear; j++) for (let i = x - clear; i < x + w + clear; i++) { if (i < 2 || j < 2 || i >= W - 2 || j >= H - 2) continue; if (grid[j * W + i] !== T.FLOOR) return false; } if (x + w > dx0 - 8 && x < dx0 + dw + 8 && y + h > H - 16) return false; if (two && y + h > 60 && y < 100 && x + w > PX - 10 && x < PX + 14) return false; return true; };
+  const place = (type, w, h, n, zone, extra, cond) => { let k = 0; for (const cl of [7, 5, 3, 1]) { clear = cl; let tries = 0; while (k < n && tries++ < 3000) { const x = Math.floor(zone[0] + prng() * Math.max(1, zone[2] - zone[0] - w)), y = Math.floor(zone[1] + prng() * Math.max(1, zone[3] - zone[1] - h)); if (!ok(x, y, w, h) || (cond && !cond(x + w / 2, y + h / 2, cl))) continue; rect(type, x, y, w, h, Object.assign({}, extra)); k++; } if (k >= n) break; } return k; };
+  const split = (n, f) => two ? [Math.round(n * f), n - Math.round(n * f)] : [n, 0];
+  const MAIN = [4, 10, PX - 2, H - 4], QUIET = [PX + 6, 10, W - 4, H - 4], ALL = [4, 10, W - 4, H - 4];
+  place(T.BOWL, 4, 4, K.bowl, [4, 10, Math.round(PX * 0.55), H - 4], { food: 0 }); // 20 cm bowls
+  const bowls = stations.filter(s => s.type === T.BOWL);
+  place(T.WATER, 4, 4, K.water, ALL);
+  const farFromFood = (cx, cy, cl) => bowls.every(b => Math.hypot(b.cx - cx, b.cy - cy) > (cl >= 5 ? 30 : 18)); // >=1.5 m preferred, >=0.9 m (ASPCApro) minimum
+  const [l1, l2] = split(K.litter, 4 / 7); place(T.LITTER, 10, 8, l1, [Math.round(PX * 0.5), 10, PX - 2, H - 4], {}, farFromFood); if (l2) place(T.LITTER, 10, 8, l2, QUIET, {}, farFromFood); // 50 x 40 cm
+  const [p1, p2] = split(K.perch, 4 / 6); place(T.PERCH, 12, 12, p1, MAIN, { cap: 2, elevated: true }); if (p2) place(T.PERCH, 12, 12, p2, QUIET, { cap: 2, elevated: true }); // 60 cm cat-tree base
+  const [b1, b2] = split(K.bed, 5 / 8); place(T.BED, 11, 11, b1, MAIN, { cap: 2 }); if (b2) place(T.BED, 11, 11, b2, QUIET, { cap: 2 }); // 55 cm beds
+  const [h1, h2] = split(K.hide, 5 / 8); place(T.HIDE, 8, 6, h1, MAIN); if (h2) place(T.HIDE, 8, 6, h2, QUIET); // 40 x 30 cm boxes
+  const [s1, s2] = split(K.scratch, 4 / 5); place(T.SCRATCH, 6, 6, s1, MAIN); if (s2) place(T.SCRATCH, 6, 6, s2, QUIET); // 30 cm post base
+  let floor = 0; for (let i = 0; i < W * H; i++) if (grid[i] !== T.WALL && grid[i] !== T.DOOR) floor++;
+  return { W, H, grid, stations, partitionX: PX, door: { x: dx0 + dw / 2, y: H - 5 }, sitSpot: { x: Math.round(PX * 0.55), y: Math.round(H / 2) }, floorM2: floor * cfg.tile * cfg.tile };
+}
+function walkable(map, x, y) { x = x | 0; y = y | 0; if (x < 0 || y < 0 || x >= map.W || y >= map.H) return false; const t = map.grid[y * map.W + x]; return t !== T.WALL && t !== T.OBST && t !== T.DOOR; }
+function distField(map, s) { // BFS (8-neighbour) distance from station cells
+  const { W, H } = map, d = new Uint16Array(W * H).fill(65535), q = new Int32Array(W * H); let qh = 0, qt = 0;
+  for (let j = s.y; j < s.y + s.h; j++) for (let i = s.x; i < s.x + s.w; i++) { d[j * W + i] = 0; q[qt++] = j * W + i; }
+  while (qh < qt) { const c = q[qh++], cx = c % W, cy = (c / W) | 0, nd = d[c] + 1; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; const nx = cx + dx, ny = cy + dy; if (!walkable(map, nx, ny)) continue; const n = ny * W + nx; if (d[n] > nd) { d[n] = nd; q[qt++] = n; } } }
+  return d;
+}
+
+// ----- navigation -----
+// clearance[i]: 8-neighbour steps from cell i to the nearest wall/obstacle/door cell (0 = blocked). A cat's body is ~18 cm
+// wide, so a centre needs clearance >= 2 (10 cm) not to touch anything; open floor is "comfortable" at >= 4 (20 cm).
+function clearanceField(map) {
+  const { W, H } = map, d = new Uint8Array(W * H).fill(255), q = new Int32Array(W * H); let qh = 0, qt = 0;
+  for (let i = 0; i < W * H; i++) if (!walkable(map, i % W, (i / W) | 0)) { d[i] = 0; q[qt++] = i; }
+  while (qh < qt) { const c = q[qh++], cx = c % W, cy = (c / W) | 0, nd = d[c] + 1; if (nd > 40) continue; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const n = ny * W + nx; if (d[n] > nd) { d[n] = nd; q[qt++] = n; } } }
+  return d;
+}
+// Coarse A* grid (G x G tiles per node) over cells whose centre has body clearance; step cost grows near walls so routes
+// keep off furniture edges instead of skimming them. Paths are string-pulled at follow time (Sim.navTo).
+function makeNav(map, G) {
+  G = G || 4; const cl = map.clear || (map.clear = clearanceField(map)), W = map.W, gw = Math.ceil(map.W / G), gh = Math.ceil(map.H / G), N = gw * gh;
+  const ok = new Uint8Array(N), pen = new Float32Array(N);
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { const x = Math.min(map.W - 1, i * G + (G >> 1)), y = Math.min(map.H - 1, j * G + (G >> 1)), c = cl[y * W + x]; ok[j * gw + i] = c >= 1 ? 1 : 0; pen[j * gw + i] = c >= 8 ? 0 : c >= 2 ? 3 / c : 6; }
+  const g = new Float32Array(N), f = new Float32Array(N), par = new Int32Array(N), seen = new Uint32Array(N), closed = new Uint32Array(N); let stamp = 0;
+  const node = (x, y) => Math.max(0, Math.min(gh - 1, (y / G) | 0)) * gw + Math.max(0, Math.min(gw - 1, (x / G) | 0));
+  function snap(n) { if (ok[n]) return n; const ci = n % gw, cj = (n / gw) | 0; for (let r = 1; r < 12; r++) { let best = -1, bd = 1e9; for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) { if (i < 0 || j < 0 || i >= gw || j >= gh || (Math.abs(i - ci) !== r && Math.abs(j - cj) !== r)) continue; const m = j * gw + i, d = (i - ci) ** 2 + (j - cj) ** 2; if (ok[m] && d < bd) { bd = d; best = m; } } if (best >= 0) return best; } return -1; }
+  function path(sx, sy, tx, ty) { // -> [[x,y], ...] tile coords of node centres from start (excl.) to goal, or null
+    const s = snap(node(sx, sy)), t = snap(node(tx, ty)); if (s < 0 || t < 0) return null; if (s === t) return [];
+    stamp++; const heap = [], tx0 = t % gw, ty0 = (t / gw) | 0, h = n => { const dx = Math.abs(n % gw - tx0), dy = Math.abs(((n / gw) | 0) - ty0); return Math.max(dx, dy) + 0.414 * Math.min(dx, dy); };
+    const push = n => { heap.push(n); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (f[heap[p]] <= f[n]) break; heap[i] = heap[p]; i = p; } heap[i] = n; };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { let i = 0; for (;;) { let l = 2 * i + 1, r = l + 1, m = i; if (l < heap.length && f[heap[l]] < f[last] && (r >= heap.length || f[heap[l]] <= f[heap[r]])) m = l; else if (r < heap.length && f[heap[r]] < f[last]) m = r; if (m === i) break; heap[i] = heap[m]; i = m; } heap[i] = last; } return top; };
+    g[s] = 0; f[s] = h(s); par[s] = -1; seen[s] = stamp; push(s);
+    while (heap.length) { const c = pop(); if (closed[c] === stamp) continue; closed[c] = stamp; if (c === t) break; const ci = c % gw, cj = (c / gw) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; const i = ci + dx, j = cj + dy; if (i < 0 || j < 0 || i >= gw || j >= gh) continue; const n = j * gw + i; if (!ok[n] || closed[n] === stamp) continue; if (dx && dy && (!ok[cj * gw + i] || !ok[j * gw + ci])) continue; // no corner cutting
+        const ng = g[c] + (dx && dy ? 1.414 : 1) * (1 + pen[n]); if (seen[n] !== stamp || ng < g[n]) { seen[n] = stamp; g[n] = ng; f[n] = ng + h(n); par[n] = c; push(n); } } }
+    if (closed[t] !== stamp) return null; const out = []; for (let n = t; n !== s && n >= 0; n = par[n]) out.push([Math.min(map.W - 1, (n % gw) * G + G / 2), Math.min(map.H - 1, ((n / gw) | 0) * G + G / 2)]); return out.reverse(); }
+  return { G, path, snapPoint(x, y) { const n = snap(node(x, y)); return n < 0 ? null : [(n % gw) * G + G / 2, ((n / gw) | 0) * G + G / 2]; } };
+}
+// Straight segment free of obstacles with at least minClear body clearance (the first few tiles around the start only need
+// to be walkable, so a cat already pressed against something can still leave).
+function lineClear(map, x0, y0, x1, y1, minClear) { const cl = map.clear, d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d); for (let k = 1; k <= n; k++) { const x = x0 + (x1 - x0) * k / n, y = y0 + (y1 - y0) * k / n; if (!walkable(map, x, y)) return false; if (k > 3 && k < n - 3 && cl[(y | 0) * map.W + (x | 0)] < minClear) return false; } return true; }
+
+return { buildMap, walkable, distField, clearanceField, makeNav, lineClear };
+});
+
+/* Cat data tables: trait correlations, name pool, ring colours, coat patterns and Nachshon's fixed personality. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory();
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['cat-data'] = api;
+})(typeof self !== 'undefined' ? self : null, function () {
+'use strict';
+
+// Order: N, E, D, I, A (Feline Five). Correlations: ASSUMPTIONS (Litchfield 2017 reports factor structure but we use plausible inter-factor correlations).
+const TRAIT_CORR = [
+  [1, -0.30, -0.10, 0.20, -0.25],
+  [-0.30, 1, 0.15, 0.20, 0.25],
+  [-0.10, 0.15, 1, 0.35, -0.35],
+  [0.20, 0.20, 0.35, 1, -0.20],
+  [-0.25, 0.25, -0.35, -0.20, 1]];
+const NAMES = ['Luna', 'Milo', 'Simba', 'Bella', 'Oscar', 'Tigger', 'Cleo', 'Pumpkin', 'Shadow', 'Ziggy', 'Mochi', 'Poppy', 'Ginger', 'Biscuit', 'Olive', 'Pepper', 'Socks', 'Willow'];
+const COLORS = ['#e6a23c', '#909399', '#f56c6c', '#67c23a', '#409eff', '#b37feb', '#ff9fd6', '#d4a373', '#36cfc9', '#fadb14', '#a0522d', '#5c7cfa', '#ff7a45', '#73d13d'];
+const COATS = ['orange-tabby', 'black', 'grey-tabby', 'tuxedo', 'calico', 'brown-tabby', 'grey', 'white-orange', 'tortie', 'cream', 'black-white', 'siamese', 'orange', 'brown-tabby'];
+const NACHSHON_TRAITS = { N: 0.04, E: 0.88, D: 0.96, I: 0.82, A: 0.55, humanSoc: 0.97, catSoc: 0.05, jealousy: 0.95, energy: 0.8 };
+
+return { TRAIT_CORR, NAMES, COLORS, COATS, NACHSHON_TRAITS };
+});
+
+/* Draws an individual cat: correlated Feline Five traits, sex, age, origin, derived sociability, and the starting internal state. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory(node ? require('./util.js') : root.WH['util'], node ? require('./cat-data.js') : root.WH['cat-data']);
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['cats'] = api;
+})(typeof self !== 'undefined' ? self : null, function (U, D) {
+'use strict';
+
+const { clamp, normCdf } = U, { TRAIT_CORR, NAMES, COLORS, COATS, NACHSHON_TRAITS } = D;
+function sampleCat(rng, id, L) {
+  const nrm = () => { let u = 0, v = 0; while (!u) u = rng(); v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const z = [0, 0, 0, 0, 0].map(nrm), c = L.map(row => row.reduce((s, l, k) => s + l * z[k], 0));
+  const sex = rng() < 0.5 ? 'M' : 'F';
+  const age = +(0.6 + (-Math.log(1 - rng())) * 3.2).toFixed(1); // skewed young adults (assumption), mean ~3.8 y
+  const r = rng(), origin = r < 0.58 ? 'surrendered' : r < 0.86 ? 'transfer' : 'stray'; // Weiss et al. 2015 shelter intake mix
+  if (sex === 'M') { c[0] -= 0.25; c[2] += 0.2; }        // males bolder (Weiss 2015: sex predicted boldness)
+  if (age > 7) { c[1] -= 0.4; c[3] -= 0.3; }           // older: less active/impulsive (assumption)
+  const N = normCdf(c[0]), E = normCdf(c[1]), D = normCdf(c[2]), I = normCdf(c[3]), Ag = normCdf(c[4]);
+  const humanSoc = clamp(0.5 * Ag + 0.3 * (1 - N) + 0.2 * E - (origin === 'stray' ? 0.15 : 0) + 0.1 * nrm() + 0.05);
+  const catSoc = clamp(0.55 * Ag + 0.45 * (1 - D) + 0.1 * nrm());
+  const jealousy = clamp(0.45 * D + 0.35 * I + 0.15 * nrm() - 0.25);
+  // how much pent-up go a cat carries: the outgoing and the young have the most of it
+  const energy = clamp(0.5 * E + 0.25 * I + 0.45 * Math.exp(-age / 4) + 0.1 * nrm());
+  return makeCat(id, NAMES[id % NAMES.length], COLORS[id % COLORS.length], { N, E, D, I, A: Ag, humanSoc, catSoc, jealousy, energy }, sex, age, origin, rng);
+}
+function makeCat(id, name, color, tr, sex, age, origin, rng) {
+  return { id, name, color, tr, sex, age, origin, neutered: true, x: 0, y: 0, px: 0, py: 0, fx: 1, fy: 0,
+    s: { hunger: rng() * 0.4, thirst: rng() * 0.5, bladder: rng() * 0.5, sleep: 0.3 + rng() * 0.5, stress: 0.1, irritation: 0, social: 0.4, play: 0.4 },
+    coat: id === 99 ? 'white' : COATS[id % COATS.length], eyes: id === 99 ? '#4aa3ff' : ['#c9b037', '#7cb342', '#e0a030', '#a5d6a7'][id % 4], act: null, mem: {}, incoming: [], stuck: 0, lastAct: null, petted: 0, fightWith: -1 };
+}
+
+return { sampleCat, makeCat };
+});
+
+/* Run statistics: the per-run record, the per-tick collector that fills it, and the summary it rolls up into. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory(node ? require('./terms.js') : root.WH['terms']);
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['stats'] = api;
+})(typeof self !== 'undefined' ? self : null, function (C) {
+'use strict';
+const { A, T, INACTIVE } = C;
+
+function newStats() { return { fights: 0, hisses: 0, fightTicks: 0, fightDur: [], fightLog: [], playToFight: 0, cornered: 0, stuckEvents: 0, litterUses: 0, eatTicks: {}, byCat: {}, hourActive: new Array(24).fill(0), hourCount: new Array(24).fill(0), bowlCrowdMax: 0, bowlCrowdSum: 0, bowlCrowdN: 0, ticks: 0, eatBouts: {}, episodes: {}, initiated: {}, hourHostile: new Array(24).fill(0), litterBy: {} }; }
+function collect(sim) {
+  const S = sim.stats, hr = Math.floor(sim.hour); S.ticks++;
+  for (const c of sim.cats) {
+    const b = S.byCat[c.id] || (S.byCat[c.id] = { name: c.name, ticks: 0, acts: {} });
+    b.ticks++; b.stress = (b.stress || 0) + c.s.stress; b.irr = (b.irr || 0) + c.s.irritation; b.playD = (b.playD || 0) + c.s.play; b.socialD = (b.socialD || 0) + c.s.social; b.hourAct = b.hourAct || new Array(24).fill(0); const t = c.act ? c.act.type : 'none'; b.acts[t] = (b.acts[t] || 0) + 1;
+    S.hourCount[hr]++; if (!INACTIVE.has(t) && t !== 'groom' && t !== 'window') { S.hourActive[hr]++; b.hourAct[hr]++; }
+    if (t === A.EAT && c.lastEatStart !== c.act.start) { c.lastEatStart = c.act.start; S.eatBouts[c.id] = (S.eatBouts[c.id] || 0) + 1; }
+  }
+  if (sim.lastFeed !== undefined && sim.t - sim.lastFeed < 900) { let n = 0; for (const c of sim.cats) for (const s of sim.map.stations) if (s.type === T.BOWL && Math.hypot(c.x - s.cx, c.y - s.cy) < sim.m2t(0.6)) { n++; break; } S.bowlCrowdMax = Math.max(S.bowlCrowdMax, n); S.bowlCrowdSum += n; S.bowlCrowdN++; }
+}
+function summary(sim) {
+  const S = sim.stats, days = Math.max(S.ticks, 1) * sim.cfg.dt / 86400, out = { days: +days.toFixed(2), cats: [], fightsPerDay: +(S.fights / days).toFixed(1), hissesPerDay: +(S.hisses / days).toFixed(1), meanFightSec: S.fightDur.length ? +(S.fightDur.reduce((a, b) => a + b, 0) / S.fightDur.length).toFixed(1) : 0, maxFightSec: S.fightDur.reduce((m, v) => Math.max(m, v), 0), simDays: S.ticks * sim.cfg.dt / 86400, stuckPerDay: +(S.stuckEvents / days).toFixed(1), litterPerCatDay: +(S.litterUses / days / sim.cats.length).toFixed(1), bowlCrowdMax: S.bowlCrowdMax, bowlCrowdMean: S.bowlCrowdN ? +(S.bowlCrowdSum / S.bowlCrowdN).toFixed(2) : 0,
+    activityByHour: S.hourActive.map((a, i) => S.hourCount[i] ? +(a / S.hourCount[i]).toFixed(2) : 0) };
+  for (const id in S.byCat) { const b = S.byCat[id]; if (!sim.catById(+id)) continue; const f = k => (b.acts[k] || 0) / Math.max(1, b.ticks), hpd = k => +(f(k) * 24).toFixed(1);
+    out.cats.push({ name: b.name, sleepH: hpd('sleep'), restH: +((f('rest') + f('perch') + f('hide')) * 24).toFixed(1), groomH: hpd('groom'), eatMin: +(f('eat') * 1440).toFixed(0), mealsPerDay: +((S.eatBouts[id] || 0) / (Math.max(1, b.ticks) * sim.cfg.dt / 86400)).toFixed(1), socialMin: +(['sniff', 'allogroom', 'play'].reduce((s, k) => s + f(k), 0) * 1440).toFixed(0), agonMin: +(['stalk', 'chase', 'hiss', 'fight', 'flee'].reduce((s, k) => s + f(k), 0) * 1440).toFixed(1), hideH: hpd('hide') }); }
+  const fc = {}; for (const f of S.fightLog) { fc[f.a] = (fc[f.a] || 0) + 1; } out.fightInitiators = Object.entries(fc).map(([id, n]) => [(sim.catById(+id) || { name: id }).name, n]).sort((a, b) => b[1] - a[1]);
+  return out;
+}
+function affinityMatrix(sim) { return sim.cats.map(a => sim.cats.map(b => a === b ? null : (a.mem[b.id] ? a.mem[b.id].aff : 0))); }
+
+return { newStats, collect, summary, affinityMatrix };
+});
+
+/* The colony: cats, people, scheduled and random world events, and the per-tick loop of state, decision, movement and interaction. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory(node ? require('./util.js') : root.WH['util'], node ? require('./terms.js') : root.WH['terms'],
+    node ? require('./config.js') : root.WH['config'], node ? require('./map.js') : root.WH['map'],
+    node ? require('./cats.js') : root.WH['cats'], node ? require('./cat-data.js') : root.WH['cat-data'],
+    node ? require('./stats.js') : root.WH['stats']);
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['sim'] = api;
+})(typeof self !== 'undefined' ? self : null, function (U, C, CFG, M, CATS, D, STATS) {
+'use strict';
+const { mulberry32, rnorm, clamp, gauss, cholesky } = U;
+const { T, A, EVDEF, RANDOM_EV, HOSTILE, INACTIVE } = C;
+const { DEFAULTS } = CFG;
+const { buildMap, walkable, distField, makeNav, lineClear } = M;
+const { sampleCat, makeCat } = CATS;
+const { TRAIT_CORR, NACHSHON_TRAITS } = D;
+
+// A fleeing cat with nowhere left to go turns and defends itself: stress spikes and it answers with a hiss.
+const SOCIAL_FRIENDLY = new Set([A.SNIFF, A.ALLOGROOM, A.PLAY]);
+function turnAtBay(c, o) { c.s.stress = Math.min(1, c.s.stress + 0.1); c.incoming.push({ from: o.id, type: 'hiss' }); }
+
+class Sim {
+  constructor(opts) {
+    this.cfg = Object.assign({}, DEFAULTS, opts || {}); this.cfg.speeds = Object.assign({}, DEFAULTS.speeds, (opts || {}).speeds); this.cfg.stimulus = Object.assign({}, DEFAULTS.stimulus, (opts || {}).stimulus); this.cfg.speedTier = Object.assign({}, DEFAULTS.speedTier, (opts || {}).speedTier); this.cfg.actionSpeed = Object.assign({}, DEFAULTS.actionSpeed, (opts || {}).actionSpeed); this.cfg.tune = Object.assign({}, DEFAULTS.tune, (opts || {}).tune);
+    const c = this.cfg; this.rng = mulberry32(c.seed >>> 0 || 1);
+    this.map = buildMap(c); this.fields = this.map.stations.map(s => distField(this.map, s)); this.nav = makeNav(this.map);
+    this.tick = 0; this.t = c.startHour * 3600; this.cats = []; this.humans = []; this.toys = []; this.log = []; this.birdUntil = 0; this.vacuum = null; this.nextId = 0;
+    this.L = cholesky(TRAIT_CORR);
+    for (let i = 0; i < c.nCats; i++) { const cat = sampleCat(this.rng, this.nextId++, this.L); const ov = c.traits && c.traits[i]; if (ov) { const o0 = Object.assign({}, cat.tr), ot = ov.tr || {}; Object.assign(cat.tr, ot); const d = k => (cat.tr[k] - o0[k]) || 0; // derived traits follow overridden base traits (same loadings as sampleCat) unless given explicitly
+      if (!('catSoc' in ot)) cat.tr.catSoc = clamp(o0.catSoc + 0.55 * d('A') - 0.45 * d('D')); if (!('humanSoc' in ot)) cat.tr.humanSoc = clamp(o0.humanSoc + 0.5 * d('A') - 0.3 * d('N') + 0.2 * d('E')); if (!('jealousy' in ot)) cat.tr.jealousy = clamp(o0.jealousy + 0.45 * d('D') + 0.35 * d('I')); if (ov.sex) cat.sex = ov.sex; if (ov.age) cat.age = ov.age; if (ov.name) cat.name = ov.name; } this.addCat(cat); }
+    for (let i = 0; i < (c.newcomers || 0) && i < this.cats.length; i++) this.markNewcomer(this.cats[this.cats.length - 1 - i]);
+    this.nachshon = makeCat(99, 'Nachshon', '#ffffff', Object.assign({}, NACHSHON_TRAITS, c.nachTr || {}), 'M', 6, 'stray', this.rng); this.nachshon.isNachshon = true;
+    if (c.nachshon) this.addCat(this.nachshon, true);
+    if (c.runSeed) this.rng = mulberry32((c.runSeed * 7919 + c.seed) >>> 0);
+    this.wev = []; this.randomEvents = this.cfg.randomEvents !== false; this.schedule = []; this.planDay(0); this.stats = this.newStats();
+    // Several toys spread around the room. The first is drawn as before; the extra ones (best of 8 spots by distance to
+    // the toys already down) come from their own random stream so the colony's own draws are unchanged.
+    if (!c.noToys) { this.toys.push(this.spawnToyAt(...this.randFloor())); const main = this.rng; this.rng = mulberry32(((c.seed >>> 0) * 31 + 7) >>> 0);
+      for (let k = 1; k < (c.toyCount ?? 3); k++) { let best = null, bd = -1; for (let j = 0; j < 8; j++) { const p = this.randFloor(), dm = Math.min(...this.toys.map(t => Math.hypot(t.x - p[0], t.y - p[1]))); if (dm > bd) { bd = dm; best = p; } } this.toys.push(this.spawnToyAt(...best)); }
+      this.rng = main; }
+    if (c.adLib) for (const st of this.map.stations) if (st.type === T.BOWL) st.food = 1.6;
+  }
+  get hour() { return (this.t / 3600) % 24; }
+  get day() { return Math.floor(this.t / 86400); }
+  clock() { const h = this.hour, hh = Math.floor(h), mm = Math.floor((h - hh) * 60); return `Day ${this.day + 1} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
+  m2t(m) { return m / this.cfg.tile; }
+  emit(msg, kind) { this.log.push({ t: this.t, clock: this.clock(), msg, kind: kind || 'info' }); if (this.log.length > 400) this.log.shift(); }
+  pointField(px, py) { return distField(this.map, { x: px | 0, y: py | 0, w: 1, h: 1 }); }
+  randFloor(mainOnly) { for (let k = 0; k < 500; k++) { const x = 3 + this.rng() * ((mainOnly ? this.map.partitionX : this.map.W) - 6), y = 3 + this.rng() * (this.map.H - 6); if (walkable(this.map, x, y) && this.map.grid[(y | 0) * this.map.W + (x | 0)] === T.FLOOR && (k > 300 || this.map.clear[(y | 0) * this.map.W + (x | 0)] >= 5)) return [x, y]; /* goals in open floor, not wedged against walls or furniture */ } return [100, 80]; }
+  addCat(cat, newcomer) {
+    const [x, y] = this.randFloor(); cat.x = cat.px = x; cat.y = cat.py = y; cat.act = null; cat.incoming = [];
+    for (const o of this.cats) { // familiarity: residents know each other a bit; newcomer is a stranger
+      const base = newcomer ? 0 : (this.rng() - 0.45) * 0.4;
+      // residents are settled with each other: at least familiarN past meetings (sets the familiarity term in decide)
+      o.mem[cat.id] = { aff: newcomer ? -0.1 : base, fear: 0, n: newcomer ? 0 : this.cfg.tune.familiarN + this.rng() * 20, wins: 0, losses: 0, last: -1e9 };
+      cat.mem[o.id] = { aff: newcomer ? -0.1 : base + (this.rng() - 0.5) * 0.1, fear: 0, n: newcomer ? 0 : this.cfg.tune.familiarN + this.rng() * 20, wins: 0, losses: 0, last: -1e9 };
+    }
+    this.cats.push(cat); if (newcomer && this.tick > 0) this.emit(`${cat.name} enters the colony`, 'event');
+  }
+  // newcomer = stranger to everyone, arrival time stamped; elevated stress baseline that habituates over days (Kessler & Turner 1999; Kry & Casey 2007)
+  markNewcomer(cat) { cat.arrivedT = this.t; for (const o of this.cats) if (o !== cat) { o.mem[cat.id] = { aff: -0.1, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 }; cat.mem[o.id] = { aff: -0.1, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 }; } cat.s.stress = Math.max(cat.s.stress, 0.35 + 0.3 * cat.tr.N); }
+  admit() { const cat = sampleCat(this.rng, this.nextId++, this.L); this.addCat(cat, true); this.markNewcomer(cat); return cat; }
+  novelty(c) { // two-phase habituation (Kessler & Turner 1997): a fast fall over the first days, then a slow tail over weeks
+    if (c.arrivedT === undefined) return 0; const d = (this.t - c.arrivedT) / 86400, H = this.cfg.habit || {};
+    const w = H.fastShare != null ? H.fastShare : 0.6; return w * Math.exp(-d / (H.fastDays || 1.2)) + (1 - w) * Math.exp(-d / (H.slowDays || 14)); }
+  removeCat(cat) { this.cats = this.cats.filter(c => c !== cat); for (const o of this.cats) { if (o.act && o.act.target === cat.id) o.act = null; o.incoming = o.incoming.filter(i => i.from !== cat.id); } this.emit(`${cat.name} removed from the colony`, 'event'); }
+  setNachshon(on) { const has = this.cats.includes(this.nachshon); if (on && !has) { this.nachshon.mem = {}; this.addCat(this.nachshon, true); } else if (!on && has) this.removeCat(this.nachshon); }
+  catById(id) { return this.cats.find(c => c.id === id); }
+  dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  spawnToyAt(x, y) { return { x, y, novelty: 1, id: (this.toySeq = (this.toySeq || 0) + 1) }; } // deterministic id (headless runs must be reproducible)
+
+  // ----- events -----
+  planDay(d) {
+    const r = this.rng, c = this.cfg, s = this.schedule, base = d * 86400;
+    for (const f of c.feedTimes) { s.push({ t: base + (f + (r() - 0.5) / 3) * 3600, type: 'feed' }); s.push({ t: base + (f + c.cleanDelayH + r() * 0.2) * 3600, type: 'clean' }); if (c.pickupH) s.push({ t: base + (f + c.pickupH) * 3600, type: 'pickup' }); }
+    const pois = (rate, h0, h1, type) => { const n = Math.round(rate + (r() - 0.5) * 2 * Math.sqrt(rate)); for (let i = 0; i < n; i++) s.push({ t: base + (h0 + r() * (h1 - h0)) * 3600, type }); };
+    pois(c.rates.noise, 7, 23, 'noise'); pois(c.rates.visit, 10, 19, 'visit'); pois(c.rates.bird, 6, 19, 'bird'); pois(c.rates.toy, 9, 18, 'toy'); pois(c.rates.vacuum, 10, 15, 'vacuum'); if (c.rates.newcomer > 0) pois(c.rates.newcomer, 9, 17, 'newcomer');
+    const to = c.turnover; if (to) { // shelter turnover (off unless cfg.turnover is set): intake reuses the newcomer path; adoptions remove a random cat
+      const once = (p, type) => { if (r() < p) s.push({ t: base + (10 + r() * 8) * 3600, type }); }; // daily rates < 1 cannot use pois (it rounds to 0)
+      for (let k = Math.floor(to.intakePerDay); k >= 0; k--) once(k ? 1 : to.intakePerDay % 1, 'intake'); once(Math.min(1, to.adoptPerCatDay * this.cats.length), 'adopt'); }
+    s.sort((a, b) => a.t - b.t);
+  }
+  trigger(type, scheduled) {
+    const r = this.rng, M = this.map;
+    if (!this.wev) this.wev = [];
+    if (scheduled && this.randomEvents === false && RANDOM_EV.has(type)) return; // random-events toggle (feeding/cleaning always run)
+    if (type === 'adopt') { if (this.cats.length > 1) { const cat = this.cats[Math.floor(r() * this.cats.length)]; this.removeCat(cat); this.emit(`🏡 ${cat.name} is adopted`, 'event'); } return; }
+    if (type === 'newcomer' || type === 'intake') { if (this.cats.length >= ((this.cfg.turnover && this.cfg.turnover.cap) || this.cfg.maxCats || 16)) return; const nc = this.admit(); this.emit(`🌱 ${nc.name} arrives as a newcomer`, 'event'); this.beginEvent('newcomer', { cat: nc }); return; }
+    const snap = this.evSnap();
+    if (type === 'feed') { const bw = M.stations.filter(s => s.type === T.BOWL); bw.forEach(s => s.food = this.cats.length * this.cfg.tune.dailyRation / Math.max(1, this.cfg.feedTimes.length) / Math.max(1, bw.length)); /* a measured ration, not an all-day supply */ this.lastFeed = this.t; if (!this.cfg.noHumans) this.addHuman('feed'); this.emit('🍽️ Staff fill the food bowls', 'event'); this.interruptAll(0.6, c => c.s.hunger > 0.2); }
+    else if (type === 'pickup') { if (!this.cfg.adLib) this.map.stations.forEach(st => { if (st.type === T.BOWL) st.food = 0; }); }
+    else if (type === 'clean') { if (!this.cfg.noHumans) this.addHuman('clean'); this.emit('🧹 Staff scoop litter boxes', 'event'); }
+    else if (type === 'noise') { let k = 0; const [nx, ny] = this.evPlace('noise'); for (const c of this.cats) { const w = this.soundW(this.soundDb(this.cfg.stimulus.noiseDb, nx, ny, c)); c.s.stress = clamp(c.s.stress + 0.55 * (0.25 + c.tr.N) * w); if (r() < (0.4 + c.tr.N * 0.5) * w) { c.act = null; c.startleT = this.t; k++; } } this.emit(`💥 Sudden loud noise: ${k} cat${k === 1 ? '' : 's'} startle${k === 1 ? 's' : ''}`, 'event'); }
+    else if (type === 'visit') { this.addHuman(r() < 0.5 ? 'sit' : 'visit'); this.emit('🧑 A person enters the room', 'event'); }
+    else if (type === 'sit') { this.addHuman('sit'); this.emit('🧘 A person comes in and sits on the floor', 'event'); }
+    else if (type === 'bird') { this.birdUntil = this.t + 300 + r() * 300; this.emit('🐦 Bird outside the window', 'event'); this.interruptAll(0.5, c => c.act && c.act.type !== A.SLEEP); }
+    else if (type === 'toy') { if (this.cfg.noToys) return; const [x, y] = this.randFloor(); this.toys.push(this.spawnToyAt(x, y)); if (this.toys.length > 4) this.toys.shift(); this.emit('🧶 New toy dropped in', 'event'); }
+    else if (type === 'vacuum') { const h = this.addHuman('vacuum'); this.vacuum = h;
+      for (const c of this.cats) c.s.stress = clamp(c.s.stress + 0.3 * (0.4 + c.tr.N) * this.soundW(this.soundDb(this.cfg.stimulus.vacuumDb, h.x, h.y, c))); // start-up noise, by distance
+      this.interruptAll(0.9, () => true);
+      this.emit('🌀 The vacuum starts up', 'event'); }
+    if (EVDEF[type]) this.beginEvent(type, { snap, startled: type === 'noise' ? this.cats.filter(c => c.startleT === this.t).length : 0 });
+  }
+  // ----- explicit world events: record, locate, measure effect (pure bookkeeping; no RNG use, no behaviour change) -----
+  evSnap() { const n = this.cats.length || 1; return { stress: this.cats.reduce((s, c) => s + c.s.stress, 0) / n, hideFlee: this.cats.filter(c => c.act && (c.act.type === A.HIDE || c.act.type === A.FLEE)).length, bowls: this.catsNear(T.BOWL, 1.5), window: this.cats.filter(c => c.act && c.act.type === A.WINDOW).length, n: this.cats.length }; }
+  catsNear(type, m) { const R = this.m2t(m), st = this.map.stations.filter(s => s.type === type); return this.cats.filter(c => st.some(s => Math.hypot(c.x - s.cx, c.y - s.cy) < R)).length; }
+  evPlace(type, o) { const M = this.map, mid = ty => { const s = M.stations.filter(x => x.type === ty); return s.length ? [s.reduce((a, x) => a + x.cx, 0) / s.length, s.reduce((a, x) => a + x.cy, 0) / s.length] : [M.W / 2, M.H / 2]; };
+    if (type === 'newcomer') return [o.cat.x, o.cat.y]; if (type === 'feed') return mid(T.BOWL); if (type === 'bird') return mid(T.WINDOW);
+    if (type === 'visit' || type === 'vacuum') { const h = this.humans[this.humans.length - 1]; return h ? [h.x, h.y] : [M.W / 2, M.H / 2]; }
+    return M.door ? [M.door.x, M.door.y] : [M.W / 2, M.H - 3]; }
+  beginEvent(type, o) { const D = EVDEF[type], [x, y] = this.evPlace(type, o), h = (type === 'visit' || type === 'vacuum') ? this.humans[this.humans.length - 1] : null;
+    const ev = { id: (this.evSeq = (this.evSeq || 0) + 1), type, icon: D.icon, name: D.name, hint: D.hint, x, y, t0: this.t, evalAt: this.t + D.evalS, until: this.t + D.durS, human: h, cat: o.cat || null, snap: o.snap || this.evSnap(), startled: o.startled || 0, near: 0, acc: 0, n: 0, effect: null, s0: new Map(this.cats.map(c => [c.id, c.s.stress])) };
+    if (type === 'bird' && this.birdUntil) ev.until = this.birdUntil; this.wev.push(ev); (this.evLog || (this.evLog = [])).push(ev); if (this.evLog.length > 60) this.evLog.shift(); return ev; }
+  updateEvents() { const now = this.t;
+    for (const ev of this.wev) {
+      if (ev.human) { if (this.humans.includes(ev.human)) { ev.x = ev.human.x; ev.y = ev.human.y; ev.until = Math.max(ev.until, now + 4); } }
+      if (ev.cat) { ev.x = ev.cat.x; ev.y = ev.cat.y; }
+      if (!ev.effect) { ev.n++; if (ev.type === 'visit' && ev.human) { const R = this.m2t(1.5); ev.near = Math.max(ev.near, this.cats.filter(c => Math.hypot(c.x - ev.x, c.y - ev.y) < R).length); }
+        if (ev.type === 'newcomer' && ev.cat && ev.cat.act && ev.cat.act.type === A.HIDE) ev.acc++;
+        if (ev.type === 'vacuum' || ev.type === 'noise') ev.near = Math.max(ev.near, this.cats.filter(c => c.act && (c.act.type === A.HIDE || c.act.type === A.FLEE)).length);
+        if (now >= ev.evalAt) { const a = this.evSnap(), b = ev.snap, pct = v => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v * 100)) + '%'; ev.after = a;
+          ev.effect = ev.type === 'noise' ? `${ev.startled} of ${b.n} cats startled, avg stress ${pct(a.stress - b.stress)}`
+            : ev.type === 'feed' ? `${a.bowls} cats at the bowls (was ${b.bowls}), ${this.cats.filter(c => c.act && c.act.type === A.WAIT).length} waiting`
+            : ev.type === 'visit' ? `${ev.near} cats came within 1.5 m · ${a.hideFlee} hiding/fleeing (was ${b.hideFlee})`
+            : ev.type === 'vacuum' ? `up to ${ev.near} cats fled or hid (was ${b.hideFlee}), avg stress ${pct(a.stress - b.stress)}`
+            : ev.type === 'bird' ? `${a.window} cats at the window (was ${b.window})`
+            : ev.type === 'newcomer' ? `${ev.cat.name} hid ${Math.round(100 * ev.acc / Math.max(1, ev.n))}% of the first hour · stress ${Math.round(ev.cat.s.stress * 100)}% vs residents ${Math.round(100 * this.cats.filter(c => c !== ev.cat).reduce((s, c) => s + c.s.stress, 0) / Math.max(1, this.cats.length - 1))}%` : '';
+          { const R = this.m2t(1.5), kinds = { noise: [A.HIDE, A.FLEE], vacuum: [A.HIDE, A.FLEE], visit: [A.SEEKH, A.HIDE, A.FLEE], bird: [A.WINDOW], feed: [A.EAT, A.WAIT], newcomer: [A.HIDE] }[ev.type] || []; // machine-readable effect for headless/validation: who reacted, and the colony stress change
+            ev.dStress = a.stress - b.stress; ev.affected = this.cats.filter(c => (ev.cat && c === ev.cat) || (c.act && kinds.includes(c.act.type)) || (c.s.stress - (ev.s0.get(c.id) ?? c.s.stress)) > 0.05 || (ev.type === 'visit' && Math.hypot(c.x - ev.x, c.y - ev.y) < R)).map(c => c.id); }
+          ev.effectT = now; this.emit(`${ev.icon} ${ev.name} effect: ${ev.effect}`, 'effect'); } } }
+    this.wev = this.wev.filter(ev => !ev.effect || now < Math.max(ev.until, ev.effectT + 120)); }
+  interruptAll(p, pred) { for (const c of this.cats) if (pred(c) && this.rng() < p) c.act = null; }
+  addHuman(mode) {
+    const durs = { feed: 150, clean: 300, visit: 600 + this.rng() * 900, sit: 900 + this.rng() * 900, vacuum: 600 };
+    const D = this.map.door; const h = { id: this.rng(), x: D.x, y: D.y, mode, until: this.t + durs[mode], phase: 0, gx: 60, gy: 60, sitting: false, petT: 0 };
+    this.humans.push(h); this.doorOpen = this.t + 20;
+    for (const c of this.cats) if (Math.hypot(c.x - h.x, c.y - h.y) < this.m2t(2)) c.s.stress = clamp(c.s.stress + 0.15 * c.tr.N); // door startle
+    return h;
+  }
+  updateHumans() {
+    const dt = this.cfg.dt, sp = this.m2t(1.0) * dt;
+    for (const h of this.humans) {
+      const leaving = this.t > h.until;
+      if (leaving) { h.gx = this.map.door.x; h.gy = this.map.door.y; h.sitting = false; h.goal = null; }
+      else if (h.mode === 'feed' || h.mode === 'clean') { const st = this.map.stations.filter(s => s.type === (h.mode === 'feed' ? T.BOWL : T.LITTER)); const s = st[Math.floor((this.t / 25)) % st.length]; h.gx = s.cx; h.gy = s.cy; h.goal = s.id; }
+      else if (h.mode === 'vacuum') { if (Math.hypot(h.gx - h.x, h.gy - h.y) < 3) [h.gx, h.gy] = this.randFloor(true); }
+      else if (h.mode === 'sit') { if (!h.sitting) { h.gx = this.map.sitSpot.x; h.gy = this.map.sitSpot.y; if (Math.hypot(h.gx - h.x, h.gy - h.y) < 2) h.sitting = true; } }
+      else if (h.mode === 'visit') { if (Math.hypot(h.gx - h.x, h.gy - h.y) < 3 && this.rng() < 0.05) [h.gx, h.gy] = this.randFloor(true); }
+      // A person with a cat at their feet stops and attends to it. Wandering on mid-greeting looked wrong
+      // and kept pulling the cat along behind them.
+      const nearCat = !leaving && h.mode !== 'vacuum' && this.cats.some(c =>
+        Math.hypot(c.x - h.x, c.y - h.y) < this.m2t(1.0) && ((c.act && c.act.type === A.SEEKH) || this.t - c.petted < 20));
+      if (!nearCat) h.attendT = undefined; else if (h.attendT === undefined) h.attendT = this.t;
+      // Bounded, or it feeds on itself: the person stops, more cats come over, and they never move again.
+      const attending = nearCat && this.t - h.attendT < 60;
+      h.attending = attending;
+      if (!h.sitting && !attending) { if (h.goal != null && !leaving) { const f = this.fields[h.goal], W = this.map.W; let x = h.x | 0, y = h.y | 0; for (let k = 0; k < sp; k++) { let bx = x, by = y, bd = f[y * W + x]; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (walkable(this.map, nx, ny) && f[ny * W + nx] < bd) { bd = f[ny * W + nx]; bx = nx; by = ny; } } if (bx === x && by === y) break; x = bx; y = by; } h.x = x + 0.5; h.y = y + 0.5; } else { const hf = this.humanField || (this.humanField = this.pointField(this.map.door.x, this.map.door.y)); const inQuiet = h.x > this.map.partitionX; if (leaving && inQuiet) { const W = this.map.W; let x = h.x | 0, y = h.y | 0; for (let k = 0; k < sp; k++) { let bx = x, by = y, bd = hf[y * W + x]; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (walkable(this.map, nx, ny) && hf[ny * W + nx] < bd) { bd = hf[ny * W + nx]; bx = nx; by = ny; } } x = bx; y = by; } h.x = x + 0.5; h.y = y + 0.5; } else { const dx = h.gx - h.x, dy = h.gy - h.y, d = Math.hypot(dx, dy); if (d > 0.5) { const k = Math.min(1, sp / d); h.x += dx * k; h.y += dy * k; } } } }
+      h.done = leaving && Math.hypot(h.x - this.map.door.x, h.y - this.map.door.y) < 3;
+      // petting: friendly humans pet one nearby cat that wants it
+      if (h.mode === 'visit' || h.mode === 'sit' || h.mode === 'feed') {
+        const near = this.cats.filter(c => Math.hypot(c.x - h.x, c.y - h.y) < this.m2t(0.6) && c.act && c.act.type === A.SEEKH);
+        if (near.length) {
+          const c = near[Math.floor(this.rng() * near.length)]; c.petted = this.t; c.s.social = clamp(c.s.social - 0.04); c.s.stress = clamp(c.s.stress - 0.02); h.petting = c.id;
+          for (const o of this.cats) if (o !== c && o.tr.jealousy > 0.3 && this.dist(o, c) < this.m2t(this.cfg.senseM)) { o.s.irritation = clamp(o.s.irritation + 0.03 * o.tr.jealousy); o.jealousOf = c.id; o.jealousT = this.t; }
+        } else h.petting = -1;
+      }
+      if (h.mode === 'vacuum') for (const c of this.cats) { const d = Math.hypot(c.x - h.x, c.y - h.y) * this.cfg.tile; if (d < 2.5) { c.s.stress = clamp(c.s.stress + 0.06 * (0.3 + c.tr.N) * (2.5 - d)); if (d < 1.2 && c.act && c.act.type !== A.FLEE && c.act.type !== A.HIDE && this.rng() < 0.3) c.act = null; } }
+    }
+    const before = this.humans.length; this.humans = this.humans.filter(h => !h.done); if (this.vacuum && !this.humans.includes(this.vacuum)) this.vacuum = null;
+    if (this.humans.length < before) this.doorOpen = this.t + 20;
+  }
+
+  // ----- per-cat internal state -----
+  circ(h) { return 0.2 + 0.8 * Math.max(gauss(h, 6.5, 1.4), gauss(h, 18.5, 1.6), 0.35 * gauss(h, 12, 3)); } // crepuscular
+  updateState(c) {
+    const TU0 = this.cfg.tune, h = this.cfg.dt / 3600, s = c.s, a = c.act ? c.act.type : null, tr = c.tr;
+    const asleep = a === A.SLEEP, resting = a === A.REST || a === A.PERCH || a === A.HIDE;
+    s.hunger = clamp(s.hunger + h / 7); s.thirst = clamp(s.thirst + h / 6); s.bladder = clamp(s.bladder + h / 6.5);
+    // homeostatic sleep pressure: rises 1/4.5h awake, falls 1/2.6h asleep (=> ~63% asleep at balance before circadian/rest effects)
+    s.sleep = clamp(s.sleep + (asleep ? -h / 5.4 : resting ? h / 14 : h / 4.0));
+    const hl = 0.25 + 0.9 * tr.N; // stress half-life hours
+    const nov = this.novelty(c), base = Math.min(1, 0.03 + 0.2 * tr.N + (this.cfg.habit || {}).amp * (0.3 + tr.N) * nov) * (asleep ? TU0.sleepStressBase : 1); // newcomer: unfamiliar room & cats; sound sleep in safety settles a cat below its waking baseline
+    s.stress += (base - s.stress) * (1 - Math.pow(0.5, h / hl));
+    s.irritation *= Math.pow(0.5, h / (0.25 + 0.3 * tr.D));
+    s.irritation = clamp(s.irritation + h * 0.6 * Math.max(0, s.hunger - 0.6));
+    s.irritation = clamp(s.irritation + h * TU0.stressIrritation * (0.5 + tr.D) * Math.max(0, s.stress - 0.2)); // stress lowers tolerance (Ellis 2009); a bold cat turns it outward, an anxious subordinate one keeps fleeing
+    if (s.bladder > 0.85) s.stress = clamp(s.stress + h * 1.5 * (s.bladder - 0.85)); // holding on because the box is taken
+    s.social = clamp(s.social + h / 5 * (0.4 + tr.A * 0.6));
+    s.play = clamp(s.play + (asleep ? 0 : h / 3 * (0.3 + tr.E)) * (c.age > 8 ? 0.5 : 1));
+    // crowding: many non-friends within 0.5 m raises irritation & stress
+    let crowd = 0; for (const o of this.cats) if (o !== c && this.dist(c, o) < this.m2t(0.5)) { const m = c.mem[o.id]; if (!m || m.aff < (asleep ? 0 : 0.3)) crowd++; } // asleep, only a disliked or unknown cat close by counts: lying next to a neutral cat is allo-resting, not crowding
+    if (crowd) { s.irritation = clamp(s.irritation + h * 1.5 * crowd * (0.3 + tr.D)); s.stress = clamp(s.stress + h * 0.6 * crowd * tr.N); }
+    for (const id in c.mem) { const m = c.mem[id]; m.aff *= Math.pow(0.5, h / (m.aff < 0 ? TU0.grudgeHalfH : 120)); /* a grudge fades faster than a bond: settled pairs end up neutral, not ever more hostile */ m.fear *= Math.pow(0.5, h / (24 * (1 + Math.min(m.losses, TU0.fearLossMax)))); } // a cat it has lost to stays feared for longer: avoidance replaces contest
+  }
+
+  // ----- decision -----
+  nearbyCats(c, r, keep) { const out = []; for (const o of this.cats) if (o !== c) { const d = this.dist(c, o); if (d < r) out.push([o, d]); } out.sort((a, b) => a[1] - b[1]); return out.slice(0, keep || 5); }
+  stationOcc(s) { let n = 0; for (const o of this.cats) if (o.act && o.act.station === s.id) n++; return n; }
+  pickStation(c, types, scoreFn) {
+    let best = null, bs = -1e9; const f = this.fields;
+    for (const s of this.map.stations) { if (!types.includes(s.type)) continue; const d = f[s.id][(c.y | 0) * this.map.W + (c.x | 0)]; if (d === 65535) continue;
+      const occ = this.stationOcc(s) - (c.act && c.act.station === s.id ? 1 : 0); if (occ >= s.cap) continue;
+      let sc = -d * this.cfg.tile * 0.6 + (scoreFn ? scoreFn(s) : 0) + this.rng() * 0.3;
+      for (const o of this.cats) if (o !== c && o.act && o.act.station === s.id) { const m = c.mem[o.id]; sc += m ? (m.aff * 0.8 - m.fear) : -0.3; }
+      if (sc > bs) { bs = sc; best = s; } }
+    return best;
+  }
+  anticipation() {
+    // Nothing to anticipate once the food is actually out. A scheduled meal can arrive a few minutes
+    // before its nominal time, and the window below is keyed to the nominal time, so without this the
+    // cats went on pacing at an empty waiting spot while seven full bowls stood untouched beside them.
+    if (this.map.stations.some(st => st.type === T.BOWL && st.food > 0.02)) return 0;
+    let best = 0; for (const f of this.cfg.feedTimes) { let m = ((f * 3600 - (this.t % 86400)) + 86400) % 86400 / 60; if (m > 0 && m <= 60) best = Math.max(best, 1 - m / 60 * 0.7); } return best; } // ramps up in the hour before a scheduled meal
+  decide(c) {
+    const s = c.s, tr = c.tr, hr = this.hour, circ = this.circ(hr), r = this.rng, opts = [];
+    // A bout that has run its course: one of them usually gets up and goes, and a wary cat bolts.
+    const done = c.act;
+    if (done && SOCIAL_FRIENDLY.has(done.type) && done.target >= 0 && this.tick >= done.until) {
+      const o = this.catById(done.target);
+      if (o && this.dist(c, o) < this.m2t(0.8)) {
+        const t = c.nearMate && c.nearMate.id === o.id ? c.nearMate : null;
+        if (t && t.part === undefined) t.part = r() < this.cfg.tune.partingP;
+        const part = t ? t.part : r() < this.cfg.tune.partingP;
+        if (part) {
+        const m0 = c.mem[o.id];
+        if (r() < this.cfg.tune.partingFleeP * (0.3 + (m0 ? m0.fear : 0) + 0.7 * tr.N)) { this.startAction(c, { type: A.FLEE, target: o.id }); return; }
+        this.withdraw(c, o, 120); return;
+        }
+      }
+      // The other way a bout can end: the two of them simply stay where they are and settle down
+      // together, which is what keeps about a fifth of interactions ending in contact.
+      const m = o ? c.mem[o.id] : null;
+      if (o && !done.soured && m && m.aff > 0.3 && this.dist(c, o) < this.m2t(0.8)) {
+        this.startAction(c, { type: A.REST }); c.act.gx = c.x; c.act.gy = c.y; c.act.station = -1; c.act.arrived = true; return;
+      }
+    }
+    const prev = c.lastAct;
+    // The carry-on bonus below is for an action worth continuing. A trip to a bowl, water or the box that
+    // never got there is not: repeating it is how a cat wedged behind the crowd spends a minute "drinking"
+    // without reaching the water. Such a cat picks afresh instead.
+    const prevStranded = c.act && c.act.station >= 0 && !c.act.arrived;
+    const add = (type, score, extra) => { let sc = score; if (prev && prev.type === type && !prevStranded && (!extra || extra.target === prev.target)) sc += 0.6 + (prev.recip ? 0.8 : 0); opts.push(Object.assign({ type, score: sc }, extra || {})); };
+    const wetFresh = this.lastFeed !== undefined && this.t - this.lastFeed < 1800 ? 1 : 0;
+    const threat = this.threat(c); // people the cat wants to get away from (see threat())
+    const TU = this.cfg.tune;
+    const anyFood = this.map.stations.some(st => st.type === T.BOWL && st.food > 0.02);
+    // solo
+    add(A.SLEEP, 4.2 * (s.sleep - 0.3) - 2.6 * (circ - 0.4) - 3 * Math.max(0, s.stress - 0.2) - 2.5 * Math.max(0, s.hunger - 0.75) - 4 * threat);
+    add(A.REST, 0.1 + 1.0 * (s.sleep - 0.35) - 1.0 * circ - s.stress - 3 * threat);
+    add(A.GROOM, 0.0 + 0.5 * (1 - s.stress) * (prev && (prev.type === A.EAT || prev.type === A.SLEEP) ? 1.5 : 0.6) + 0.4 * s.stress * tr.N);
+    add(A.EXPLORE, -0.3 + 1.1 * circ + 0.5 * tr.E + 0.4 * s.play - 0.8 * s.sleep - s.stress * tr.N * 1.5 - 2.5 * threat);
+    // fresh food pulls the whole colony to the bowls, not only the cats that are already hungry
+    if (anyFood) add(A.EAT, 4.5 * (s.hunger - 0.4) + wetFresh * (TU.freshFoodPull + 0.8 * tr.D) * (s.hunger > 0.05 ? 1 : 0) - s.stress * tr.N - 2 * threat);
+    add(A.DRINK, 5 * (s.thirst - 0.6));
+    add(A.LITTER, 7 * (s.bladder - 0.65));
+    add(A.HIDE, -0.9 + 3.2 * s.stress * (0.4 + tr.N) + 0.35 * tr.N + 0.8 * this.novelty(c) + 4.5 * threat);
+    const antic = this.anticipation(); const seek = anyFood || this.t < (c.noSeekT || 0) ? -Infinity : -1.5 + 10 * (s.hunger - 0.65) - 2 * Math.max(0, s.sleep - 0.5); // a hungry cat with empty bowls goes and waits at them
+    if (antic > 0 || seek > -1.5) add(A.WAIT, (antic > 0 ? -0.5 + 5.0 * antic * (0.3 + s.hunger) + Math.max(0, seek + 1.5) : seek) - s.stress * tr.N - 2 * threat); // food-anticipatory activity: learned routine
+    add(A.PERCH, -0.25 + 0.5 * tr.D + 0.6 * (s.sleep - 0.3) + 0.8 * s.stress * (1 - tr.N) - 0.3 * circ - 1.5 * threat);
+    add(A.WINDOW, -0.6 + 0.6 * tr.E + 0.5 * circ + (this.t < this.birdUntil ? 0.7 + 3.0 * tr.E + 0.4 * tr.I - 1.6 * tr.N : 0));
+    // a burst comes on after a nap or the litter box, mostly at dawn and dusk, in a cat with go in
+    // it and nothing weighing on it; it is suppressed by stress, hunger and anyone frightening about
+    const justUp = prev && (prev.type === A.SLEEP || prev.type === A.REST || prev.type === A.LITTER) ? 1 : 0;
+    const sinceZoom = c.lastZoomT === undefined ? 1e9 : this.t - c.lastZoomT;
+    if (sinceZoom > TU.zoomRefractoryS)
+    add(A.ZOOM, TU.zoomBase + 2.6 * tr.energy * (0.35 + circ) + 1.1 * justUp + 0.8 * s.play
+      - 2.5 * s.stress - 3 * Math.max(0, s.hunger - 0.5) - 1.5 * s.sleep - 4 * threat - (c.age > 9 ? 0.8 : 0));
+    add(A.SCRATCH, -1.1 + 0.4 * circ + 0.4 * tr.D + (prev && prev.type === A.SLEEP ? 0.9 : 0));
+    // Object play (docs/BEHAVIOR-MODEL.md, "Toys"): adult cats play with objects in short bursts, a few minutes a day,
+    // young cats more and seniors less. Each toy is weighed by distance (nearest wins), novelty, and whether another cat
+    // already has it: a toy in use by a cat I am not close to (affinity <= 0.5) is competition, so I look elsewhere.
+    if (this.toys.length) { let toy = null, tv = -Infinity;
+      for (const t of this.toys) { const dM = this.dist(c, t) * this.cfg.tile; let v = 1.6 * this.falloff(dM, this.cfg.stimulus.catD0M) + 1.0 * t.novelty * tr.E;
+        for (const o of this.cats) if (o !== c && o.act && o.act.type === A.TOY && o.act.toy === t) { const af = (c.mem[o.id] || { aff: 0 }).aff; v -= af > 0.5 ? 0.3 : 1.5; }
+        if (v > tv) { tv = v; toy = t; } }
+      add(A.TOY, TU.toyBase + 1.6 * s.play + 0.3 * tr.E + tv - 0.6 * s.stress + (c.age < 2 ? 0.5 : c.age > 8 ? -0.3 : 0), { toy }); }
+    if (this.humans.some(h => h.mode !== 'vacuum')) { const jb = c.jealousT && this.t - c.jealousT < 120 ? 0.8 * tr.jealousy : 0; add(A.SEEKH, TU.seekHumanBase + 2.4 * tr.humanSoc + 1.0 * s.social - 1.5 * s.stress * tr.N + jb - 0.5 * s.sleep - 3 * threat); }
+    // social (incl. responses to incoming)
+    const sense = this.m2t(this.cfg.senseM), contact = this.m2t(this.cfg.contactM);
+    // A cat can see a friend across the room and go to it. Hostile options are still judged on the
+    // close range below, because stalking someone from eight metres away is not a thing cats do.
+    const reach = this.m2t(this.cfg.tune.approachM);
+    const inc = {}; for (const i of c.incoming) inc[i.from] = i.type;
+    for (const [o, d] of this.nearbyCats(c, reach, 8)) {
+      const m = c.mem[o.id] || (c.mem[o.id] = { aff: 0, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 });
+      const aff = m.aff, fear = m.fear, near = d < contact * 1.5, dd = 2 * (1 - this.falloff(d * this.cfg.tile, this.cfg.stimulus.catD0M)), oa = o.act ? o.act.type : null, oAsleep = oa === A.SLEEP;
+      const fam = Math.min(1, m.n / TU.familiarN), strange = TU.strangerHostile * (1 - fam) - TU.familiarCalm * fam * (1 - Math.min(tr.D, o.tr.D)); // familiarity: challenges peak at first contact and fade below the stranger level as the pair learns whom to avoid, except between two bold cats, who keep contesting rank (Levine et al. 2005; Kessler & Turner 1997)
+      const ddA = TU.affiliativeDist * dd;  // affiliative bids tolerate distance far better than hostile ones
+      const it = inc[o.id], hostileIn = it && HOSTILE.has(it), friendlyIn = it === A.PLAY || it === A.ALLOGROOM || it === A.SNIFF;
+      const bidIn = friendlyIn && o.act && o.act.target === c.id; // a friendly bid aimed at this cat, still running
+      // How unwanted the bid is. Every term is something the cat already knows: it does not care for
+      // the asker, it is cross, it is sleepy or has just been woken, it is in the middle of something
+      // else, it is afraid, or it is simply not a sociable cat. Rough play from a pushy or excitable
+      // cat lands worse than a sniff. One number, so the three responses below compete over the same
+      // pressure rather than each inventing its own.
+      const cur = c.act, woken = cur && (cur.type === A.SLEEP || cur.type === A.REST),
+        busy = cur && cur.target < 0 && !INACTIVE.has(cur.type) && cur.type !== A.EXPLORE;
+      const unwanted = bidIn ? Math.min(3, Math.max(0, TU.unwantedBase + 1.6 * s.irritation + 2.0 * fear
+        + 0.9 * s.sleep * (woken ? 1.6 : 0.6) + 0.5 * (busy ? 1 : 0) + 0.9 * (1 - tr.catSoc) - 0.7 * aff
+        + (it === A.PLAY ? 0.5 * (o.tr.D + o.tr.I) : 0))) : 0;
+      // Response to a friendly bid: answering in kind is strongly favoured between cats that do not dislike or fear each other.
+      const respond = bidIn ? TU.respondFriendly + 0.8 * tr.catSoc + 1.5 * aff - 3.5 * fear - 1.2 * s.irritation - TU.unwantedRespond * unwanted : 0;
+      const jealous = c.jealousOf === o.id && this.t - c.jealousT < 180 ? tr.jealousy : 0;
+      // timidity the target shows toward this cat: its fear of us; feeds the chase score only (assumption, bullyGain in config.js)
+      const om0 = o.mem[c.id], timid = Math.min(1, (om0 ? om0.fear : 0)), bully = TU.bullyGain * tr.D * timid;
+      const dom = tr.D * (1 - 0.5 * tr.catSoc), guard = (o.act && o.act.station >= 0 && d < this.m2t(1.2)) ? tr.D * (1 - Math.max(0, aff)) : 0; // resource guarding
+      /* proximity: friendly bids get likelier as cats get closer (within proxM), scaled by sociability; off for fearful/hostile pairs, for cats busy at a resource (bowl, water, litter, queue), and for 5 min after they last interacted */
+      const busyRes = oa === A.EAT || oa === A.WAIT || oa === A.LITTER || oa === A.DRINK, dM = d * this.cfg.tile, prox = (!busyRes && dM < this.cfg.proxM && fear < 0.25 && aff > -0.2 && this.t - m.last > this.cfg.proxCooldownS) ? this.cfg.proxGain * (1 - dM / this.cfg.proxM) * (0.3 + 0.7 * tr.catSoc) * (1 - 0.5 * tr.N * s.stress) : 0;
+      // The three friendly bids. Their own appetites are kept separate from the response pull, because the
+      // alternative answers below are priced relative to the bid actually on the table: a sniff and a
+      // grooming invitation are worth very different amounts to the cat, and a walk-away or a hiss has to
+      // compete with whichever one it is, not with a fixed number.
+      const sniffS = prox - 1.4 + 0.9 * Math.exp(-m.n / 4) + 0.4 * tr.E + 0.3 * s.social + TU.affilA * (tr.A - 0.5) - fear - ddA - (oAsleep ? 0.6 : 0);
+      const groomS = prox - TU.allogroomBase + TU.groomAffinity * aff + 0.9 * s.social + 0.4 * tr.catSoc + 0.3 * tr.A + TU.affilA * (tr.A - 0.5) + TU.groomRank * tr.D - 1.5 * s.irritation - ddA + 0.8 * (tr.D - o.tr.D);
+      const playS = prox * (0.5 + Math.max(0, aff)) - 1.5 + 1.4 * s.play + 0.4 * tr.E + 0.4 * tr.A + TU.affilA * (tr.A - 0.5) + 0.7 * aff - 0.8 * s.stress + TU.playYouth * (Math.exp(-c.age / 3) - 0.3) - ddA - 0.6 * s.sleep;
+      add(A.SNIFF, sniffS + (it === A.SNIFF ? respond : 0), { target: o.id });
+      if (aff > 0.1 || it === A.ALLOGROOM) add(A.ALLOGROOM, groomS + (it === A.ALLOGROOM ? respond : 0), { target: o.id }); // grooming runs down the rank order
+      if (!oAsleep || it === A.PLAY) add(A.PLAY, playS + (it === A.PLAY ? respond : 0), { target: o.id });
+      // The level a plain "answer something" sits at: the bid's own worth plus the pull to reply, with the
+      // warmth terms (affinity, fear, irritation) left out — those belong to answering in kind, and each
+      // alternative answer carries its own. respondAvoid / respondHiss are offsets from this level, so the
+      // split between replying, leaving and threatening does not depend on which bid came in.
+      const anchor = bidIn ? (it === A.SNIFF ? sniffS : it === A.ALLOGROOM ? groomS : playS) + TU.respondFriendly + 0.8 * tr.catSoc : 0;
+      // Walking away: the quiet third option. Always open as an answer to a bid, not only to a frightening one.
+      if (bidIn || fear > TU.fearApproachFear) add(A.AVOID, (bidIn ? anchor + TU.respondAvoid : TU.avoidBase) + TU.unwantedAvoid * unwanted
+        + 1.6 * fear + 0.5 * s.sleep + 0.4 * tr.N - 1.4 * Math.max(0, aff) - 0.6 * tr.catSoc, { target: o.id });
+      if (d < sense) {
+      add(A.STALK, -1.6 + 0.8 * s.play + 0.5 * tr.I + 0.5 * dom - 0.4 * aff - dd + strange, { target: o.id });
+      add(A.CHASE, TU.chaseBase + 0.9 * dom + 0.4 * tr.D - 1.0 * tr.A + 0.8 * guard + 1.2 * s.irritation - 0.8 * aff + 0.4 * tr.I + 1.6 * jealous - 1.2 * fear - dd + (it === A.HISS ? 0.4 * tr.D : 0) + ((oa === A.EAT && s.hunger > 0.3) ? 0.6 * dom : 0) + strange + bully, { target: o.id });
+      if (d < sense * 0.6) add(A.HISS, (bidIn ? anchor + TU.respondHiss : TU.hissBase) + TU.unwantedHiss * unwanted + 1.5 * s.irritation + 0.9 * fear - 0.7 * aff + 0.3 * tr.N + 0.2 * tr.D - 0.8 * tr.A + 0.6 * guard + (hostileIn && it !== A.HISS ? 1.0 : it === A.HISS ? 0.3 : 0) + (it === A.PLAY && aff < 0 ? 0.8 : 0) + jealous + strange, { target: o.id });
+      // a swat: the same unwantedness, weighted down, so escalation from a friendly start stays the rare case
+      if (near && (hostileIn || s.irritation > 0.35 || jealous || guard > 0.4 || unwanted > 1.5)) add(A.FIGHT, 0.5 * TU.unwantedHiss * unwanted + (bidIn ? anchor + TU.respondHiss - TU.swatGap : TU.fightBase) + 1.2 * dom + 0.4 * tr.D - 0.7 * tr.A + 0.5 * guard + 1.4 * s.irritation - aff - 1.5 * fear - s.stress * tr.N + 0.3 * tr.I + (it === A.FIGHT ? 1.3 + tr.D : 0) + jealous + strange, { target: o.id });
+      // A cat that is afraid of this one can leave at a run even when the approach is friendly.
+      if (hostileIn || fear > 0.3 || (bidIn && fear > TU.fearApproachFear) || (o.act && HOSTILE.has(oa) && o.act.target !== c.id && fear > 0.1)) add(A.FLEE, (bidIn ? TU.respondFlee * fear : 0) - 0.6 + 1.8 * fear + 1.5 * s.stress + 0.8 * tr.N - 0.9 * tr.D + TU.fleeN * (tr.N - 0.5) + (hostileIn ? 0.8 : 0) + (it === A.FIGHT ? 0.5 : 0) - (it === A.HISS ? -0.2 : 0), { target: o.id });
+      }
+    }
+    // softmax choice; impulsiveness raises temperature
+    const Tm = 0.22 + 0.35 * tr.I; let mx = -1e9; for (const o of opts) mx = Math.max(mx, o.score);
+    let tot = 0; for (const o of opts) { o.w = Math.exp((o.score - mx) / Tm); tot += o.w; }
+    let u = r() * tot, ch = opts[opts.length - 1]; for (const o of opts) { u -= o.w; if (u <= 0) { ch = o; break; } }
+    this.startAction(c, ch);
+  }
+  startAction(c, ch) {
+    const r = this.rng, m = 60 / this.cfg.dt; // ticks per minute
+    const durMin = { sleep: [25, 100], rest: [5, 30], groom: [1, 6], explore: [0.5, 3], eat: [1, 4], drink: [0.3, 1], litter: [1, 2], hide: [5, 35], perch: [5, 40], window: [2, 15], scratch: [0.3, 1], toy: [1, 4], seek_human: [2, 8],
+      zoom: [0.4, 2], avoid: [0.2, 0.8], sniff: [0.2, 0.5], allogroom: [0.5, 3], play: [0.3, 1.5], stalk: [0.3, 1], chase: [0.15, 0.6], hiss: [0.1, 0.3], fight: [0.1, 0.5], flee: [0.2, 0.6], wait_food: [0.5, 2] }[ch.type];
+    const act = { type: ch.type, target: ch.target !== undefined ? ch.target : -1, start: this.tick, until: this.tick + Math.max(1, Math.round(Math.min(durMin[1] * 4, Math.max(durMin[0] * 0.3, Math.sqrt(durMin[0] * durMin[1]) * Math.exp(0.75 * rnorm(r)))) * m)), station: -1, gx: null, gy: null, toy: ch.toy, arrived: false, recip: false };
+    const rest = { [A.SLEEP]: [T.BED, T.PERCH, T.HIDE, T.WINDOW], [A.REST]: [T.BED, T.PERCH, T.WINDOW, T.FLOOR], [A.HIDE]: [T.HIDE], [A.PERCH]: [T.PERCH], [A.WINDOW]: [T.WINDOW], [A.EAT]: [T.BOWL], [A.DRINK]: [T.WATER], [A.LITTER]: [T.LITTER], [A.SCRATCH]: [T.SCRATCH] }[ch.type];
+    if (rest) {
+      const tr = c.tr;
+      // Which bowl to go to. A cat keeps away from one a cat above it is already at, but the way to do
+      // that is to take a different bowl, not to stand and wait while six others sit full: queueing is
+      // only for when every bowl is taken. Same for the boxes.
+      const crowdedBy = s => { let p = 0; for (const o of this.cats) { if (o === c || !o.act) continue;
+          const oa2 = o.act.type; if (oa2 !== A.EAT && oa2 !== A.WAIT && oa2 !== A.LITTER) continue;
+          if (Math.hypot(o.x - (s.cx == null ? s.x : s.cx), o.y - (s.cy == null ? s.y : s.cy)) > this.m2t(1.5)) continue;
+          const m2 = c.mem[o.id];
+          p -= (o.tr.D > c.tr.D + 0.15 || (m2 && m2.fear > 0.15)) ? 3.0 : 0.6; } return p; };
+      const pref = s => s.type === T.HIDE ? 1.2 * tr.N : s.type === T.PERCH ? 0.8 * tr.D : s.type === T.BED ? 0.5
+        : s.type === T.BOWL ? (s.food > 0.02 ? crowdedBy(s) : -50) : s.type === T.LITTER ? crowdedBy(s) : 0;
+      const st = this.pickStation(c, rest, pref);
+      if (st && ch.type === A.EAT && this.cats.some(o => o !== c && o.act && o.act.type === A.EAT && o.tr.D > c.tr.D + 0.15 && ((c.mem[o.id] && c.mem[o.id].fear > 0.15) || r() < 0.8 * (1 - c.tr.D)) && Math.hypot(o.x - (st.cx||st.x), o.y - (st.cy||st.y)) < this.m2t(1.5))) { act.type = A.WAIT; act.gx = (st.cx||st.x) + 5 + r() * 6; act.gy = (st.cy||st.y) + (r() - 0.5) * 10; act.waitBowl = st.id; } // deference to a dominant eater nearby
+      else if (st) { act.station = st.id; act.gx = st.x + r() * st.w; act.gy = st.y + r() * st.h; }
+      else if (ch.type === A.EAT && (() => { const vic = this.cats.filter(o => o !== c && o.act && o.act.type === A.EAT && o.tr.D < c.tr.D - 0.1 && !(c.mem[o.id] && c.mem[o.id].fear > 0.2)); if (!vic.length || r() > c.tr.D) return false; const v = vic[Math.floor(r() * vic.length)]; act.type = A.CHASE; act.target = v.id; act.until = this.tick + Math.round(0.5 * m); ch = { type: A.CHASE, target: v.id }; return true; })()) { /* displacement */ }
+      else if (ch.type === A.EAT) { act.type = A.WAIT; const bowls = this.map.stations.filter(s => s.type === T.BOWL && s.food > 0.02); const b = bowls[Math.floor(r() * bowls.length)] || this.map.stations[0]; act.gx = b.cx + 5 + r() * 6; act.gy = b.cy + (r() - 0.5) * 10; act.waitBowl = b.id; }
+      else if (ch.type === A.LITTER) { const boxes = this.map.stations.filter(x => x.type === T.LITTER); const b = boxes.reduce((p, x) => (!p || this.fields[x.id][(c.y | 0) * this.map.W + (c.x | 0)] < this.fields[p.id][(c.y | 0) * this.map.W + (c.x | 0)] ? x : p), null); const occ = b && this.cats.find(o => o !== c && o.act && o.act.type === A.LITTER && o.act.station === b.id && o.act.arrived); if (occ && occ.tr.D < c.tr.D && r() < c.tr.D * (0.5 + c.s.irritation)) { act.type = A.CHASE; act.target = occ.id; this.stats.litterChases = (this.stats.litterChases || 0) + 1; } /* dominant cat displaces the box occupant, as at bowls */ else if (b) { act.type = A.WAIT; act.gx = b.cx + (r() < 0.5 ? -1 : 1) * (9 + r() * 4); act.gy = b.cy + (r() - 0.5) * 8; act.waitBowl = b.id; c.s.irritation = clamp(c.s.irritation + 0.05); this.stats.litterWaits = (this.stats.litterWaits || 0) + 1; } else { act.type = A.REST; act.gx = c.x; act.gy = c.y; } } // box occupied: wait nearby
+      else if (ch.type === A.SLEEP || ch.type === A.REST) { act.gx = c.x; act.gy = c.y; } // sleep on floor where you are
+      else { act.type = A.REST; act.gx = c.x; act.gy = c.y; }
+    } else if (ch.type === A.WAIT) { const bowls = this.map.stations.filter(x => x.type === T.BOWL); const b = bowls[Math.floor(r() * bowls.length)]; if (b) { act.gx = b.cx + 5 + r() * 6; act.gy = b.cy + (r() - 0.5) * 10; act.waitBowl = b.id; act.antic = true; act.t0 = this.t; if (!(this.anticipation() > 0)) { const TU = this.cfg.tune; act.until = this.tick + Math.round(TU.seekCheckS / this.cfg.dt); c.noSeekT = this.t + TU.seekRefractS * (this.t - (this.lastFeed ?? -Infinity) > TU.missedMealH * 3600 ? 0.1 : 1); /* a missed meal makes it check far more often */ } /* unreinforced bowl-checking extinguishes: a short check, then a pause */ } else { act.type = A.REST; act.gx = c.x; act.gy = c.y; } }
+    else if (ch.type === A.ZOOM) { [act.gx, act.gy] = this.randFloor(); act.jumps = 0; }
+    else if (ch.type === A.EXPLORE) { [act.gx, act.gy] = this.randFloor(); }
+    else if (ch.type === A.GROOM) { act.gx = c.x; act.gy = c.y; }
+    if (act.target >= 0) { const o = this.catById(act.target); if (o) { const m2 = c.mem[o.id]; m2.n++; m2.last = this.t; act.recip = !!(c.incoming.find(i => i.from === o.id && i.type === act.type));
+      // the walk over is not part of the bout: hold the clock until the two of them are together
+      if (SOCIAL_FRIENDLY.has(act.type)) act.contactT = this.t; // already together unless the walk below says otherwise
+      if (SOCIAL_FRIENDLY.has(act.type) && this.dist(c, o) > this.m2t(this.cfg.contactM) * 1.5) { act.contactT = undefined; act.travel = true; act.until = this.tick + Math.round(this.cfg.tune.approachS / this.cfg.dt); act.span = act.until - act.start; } } }
+    if (act.type === A.FIGHT && (!c.act || c.act.type !== A.FIGHT)) { const o = this.catById(act.target); if (o && !(o.act && o.act.type === A.FIGHT && o.act.target === c.id)) { this.stats.fights++; this.stats.fightLog.push({ t: this.t, a: c.id, b: act.target }); if (this.emitFights !== false) this.emit(`⚔️ ${c.name} attacks ${o.name}`, 'fight'); } }
+    if (act.type === A.HISS) this.stats.hisses++;
+    if (c.act && c.act.target >= 0) { const E = this.stats.episodes; (E[c.act.type] || (E[c.act.type] = [])).push((this.tick - c.act.start) * this.cfg.dt); }
+    if (act.target >= 0) { const I = this.stats.initiated; const k = c.id + ':' + act.type; I[k] = (I[k] || 0) + 1; const hk = act.type; if (HOSTILE.has(hk) || hk === A.CHASE) this.stats.hourHostile[Math.floor(this.hour)]++; }
+    c.lastAct = { type: act.type, target: act.target, recip: act.recip };
+    c.act = act; c.incoming = [];
+  }
+
+  // ----- movement -----
+  // Stuck (blocked by cats or wedged): drop the route and take a step towards the most open nearby floor.
+  unwedge(c) { const m = this.map, cl = m.clear; let best = null, bc = cl[(c.y | 0) * m.W + (c.x | 0)]; for (let i = 0; i < 8; i++) { const th = i * Math.PI / 4 + this.rng() * 0.4, x = c.x + Math.cos(th) * 4, y = c.y + Math.sin(th) * 4; if (!walkable(m, x, y) || !lineClear(m, c.x, c.y, x, y, 0)) continue; const v = cl[(y | 0) * m.W + (x | 0)] + this.rng(); if (v > bc) { bc = v; best = [x, y]; } } if (best) this.setPos(c, best[0], best[1]); }
+  stepField(c, field, maxSteps) {
+    const W = this.map.W; let x = c.x | 0, y = c.y | 0, moved = 0;
+    for (let k = 0; k < maxSteps; k++) { const cur = field[y * W + x]; if (cur === 0) break; let bx = x, by = y, bd = cur;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (!walkable(this.map, nx, ny)) continue; const nd = field[ny * W + nx]; if (nd < bd) { bd = nd; bx = nx; by = ny; } }
+      if (bx === x && by === y) break; x = bx; y = by; moved++; }
+    if (moved) this.setPos(c, x + 0.5, y + 0.5); return field[y * W + x] === 0;
+  }
+  setPos(c, x, y) { const dx = x - c.x, dy = y - c.y, d = Math.hypot(dx, dy); if (d > 0.01) { c.fx = dx / d; c.fy = dy / d; } c.x = x; c.y = y; }
+  // Pathing. navTo walks straight when the segment has body clearance, otherwise follows a coarse A* route (makeNav) that
+  // keeps off walls and furniture, string-pulled to the farthest visible waypoint. stepToward adds local avoidance: it bends
+  // the heading away from other cats and from tight spots. Returns true on arrival (within 1 tile).
+  navTo(c, tx, ty, maxTiles, depth) {
+    const m = this.map; if (Math.hypot(tx - c.x, ty - c.y) < 1) return true;
+    let wx = tx, wy = ty, wp = false;
+    if (!lineClear(m, c.x, c.y, tx, ty, 2)) {
+      const key = ((tx / 4) | 0) * 1000 + ((ty / 4) | 0); let P = c.path;
+      if (!P || P.key !== key || P.i >= P.pts.length) { const pts = this.nav.path(c.x, c.y, tx, ty); P = c.path = pts && pts.length ? { key, pts, i: 0 } : null; this.stats.navPlans = (this.stats.navPlans || 0) + 1; }
+      if (P) { let k = Math.min(P.pts.length - 1, P.i + 10); while (k > P.i && !lineClear(m, c.x, c.y, P.pts[k][0], P.pts[k][1], 2)) k--; P.i = k; [wx, wy] = P.pts[k]; wp = true;
+        if (Math.hypot(wx - c.x, wy - c.y) < 1.5 && k < P.pts.length - 1) { P.i = k + 1; [wx, wy] = P.pts[k + 1]; } }
+    } else c.path = null;
+    const before = Math.hypot(wx - c.x, wy - c.y), moved = this.stepToward(c, wx, wy, Math.min(maxTiles, before));
+    if (wp && !depth && maxTiles - moved > 1 && Math.hypot(wx - c.x, wy - c.y) < 1.5) return this.navTo(c, tx, ty, maxTiles - moved, 1);
+    return Math.hypot(tx - c.x, ty - c.y) < 1;
+  }
+  stepToward(c, tx, ty, step) {
+    const d = Math.hypot(tx - c.x, ty - c.y); if (d < 0.01 || step <= 0) return 0; const ux = (tx - c.x) / d, uy = (ty - c.y) / d, m = this.map, cl = m.clear, tgt = c.act ? c.act.target : -1;
+    let best = null, bs = -1e9;
+    for (const ang of [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.6, -1.6, 2.3, -2.3]) {
+      const ca = Math.cos(ang), sa = Math.sin(ang), vx = ux * ca - uy * sa, vy = ux * sa + uy * ca; let nx = c.x, ny = c.y, ok = true;
+      for (let k = 1; k <= Math.ceil(step); k++) { const px = c.x + vx * Math.min(k, step), py = c.y + vy * Math.min(k, step); if (!walkable(m, px, py)) { ok = false; break; } nx = px; ny = py; }
+      if (!ok && Math.hypot(nx - c.x, ny - c.y) < 0.5) continue;
+      let sc = -0.9 * Math.abs(ang) - (ok ? 0 : 1.5), ce = cl[(ny | 0) * m.W + (nx | 0)]; if (ce < 2 && ce < cl[(c.y | 0) * m.W + (c.x | 0)]) sc -= 1.2;
+      for (const o of this.cats) if (o !== c && o.id !== tgt) { const dd = Math.hypot(o.x - nx, o.y - ny); if (dd < 7) sc -= (7 - dd) / 7 * 1.0; }
+      if (sc > bs) { bs = sc; best = [nx, ny]; } if (ang === 0 && ok && sc > -0.05) break;
+    }
+    if (!best) return 0; const mv = Math.hypot(best[0] - c.x, best[1] - c.y); this.setPos(c, best[0], best[1]); return mv;
+  }
+  // Escape from a threat at (ox, oy): of 16 headings, take the one that best combines "away", a long free run and open
+  // space at its end, so a fleeing cat runs along the room rather than into the nearest corner. Returns tiles moved.
+  fleeFrom(c, ox, oy, maxTiles) {
+    const m = this.map, cl = m.clear, R = this.m2t(2), ad = Math.hypot(c.x - ox, c.y - oy) || 1, ax = (c.x - ox) / ad, ay = (c.y - oy) / ad; let best = null, bs = -1e9;
+    for (let i = 0; i < 16; i++) { const th = i * Math.PI / 8, vx = Math.cos(th), vy = Math.sin(th), al = vx * ax + vy * ay; if (al < -0.2) continue;
+      let L = 0; for (let k = 1; k <= R; k++) { const px = c.x + vx * k, py = c.y + vy * k; if (!walkable(m, px, py) || (k > 2 && cl[(py | 0) * m.W + (px | 0)] < 2)) break; L = k; }
+      if (L < 1) continue; const ex = c.x + vx * L, ey = c.y + vy * L, sc = 1.2 * al + 1.2 * L / R + 0.05 * Math.min(10, cl[(ey | 0) * m.W + (ex | 0)]) - (Math.hypot(ex - ox, ey - oy) < ad ? 1 : 0);
+      if (sc > bs) { bs = sc; best = [vx, vy, L]; } }
+    if (!best) return 0; const s = Math.min(maxTiles, best[2]); this.setPos(c, c.x + best[0] * s, c.y + best[1] * s); c.path = null; return s;
+  }
+  // Flee (an AWAY action): run from the threat with fleeFrom. A frightened cat (fear of this cat or stress high), or one whose
+  // run is blocked, heads for a hide box / perch away from the threat instead; reaching it turns the flight into HIDE. With
+  // no way out at all it turns at bay. Distance to the threat should grow while fleeing (checked by nav-check.js).
+  flee(c, o, a, V) {
+    const fear = (c.mem[o.id] ? c.mem[o.id].fear : 0), scared = c.s.stress > this.cfg.tune.fleeHideStress || fear > 0.3, bx = c.x, by = c.y;
+    if (a.hideSt == null && scared) { const st = this.pickStation(c, [T.HIDE, T.PERCH], s => -Math.max(0, 1 - Math.hypot(s.cx - o.x, s.cy - o.y) / this.m2t(1.5)) * 3); if (st && Math.hypot(st.cx - o.x, st.cy - o.y) > Math.hypot(st.cx - c.x, st.cy - c.y) * 0.7) a.hideSt = st.id; }
+    if (a.hideSt == null) { this.fleeFrom(c, o.x, o.y, V); if (Math.hypot(c.x - bx, c.y - by) >= Math.min(V, 3)) return; const st = this.pickStation(c, [T.HIDE, T.PERCH], s => Math.hypot(s.cx - o.x, s.cy - o.y) * 0.02); if (st) a.hideSt = st.id; }
+    if (a.hideSt != null) { const st = this.map.stations[a.hideSt]; this.navTo(c, st.cx, st.cy, V);
+      if (this.fields[st.id][(c.y | 0) * this.map.W + (c.x | 0)] === 0) { this.stats.fleeToHide = (this.stats.fleeToHide || 0) + 1; this.startAction(c, { type: st.type === T.HIDE ? A.HIDE : A.PERCH }); if (c.act) { c.act.station = st.id; c.act.gx = c.x; c.act.gy = c.y; c.act.arrived = true; } return; } }
+    if (Math.hypot(c.x - bx, c.y - by) < 1) { this.stats.cornered++; a.until = this.tick; turnAtBay(c, o); }
+  }
+  steer(c, tx, ty, maxTiles, away) {
+    let dx = tx - c.x, dy = ty - c.y; let d = Math.hypot(dx, dy); if (d < 0.01) return true;
+    if (away) { dx = -dx; dy = -dy; } const ux = dx / d, uy = dy / d; const step = away ? maxTiles : Math.min(maxTiles, d);
+    for (const ang of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.3, -2.3]) {
+      const ca = Math.cos(ang), sa = Math.sin(ang), vx = ux * ca - uy * sa, vy = ux * sa + uy * ca;
+      let ok = true, nx = c.x, ny = c.y; for (let k = 1; k <= Math.ceil(step); k++) { const px = c.x + vx * Math.min(k, step), py = c.y + vy * Math.min(k, step); if (!walkable(this.map, px, py)) { ok = false; break; } nx = px; ny = py; }
+      if (ok) { this.setPos(c, nx, ny); return !away && Math.hypot(tx - c.x, ty - c.y) < 1; }
+      if (!away && ang === 0) { /* blocked straight: try partial */ }
+    }
+    return false;
+  }
+  moveCat(c) {
+    const a = c.act, V = this.m2t(this.cfg.speedTier[this.cfg.actionSpeed[a.type] || 'normal']) * this.cfg.dt, t = this.m2t(1) * this.cfg.dt, contact = this.m2t(this.cfg.contactM);
+    const ox = c.x, oy = c.y; let wantsMove = false; a.phase = 'act';
+    // A cat still inside the vacuum's reach backs away from it before pursuing anything else; one
+    // already on its way to a hide box keeps going, because that is the better escape.
+    const vac = this.vacuum;
+    if (vac && a.type !== A.HIDE) {
+      const dM = Math.hypot(vac.x - c.x, vac.y - c.y) * this.cfg.tile;
+      if (dM < 2.2) { this.fleeFrom(c, vac.x, vac.y, this.m2t(this.cfg.speedTier.fast) * this.cfg.dt); a.phase = 'away'; c.stuck = 0; return; }
+    }
+    if (a.station >= 0 && !a.arrived) { wantsMove = true; a.phase = 'approach'; const spd = V;
+      // The walk over is not part of the bout, exactly as for a friendly approach: hold the action's clock
+      // while the cat is still on its way, or a short drink can time out before the cat reaches the water
+      // and read as a drink that quenched no thirst. Capped by the same travel budget, tune.approachS.
+      if ((this.tick - a.start) * this.cfg.dt < this.cfg.tune.approachS) a.until = Math.max(a.until, this.tick + 2);
+      const f = this.fields[a.station]; this.navTo(c, a.gx, a.gy, spd); if (f[(c.y | 0) * this.map.W + (c.x | 0)] === 0 || (c.stuck > 2 && this.stepField(c, f, Math.ceil(spd)))) { this.steer(c, a.gx, a.gy, spd); a.arrived = true; a.phase = 'act'; if (Math.hypot(c.x - ox, c.y - oy) < 1) wantsMove = false; } } // already there: no journey
+    else if (a.target >= 0) {
+      const o = this.catById(a.target); if (!o) { c.act = null; return; }
+      const d = this.dist(c, o);
+      if (a.type === A.FLEE) { wantsMove = d < this.m2t(this.cfg.tune.fleeBreakM) || a.hideSt != null; if (wantsMove) { a.phase = 'away'; this.flee(c, o, a, V); if (!c.act || c.act !== a) return; wantsMove = a.until > this.tick; } }
+      else if (a.type === A.HISS) { if (d < contact) { a.phase = 'away'; this.fleeFrom(c, o.x, o.y, V); } }
+      // Walking away: the same get-away movement as a flight, but at the slow tier and only as far as a
+      // couple of metres. A cat that has made its distance stops there, and often takes a perch or a box.
+      else if (a.type === A.AVOID) {
+        const goal = this.m2t(a.awayM || this.cfg.tune.avoidM);
+        if (d < goal) { wantsMove = true; a.phase = 'away'; this.fleeFrom(c, o.x, o.y, V); if (Math.hypot(c.x - ox, c.y - oy) < 0.2 && c.stuck > 2) a.until = this.tick; }
+        else { this.stats.avoidsDone = (this.stats.avoidsDone || 0) + 1;
+          if (this.rng() < this.cfg.tune.avoidPerchP) { this.startAction(c, { type: this.rng() < c.tr.N ? A.HIDE : A.PERCH }); return; }
+          this.startAction(c, { type: A.REST }); if (c.act) { c.act.gx = c.x; c.act.gy = c.y; c.act.station = -1; c.act.arrived = true; } return; } }
+      else if (a.type === A.STALK) { if (d > this.m2t(0.9)) { wantsMove = true; a.phase = 'approach'; this.navTo(c, o.x, o.y, Math.min(V, d - this.m2t(0.8))); } }
+      else { const spd = V; if (d > contact * 0.8) { wantsMove = true; a.phase = 'approach'; this.navTo(c, o.x, o.y, Math.min(spd, d - contact * 0.6)); }
+        else if (a.travel) { a.travel = false; a.start = this.tick; a.contactT = this.t; a.until = this.tick + Math.max(1, a.span || 1); } } // arrived: the bout starts now
+    } else if (a.type === A.TOY && a.toy) { if (this.dist(c, a.toy) > 3) { wantsMove = true; a.phase = 'approach'; this.navTo(c, a.toy.x, a.toy.y, V); } else { a.toy.x = clamp(a.toy.x + (this.rng() - 0.5) * 8, 3, this.map.W - 4); a.toy.y = clamp(a.toy.y + (this.rng() - 0.5) * 8, 3, this.map.H - 4); if (!walkable(this.map, a.toy.x, a.toy.y) || this.map.clear[(a.toy.y | 0) * this.map.W + (a.toy.x | 0)] < 3) { a.toy.x = c.x; a.toy.y = c.y; } } }
+    else if (a.type === A.SEEKH) { const h = this.nearestHuman(c); if (h && Math.hypot(h.x - c.x, h.y - c.y) > this.m2t(0.4)) { wantsMove = true; this.navTo(c, h.x + (this.rng() - 0.5) * 6, h.y + (this.rng() - 0.5) * 6, 2 * V); } } // a brisk trot (1 m/s, as before tiers): people walk at 0.5 m/s
+    else if (a.type === A.ZOOM) {
+      wantsMove = true;
+      if (this.navTo(c, a.gx, a.gy, V * (0.8 + this.rng() * 0.5)) || this.rng() < 0.08 * this.cfg.dt / 2) {
+        // tight turns and sudden changes of mind, and now and then a leap onto something
+        if (this.rng() < 0.3) { const st = this.pickStation(c, [T.PERCH, T.WINDOW]); if (st) { a.gx = st.cx; a.gy = st.cy; a.jumps++; } else [a.gx, a.gy] = this.randFloor(); }
+        else [a.gx, a.gy] = this.randFloor();
+      }
+    }
+    else if (a.gx !== null && (a.type === A.EXPLORE || a.type === A.WAIT)) { wantsMove = true; if (this.navTo(c, a.gx, a.gy, V * (0.8 + this.rng() * 0.4))) { if (a.type === A.EXPLORE) [a.gx, a.gy] = this.randFloor(); else wantsMove = false; } }
+    // a cat with company drifts back towards it rather than wandering off alone
+    const mate = this.mate(c);
+    // Not while the cat is on its way somewhere it needs to be: the pull towards a companion fought the
+    // walk to the water bowl tick for tick, and a thirsty cat could spend a minute and a half getting
+    // less than two metres. Company does not outrank the water.
+    if (mate && a.target < 0 && a.type !== A.HIDE && a.station < 0) {
+      const dm = this.dist(c, mate);
+      const lim = this.m2t(this.cfg.tune.tetherM);
+      if (dm > lim) { const ux = (c.x - mate.x) / dm, uy = (c.y - mate.y) / dm;
+        const nx = mate.x + ux * lim, ny = mate.y + uy * lim;
+        const step = this.m2t(this.cfg.speedTier.normal) * this.cfg.dt; // never snap farther than one normal-speed step
+        if (dm - lim <= step && walkable(this.map, nx, ny) && lineClear(this.map, c.x, c.y, nx, ny, 2)) this.setPos(c, nx, ny); else this.navTo(c, mate.x, mate.y, Math.min(step, dm - lim)); }
+    }
+    // soft separation: body ~18 cm wide, 46 cm long -> keep ~35 cm between centres unless in contact interaction or sharing a bed
+    const contactPair = o => (a.target === o.id && (a.type === A.FIGHT || a.type === A.ALLOGROOM || a.type === A.PLAY || a.type === A.SNIFF)) || (o.act && o.act.target === c.id && (o.act.type === A.FIGHT || o.act.type === A.ALLOGROOM || o.act.type === A.PLAY || o.act.type === A.SNIFF));
+    for (const o of this.cats) if (o !== c) { const dx = c.x - o.x, dy = c.y - o.y, d = Math.hypot(dx, dy); const minD = contactPair(o) ? 4 : (a.station >= 0 && o.act && o.act.station === a.station && a.type === A.SLEEP && o.act.type === A.SLEEP) ? 4.5 : 7;
+      if (d < minD) { const ux = d > 0.01 ? dx / d : this.rng() - 0.5, uy = d > 0.01 ? dy / d : this.rng() - 0.5, push = Math.min(2.5, (minD - d) * 0.6); const nx = c.x + ux * push, ny = c.y + uy * push; const cl = this.map.clear, W = this.map.W; if (walkable(this.map, nx, ny) && (cl[(ny | 0) * W + (nx | 0)] >= 2 || cl[(ny | 0) * W + (nx | 0)] >= cl[(c.y | 0) * W + (c.x | 0)])) { c.x = nx; c.y = ny; } } } // never shoved into a wall
+    c.wantsMove = wantsMove;
+    if (wantsMove && Math.hypot(c.x - ox, c.y - oy) < 0.3) { c.stuck++; if (c.stuck % 3 === 2) { c.path = null; this.unwedge(c); } if (c.stuck > 30 / this.cfg.dt) { this.stats.stuckEvents++; c.act = null; c.stuck = 0; const [x, y] = [c.x + (this.rng() - 0.5) * 4, c.y + (this.rng() - 0.5) * 4]; if (walkable(this.map, x, y)) { c.x = x; c.y = y; } } } else c.stuck = 0;
+  }
+  // How alarming the people in the room are to this cat right now, 0 to about 1.3. The vacuum
+  // frightens every cat, the more so the more neurotic it is; a person only alarms a cat that does
+  // not care for people. One value drives the hide score, the settle-down scores and scattering,
+  // so every "people frighten cats" effect in the model comes from the same place.
+  // ----- distance weighting of stimuli -----
+  // falloff: 1 at d = 0, 1/2 at d = d0; with a cutoff it is rescaled to reach 0 smoothly there (sense / visibility limit).
+  falloff(dM, d0M, cutM) { const f = x => 1 / (1 + (x / d0M) * (x / d0M)); if (cutM == null) return f(dM); if (dM >= cutM) return 0; const fc = f(cutM); return (f(dM) - fc) / (1 - fc); }
+  // perceived sound level (dB) of a source of srcDb (at 1 m) at (x, y): -20 log10(d), and wallDb lost through the partition.
+  soundDb(srcDb, sx, sy, c) { const dM = Math.max(0.5, Math.hypot(c.x - sx, c.y - sy) * this.cfg.tile), P = this.map.partitionX, wall = this.cfg.layout !== 'single' && P < this.map.W && (c.x > P) !== (sx > P); return srcDb - 20 * Math.log10(dM) - (wall ? this.cfg.stimulus.wallDb : 0); }
+  // 0..1 weight of a sound: 0 below the hearing threshold, 1 at or above the startle level.
+  soundW(db) { const S = this.cfg.stimulus; return clamp((db - S.hearDb) / (S.startleDb - S.hearDb)); }
+  threat(c) {
+    let worst = 0;
+    for (const h of this.humans) {
+      const S = this.cfg.stimulus, dM = Math.hypot(h.x - c.x, h.y - c.y) * this.cfg.tile, reach = h.mode === 'vacuum' ? S.vacuumCutM : S.humanCutM;
+      if (dM >= reach) continue;
+      const w = h.mode === 'vacuum' ? 0.6 + 0.8 * c.tr.N : 1.3 * (1 - c.tr.humanSoc) * (0.3 + c.tr.N);
+      worst = Math.max(worst, this.falloff(dM, h.mode === 'vacuum' ? S.threatD0M : S.humanD0M, reach) * w);
+    }
+    return worst;
+  }
+  // An approach that is taken up runs on; one that is rebuffed ends with the asker leaving. Without
+  // this an encounter just times out, and on screen two cats sit together doing nothing in
+  // particular. Withdrawing also sets a refractory period, so a rebuffed cat does not ask again at
+  // once: that is what keeps affiliative behaviour to a believable rate.
+  // A bid needs a moment before it counts as refused: the other cat only gets to answer on its own
+  // next decision, so judging it on the first tick would mean no approach was ever taken up.
+  rebuffed(c, a) { return this.tick - a.start > 8 / this.cfg.dt; }
+  // Whether cat o is taking up c's friendly bid. Answering in kind counts, and so does simply staying
+  // put and at ease; a cat that is walking off, running, threatening or busy at something else is not
+  // accepting it, and nothing about the exchange should make either of them think better of the other.
+  accepts(c, o, recip) {
+    if (recip) return true;
+    const oa = o.act; if (!oa) return false;
+    if (HOSTILE.has(oa.type) || oa.type === A.FLEE || oa.type === A.AVOID) return false;
+    if (SOCIAL_FRIENDLY.has(oa.type) && oa.target === c.id) return true; // any friendly answer counts, not only the same one
+    if (!(oa.type === A.REST || oa.type === A.SLEEP || oa.type === A.GROOM || oa.type === A.PERCH)) return false;
+    const om = o.mem[c.id]; return !om || om.aff > -0.2;
+  }
+  // Two cats that have just got on stay in each other's company for a while, whatever either of
+  // them turns to next. Kept as a pull on movement rather than a choice of action, because a choice
+  // only lasts until the next decision and this has to outlive it.
+  tether(c, o, seconds) {
+    const m = c.mem[o.id], om = o.mem[c.id];
+    if (!m || !om || m.aff < 0.2 || om.aff < 0.2 || m.fear > 0.15 || om.fear > 0.15) return;
+    c.nearMate = { id: o.id, until: this.t + seconds }; o.nearMate = { id: c.id, until: this.t + seconds };
+  }
+  mate(c) {
+    const t = c.nearMate; if (!t || this.t > t.until) return null;
+    const o = this.catById(t.id); if (!o) return null;
+    const m = c.mem[o.id];
+    if (c.s.irritation > 0.4 || o.s.irritation > 0.4 || !m || m.aff < 0.1) { c.nearMate = null; o.nearMate = null; return null; }
+    return o;
+  }
+  withdraw(c, o, seconds) {
+    if (c.nearMate && c.nearMate.id === o.id) c.nearMate = null;
+    if (o.nearMate && o.nearMate.id === c.id) o.nearMate = null;
+    const m = c.mem[o.id]; if (m) m.last = this.t + (seconds || 0);     // hold off before asking again
+    // A cat on its way to water or to the box keeps going: it takes the refractory period above but is not
+    // turned around by a social snub. (Eating is left out: being displaced from a bowl is a real thing
+    // cats do to each other, and the feeding model already has its own path for it.)
+    const ca = c.act, cres = ca && (ca.type === A.EAT || ca.type === A.DRINK || ca.type === A.LITTER);
+    if (cres && (!ca.arrived || ca.type !== A.EAT)) return;
+    const away = Math.atan2(c.y - o.y, c.x - o.x) || 0, r = this.m2t(this.cfg.tune.withdrawM);
+    c.act = { type: A.EXPLORE, target: -1, start: this.tick, until: this.tick + Math.round(20 / this.cfg.dt), station: -1,
+      gx: clamp(c.x + Math.cos(away) * r, 3, this.map.W - 4), gy: clamp(c.y + Math.sin(away) * r, 3, this.map.H - 4), arrived: false, recip: false };
+    c.lastAct = { type: A.EXPLORE, target: -1 };
+  }
+  // A welcome interaction keeps going rather than lapsing on its timer.
+  // Extends a welcome bout, but never past a plausible length for one: called every tick while the
+  // partner is still willing, an uncapped extension would make the bout run for ever.
+  sustain(c, a, maxSeconds) { const o = this.catById(a.target); if (o) this.tether(c, o, this.cfg.tune.tetherS); const cap = a.start + Math.round(maxSeconds / this.cfg.dt); a.until = Math.min(cap, Math.max(a.until, this.tick + Math.round(20 / this.cfg.dt))); a.recip = true; }
+  nearestHuman(c) { let b = null, bd = 1e9; for (const h of this.humans) { if (h.mode === 'vacuum') continue; const d = Math.hypot(h.x - c.x, h.y - c.y); if (d < bd) { bd = d; b = h; } } return b; }
+
+  // ----- interactions & consumption -----
+  resolve(c) {
+    const a = c.act, s = c.s, h = this.cfg.dt / 3600, contact = this.m2t(this.cfg.contactM), r = this.rng, k = this.cfg.dt / 2, pk = p => 1 - Math.pow(1 - Math.min(1, p), k);
+    if (a.type === A.EAT && a.arrived) { const b = this.map.stations[a.station]; if (b.food > 0.005) { const e = Math.min(0.006 * k, b.food, s.hunger); b.food -= e; s.hunger = clamp(s.hunger - e); this.stats.eatTicks[c.id] = (this.stats.eatTicks[c.id] || 0) + 1; if (s.hunger < 0.04) a.until = this.tick; } else a.until = this.tick; }
+    if (a.type === A.DRINK && a.arrived) { s.thirst = clamp(s.thirst - (0.06) * k); if (s.thirst < 0.03) a.until = this.tick; }
+    if (a.type === A.LITTER && a.arrived) { s.bladder = clamp(s.bladder - (0.05) * k); if (s.bladder < 0.02) { a.until = this.tick; this.stats.litterUses++; this.stats.litterBy[c.id] = (this.stats.litterBy[c.id] || 0) + 1; } }
+    if (a.type === A.ZOOM) {
+      c.lastZoomT = this.t;
+      s.play = clamp(s.play - 0.02 * k); s.sleep = clamp(s.sleep + 0.003 * k); s.hunger = clamp(s.hunger + 0.004 * k);
+      // a cat hurtling past unnerves the timid ones; the confident barely look up
+      for (const o of this.cats) if (o !== c && this.dist(c, o) < this.m2t(1.2)) {
+        const jumpy = o.tr.N * (1 - o.tr.D);
+        o.s.stress = clamp(o.s.stress + 0.02 * jumpy * k);
+        if (jumpy > 0.3 && o.act && o.act.type !== A.FLEE && o.act.type !== A.HIDE && r() < 0.02 * jumpy * k) this.startAction(o, { type: A.FLEE, target: c.id });
+      }
+      this.stats.zoomies = (this.stats.zoomies || 0) + 0;
+    }
+    if (a.type === A.TOY) { s.play = clamp(s.play - (0.008) * k); if (a.toy) a.toy.novelty *= Math.pow(0.995, k); }
+    if (a.type === A.SEEKH && this.t - c.petted < 10) { s.social = clamp(s.social - (0.01) * k); }
+    if (a.type === A.GROOM) { s.stress *= Math.pow(1 - 0.0006, k); }
+    if (a.type === A.HIDE && a.arrived) s.stress *= Math.pow(1 - 0.0012, k);
+    if (a.type === A.PERCH && a.arrived) s.stress *= Math.pow(1 - 0.0006, k);
+    if (a.type === A.WAIT) { const b = this.map.stations[a.waitBowl]; if (b) { if (a.antic ? ((this.lastFeed || -1) >= a.t0 || b.food > 0.02) : (this.stationOcc(b) < b.cap && (b.type !== T.BOWL || b.food > 0.02))) { c.act = null; return; } } }
+    // Cats that lie down together are affiliating: allo-resting is one of the standard measures of a
+    // preferred association. Without it a pair that has settled side by side gains nothing from the hours
+    // it spends in contact, and with affinity no longer coming free from every sniff that is most of the
+    // bond-building two quiet cats ever do. A cat it is afraid of is excluded: sharing a bed under duress
+    // is not a bond.
+    if (a.type === A.REST || a.type === A.SLEEP) {
+      for (const o2 of this.cats) if (o2 !== c && o2.act && (o2.act.type === A.REST || o2.act.type === A.SLEEP) && this.dist(c, o2) < contact * 1.6) {
+        const m2 = c.mem[o2.id]; if (m2 && m2.fear < 0.05 && m2.aff > 0.05) m2.aff = clamp(m2.aff + 0.003 * k * this.cfg.tune.affAccept * (1 - Math.abs(m2.aff)), -1, 1); }
+    }
+    if (a.target < 0) return;
+    const o = this.catById(a.target); if (!o) { c.act = null; return; }
+    const d = this.dist(c, o), m = c.mem[o.id], om = o.mem[c.id] || (o.mem[c.id] = { aff: 0, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 });
+    // Bonds are built only by contact the other cat takes up (see accepts()). Before that rule a sniff
+    // credited affinity whatever the other cat did, which was most of the colony's affinity; with the
+    // bug gone the gain per accepted tick carries the whole job, so it is a setting and is calibrated.
+    const ka = k * this.cfg.tune.affAccept;
+    const oa = o.act || {}; const recip = oa.target === c.id && oa.type === a.type;
+    const notify = (type) => { if (!o.incoming.find(i => i.from === c.id && i.type === type)) o.incoming.push({ from: c.id, type }); };
+    const inContact = d < contact * 1.3;
+    if (a.type === A.FLEE) { if (d > this.m2t(this.cfg.tune.fleeBreakM)) a.until = this.tick; m.fear = clamp(m.fear + (0.004) * k); return; }
+    // Walking away from a cat: the asker is told (so its bid counts as refused) and neither warms to the
+    // other for it. The walker holds off asking this cat for a while itself.
+    if (a.type === A.AVOID) { notify(A.AVOID); m.aff = clamp(m.aff - 0.003 * k, -1, 1); om.aff = clamp(om.aff - 0.004 * k, -1, 1);
+      m.last = Math.max(m.last, this.t + 300);
+      if (c.nearMate && c.nearMate.id === o.id) { c.nearMate = null; if (o.nearMate && o.nearMate.id === c.id) o.nearMate = null; }
+      return; }
+    if (a.type === A.HISS && d < this.m2t(2.5)) { notify(A.HISS); s.irritation = clamp(s.irritation - (0.04) * k); o.s.stress = clamp(o.s.stress + (0.042 * (0.4 + o.tr.N)) * k); om.fear = clamp(om.fear + (0.03 * (1 - o.tr.D)) * k); om.aff = clamp(om.aff - 0.016 * k, -1, 1); m.aff = clamp(m.aff - 0.005 * k, -1, 1);
+      if (!(o.act && (o.act.type === A.FLEE || o.act.type === A.FIGHT))) {
+        const bidding = o.act && SOCIAL_FRIENDLY.has(o.act.type) && o.act.target === c.id;
+        const press = bidding ? pk(this.cfg.tune.escalateP * (0.2 + o.tr.D + o.tr.I) * (om.aff < 0 ? 1.8 : 1 - Math.max(0, om.aff))) : 0;
+        if (press && r() < press) this.startAction(o, { type: r() < 0.35 + 0.4 * o.tr.D ? A.CHASE : A.FIGHT, target: c.id });
+        else if (bidding || o.tr.D < c.tr.D) this.withdraw(o, c, 300); }
+      return; }
+    // Being stalked is aversive even before anything comes of it: the cat being watched from across the
+    // room likes the watcher less for it, and warier cats take it as a threat.
+    if (a.type === A.STALK) { if (d < this.m2t(1.2)) { if (r() < 0.15 + 0.3 * (1 - o.tr.D)) notify(A.STALK);
+        om.aff = clamp(om.aff - 0.006 * k, -1, 1); om.fear = clamp(om.fear + (0.004 * (1 - o.tr.D)) * k); m.aff = clamp(m.aff - 0.002 * k, -1, 1); }
+      s.play = clamp(s.play - (0.003) * k); return; }
+    if (a.type === A.CHASE) { if (d < this.m2t(2.0)) { notify(A.CHASE); o.s.stress = clamp(o.s.stress + (0.034 * (0.5 + o.tr.N)) * k); om.fear = clamp(om.fear + (0.018) * k); om.aff = clamp(om.aff - 0.016 * k, -1, 1); m.aff = clamp(m.aff - 0.003 * k, -1, 1); s.irritation = clamp(s.irritation - (0.02) * k); if (o.act && o.act.type === A.EAT && o.tr.D < c.tr.D) { const wasArrived = o.act.arrived; this.startAction(o, { type: A.FLEE, target: c.id }); if (wasArrived && c.s.hunger > 0.15) { this.stats.supplants = (this.stats.supplants || 0) + 1; this.startAction(c, { type: A.EAT }); return; } } /* displaced from bowl: winner takes it */ else if (o.act && o.act.type !== A.FLEE && o.act.type !== A.FIGHT && r() < pk(0.6)) o.act = null; } return; }
+    if (!inContact) return;
+    if (a.type === A.SNIFF) { notify(A.SNIFF); const ok = this.accepts(c, o, recip);
+      if (ok) { m.aff = clamp(m.aff + 0.004 * ka * (1 - Math.abs(m.aff)), -1, 1); om.aff = clamp(om.aff + 0.004 * ka * (1 - Math.abs(om.aff)), -1, 1); }
+      else { m.aff = clamp(m.aff - 0.002 * k, -1, 1); if (this.rebuffed(c, a)) this.withdraw(c, o, 600); } return; }
+    if (a.type === A.ALLOGROOM) { notify(A.ALLOGROOM); const accepts = this.accepts(c, o, recip);
+      if (accepts) { m.aff = clamp(m.aff + 0.006 * ka * (1 - Math.abs(m.aff)), -1, 1); om.aff = clamp(om.aff + 0.007 * ka * (1 - Math.abs(om.aff)), -1, 1);
+        s.social = clamp(s.social - (0.015) * k); o.s.social = clamp(o.s.social - (0.015) * k); o.s.stress = clamp(o.s.stress - (0.005) * k); this.sustain(c, a, this.cfg.tune.groomBoutS);
+        // tension inside the bout: the groomer presses, the groomee tires of it, and some bouts sour
+        o.s.irritation = clamp(o.s.irritation + 0.004 * (1 - o.tr.catSoc) * k);
+        s.irritation = clamp(s.irritation + 0.002 * c.tr.D * k);
+        // a mutual bout is one bout: only one of the pair rolls for souring, and souring ends both sides
+        if (!a.soured && !(recip && c.id > o.id) && r() < k * this.cfg.tune.souredP * (0.4 + o.s.irritation + 0.5 * c.tr.D)) {
+          a.soured = 1; this.stats.groomSoured = (this.stats.groomSoured || 0) + 1;
+          if (oa.type === A.ALLOGROOM && oa.target === c.id) { oa.soured = 1; oa.until = this.tick; }
+          om.fear = clamp(om.fear + 0.03 * (1 - o.tr.D)); o.s.stress = clamp(o.s.stress + 0.04 * (0.4 + o.tr.N));
+          o.s.irritation = clamp(o.s.irritation + 0.06); a.until = this.tick; this.withdraw(o, c, 300); return; } }
+      else { a.refused = 1; /* marks the bout as (partly) refused, for the record */ o.s.irritation = clamp(o.s.irritation + (0.03 * (1 - o.tr.catSoc)) * k); m.aff = clamp(m.aff - 0.002 * k, -1, 1); if (this.rebuffed(c, a)) this.withdraw(c, o, 900); } return; }
+    if (a.type === A.PLAY) { notify(A.PLAY); s.play = clamp(s.play - (0.012) * k);
+      if (recip) { m.aff = clamp(m.aff + 0.004 * ka * (1 - Math.abs(m.aff)), -1, 1); om.aff = clamp(om.aff + 0.004 * ka * (1 - Math.abs(om.aff)), -1, 1); this.sustain(c, a, this.cfg.tune.playBoutS); // rough play can tip into a real fight
+        if (r() < k * 0.004 * (c.tr.D + c.tr.I) * (1 + s.irritation * 3)) { s.irritation = clamp(s.irritation + (0.25) * k); this.stats.playToFight++; } }
+      else { if (oa.type !== A.FLEE && oa.type !== A.AVOID) o.s.irritation = clamp(o.s.irritation + (0.025 * (1 - o.tr.catSoc) * (1 + o.s.sleep)) * k); m.aff = clamp(m.aff - 0.002 * k, -1, 1); if (this.rebuffed(c, a)) this.withdraw(c, o, 600); } return; }
+    if (a.type === A.FIGHT) { notify(A.FIGHT); m.aff = clamp(m.aff - (0.02) * k, -1, 1); om.aff = clamp(om.aff - (0.02) * k, -1, 1);
+      o.s.stress = clamp(o.s.stress + (0.06 * (0.5 + o.tr.N)) * k); s.stress = clamp(s.stress + (0.03 * (0.5 + c.tr.N)) * k); s.irritation = clamp(s.irritation + (0.02) * k); o.s.irritation = clamp(o.s.irritation + (0.05) * k);
+      if (recip) { // real fight: resolve by power; loser breaks and flees
+        c.fightTicks = (c.fightTicks || 0) + 1; this.stats.fightTicks++;
+        const end = r() < pk(0.18 + 0.05 * c.fightTicks * k);
+        if (end && c.id < o.id) {
+          const pw = x => x.tr.D * 0.6 + (x.sex === 'M' ? 0.1 : 0) + (x.age > 1.5 && x.age < 9 ? 0.1 : 0) - x.s.stress * 0.4 + r() * 0.5;
+          const [w, l] = pw(c) >= pw(o) ? [c, o] : [o, c];
+          w.mem[l.id].wins++; l.mem[w.id].losses++; l.mem[w.id].fear = clamp(l.mem[w.id].fear + 0.35); l.s.stress = clamp(l.s.stress + 0.25);
+          w.s.irritation = clamp(w.s.irritation * 0.4); l.s.irritation *= 0.5; this.stats.fightDur.push(c.fightTicks * this.cfg.dt); c.fightTicks = 0; o.fightTicks = 0;
+          this.startAction(l, { type: A.FLEE, target: w.id }); this.startAction(w, { type: A.HISS, target: l.id });
+          if (this.emitFights !== false) this.emit(`🏁 ${w.name} wins vs ${l.name}`, 'fight'); if (this.onFight) this.onFight(w, l, this.stats.fightDur[this.stats.fightDur.length - 1]);
+        }
+      } else if (oa.type !== A.FLEE && oa.type !== A.FIGHT) { o.act = null; } // defender reacts next tick
+    }
+  }
+
+  // ----- main loop -----
+  step() {
+    const dt = this.cfg.dt; this.tick++; this.t += dt;
+    while (this.schedule.length && this.schedule[0].t <= this.t) this.trigger(this.schedule.shift().type, true);
+    if (this.wev.length) this.updateEvents();
+    if (this.schedule.length === 0 || this.schedule[this.schedule.length - 1].t < (this.day + 1) * 86400) { if (!this.plannedDays) this.plannedDays = new Set([0]); const nd = this.day + 1; if (!this.plannedDays.has(nd)) { this.plannedDays.add(nd); this.planDay(nd); } }
+    this.updateHumans();
+    if (this.cfg.adLib) for (const st of this.map.stations) if (st.type === T.BOWL) st.food = 1.6;
+    for (const c of this.cats) { c.px = c.x; c.py = c.y; this.updateState(c); }
+    // decisions (snapshot semantics: incoming from last tick)
+    for (const c of this.cats) {
+      const a = c.act;
+      let redo = !a || this.tick >= a.until;
+      // Response: an action aimed at this cat makes it re-decide on the next tick, so it can answer (reciprocate, hiss, flee)
+      // or ignore it. Hostile actions always get this; a friendly bid does once the current action is >= respondCommitS old.
+      // Each friendly (sender, type) gets one forced re-decision per respondRepeatS, so an ignored bid is not re-asked every tick.
+      if (a && !redo && c.incoming.length) { const rr = c.respondedTo || (c.respondedTo = {}), TUN = this.cfg.tune;
+        for (const i of c.incoming) { if (a.target === i.from && (a.type === i.type || (!HOSTILE.has(i.type) && !HOSTILE.has(a.type)))) continue; /* the cat I am already engaging is answering me: that is not a new bid */ const key = i.from + ':' + i.type; if (!HOSTILE.has(i.type) && rr[key] != null && this.t - rr[key] < TUN.respondRepeatS) continue;
+          if (!HOSTILE.has(i.type) && (this.tick - a.start) * dt < TUN.respondCommitS) continue;
+          // A cat does not break off a trip to food, water or the box to answer a greeting: the need is
+          // still there afterwards, so the bid waits.
+          if (!HOSTILE.has(i.type) && (a.type === A.EAT || a.type === A.DRINK || a.type === A.LITTER || a.type === A.WAIT)) continue;
+          rr[key] = this.t; redo = true; break; } }
+      // a contact bout (groom, play, sniff) is over once the partner has walked off: the cat does not trail after it
+      if (a && !redo && a.target >= 0 && (a.type === A.ALLOGROOM || a.type === A.PLAY || a.type === A.SNIFF)) { if (a.phase === 'act') a.contacted = 1; else if (a.contacted && a.phase === 'approach') redo = true; else if (a.recip && !a.contacted) { const o = this.catById(a.target); if (o && !(o.act && o.act.target === c.id)) redo = true; } } /* an answer to a bid that has been withdrawn is dropped */
+      if (a && a.type === A.SLEEP && !redo && (c.s.sleep < 0.05 || c.s.stress > 0.5 || c.s.hunger > 0.85)) redo = true;
+      if (a && a.target >= 0 && !this.catById(a.target)) redo = true;
+      if (redo) this.decide(c);
+    }
+    for (const c of this.cats) if (c.act) this.moveCat(c);
+    for (const c of this.cats) if (c.act) this.resolve(c);
+    this.collect();
+  }
+  run(ticks) { for (let i = 0; i < ticks; i++) this.step(); }
+
+  // ----- statistics (owned by stats.js; Sim holds the record and triggers collection) -----
+  newStats() { return STATS.newStats(); }
+  collect() { STATS.collect(this); }
+  summary() { return STATS.summary(this); }
+  affinityMatrix() { return STATS.affinityMatrix(this); }
+}
+
+return { Sim };
+});
+
+/* Whisker Hall simulation engine. Assembles the src/ modules into one API, for Node (require) and the browser (window.CatSim).
+   Load order in the browser: util, terms, config, map, cat-data, cats, stats, sim, then this file. */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory(node ? require('./src/util.js') : root.WH['util'], node ? require('./src/terms.js') : root.WH['terms'],
+    node ? require('./src/config.js') : root.WH['config'], node ? require('./src/map.js') : root.WH['map'],
+    node ? require('./src/cat-data.js') : root.WH['cat-data'], node ? require('./src/sim.js') : root.WH['sim']);
+  if (node) module.exports = api; else root.CatSim = api;
+})(typeof self !== 'undefined' ? self : null, function (U, C, CFG, M, D, S) {
+'use strict';
+return { Sim: S.Sim, T: C.T, TNAME: C.TNAME, A: C.A, ICON: C.ICON, EVDEF: C.EVDEF, SOCIAL: C.SOCIAL, HOSTILE: C.HOSTILE,
+  DEFAULTS: CFG.DEFAULTS, COATS: D.COATS, NACHSHON_TRAITS: D.NACHSHON_TRAITS, TRAIT_CORR: D.TRAIT_CORR, walkable: M.walkable,
+  toCSS: (stress, gamma) => U.toCSS(stress, gamma != null ? gamma : CFG.DEFAULTS.cssGamma) };
+});
+
+</script>
+<script>
+/* Whisker Hall: playable layer over sim-core.js. PlaySim adds a player hook (subclass); sim-core is unchanged.
+   In Node: module.exports = { PlaySim, ... } (used by scenarios.js). In the browser it also boots the UI. */
+(function (root) {
+'use strict';
+const CS = (typeof module !== 'undefined' && module.exports) ? require('./sim-core.js') : root.CatSim;
+const { Sim, A, T, HOSTILE } = CS;
+
+const CMD = { greet: A.SNIFF, groom: A.ALLOGROOM, play: A.PLAY, hiss: A.HISS, swat: A.FIGHT, eat: A.EAT, sleep: A.SLEEP, hide: A.HIDE, selfgroom: A.GROOM };
+const TARGETED = new Set(['greet', 'groom', 'play', 'hiss', 'swat']);
+const REACH_M = 2.5;
+
+class PlaySim extends Sim {
+  constructor(opts) { super(opts); this.player = null; this.moveVec = { x: 0, y: 0, run: false }; this.events = []; this.lastEv = {}; this.pulse = []; }
+  step() { super.step(); if (this.tick % 150 === 0 && this.cats.length) { this.pulse.push({ t: this.t, v: this.cats.reduce((s, c) => s + c.s.stress, 0) / this.cats.length }); if (this.pulse.length > 288) this.pulse.shift(); } } // shelter pulse: mean stress every 5 sim-min
+  setPlayer(c) { if (this.player) { this.player.cmd = null; if (this.player.act && this.player.act.manual) this.player.act = null; } this.player = c || null; if (c) { c.cmd = null; c.act = null; } }
+  nearestTo(c, maxM) { let b = null, bd = this.m2t(maxM == null ? REACH_M : maxM); for (const o of this.cats) if (o !== c) { const d = this.dist(c, o); if (d < bd) { bd = d; b = o; } } return b; }
+  idleAct(c, type) { return { type: type || A.REST, target: -1, start: this.tick, until: this.tick + 1e9, station: -1, gx: null, gy: null, arrived: true, recip: false, manual: true }; }
+  // Player command: returns '' on success or a short reason
+  command(name) {
+    const c = this.player; if (!c) return 'No cat under control';
+    if (c.act && c.act.type === A.FLEE && !c.act.manual) return 'Too scared to obey: fleeing';
+    const type = CMD[name]; let target;
+    if (TARGETED.has(name)) { const o = this.nearestTo(c); if (!o) return 'No cat within 2.5 m'; target = o.id; }
+    c.cmd = { name, type, target: target == null ? -1 : target, until: null, reissue: 0 };
+    this.issue(c); return '';
+  }
+  issue(c) {
+    const k = c.cmd; super.startAction(c, { type: k.type, target: k.target >= 0 ? k.target : undefined });
+    if (k.until == null) k.until = c.act.until; else c.act.until = Math.max(c.act.until, k.until);
+  }
+  decide(c) {
+    if (c !== this.player) return super.decide(c);
+    const k = c.cmd, a = c.act;
+    if (k) {
+      const naturalEnd = a && a.type !== A.FLEE && this.tick >= a.until;
+      const gone = k.target >= 0 && !this.catById(k.target);
+      if (naturalEnd || gone || this.tick >= k.until || k.reissue > 40) c.cmd = null;
+      else { k.reissue++; this.issue(c); return; } // interrupted -> re-issue
+    }
+    c.act = this.idleAct(c); c.lastAct = { type: A.REST, target: -1 };
+  }
+  startAction(c, ch) {
+    if (c === this.player && ch.type === A.FLEE) c.cmd = null; // lost a fight / displaced: flee as the sim dictates
+    super.startAction(c, ch);
+    const a = c.act; if (a.target >= 0) this.noteEvent(c, a);
+    // a cat hissed at or swatted by the player reacts at once instead of finishing a long nap first
+    if (c === this.player && (a.type === A.HISS || a.type === A.FIGHT)) { const o = this.catById(a.target); if (o && o !== this.player && o.act && o.act.type !== A.FLEE && o.act.type !== A.FIGHT) o.act.until = Math.min(o.act.until, this.tick + 2); }
+  }
+  noteEvent(c, a) {
+    const verbs = { sniff: 'greets', allogroom: 'grooms', play: 'plays with', hiss: 'hisses at', chase: 'chases', stalk: 'stalks', flee: 'runs away from', avoid: 'moves away from', fight: 'swats at' };
+    const v = verbs[a.type], o = this.catById(a.target); if (!v || !o) return;
+    const key = c.id + ':' + o.id + ':' + a.type; if (this.t - (this.lastEv[key] || -1e9) < 120) return; this.lastEv[key] = this.t;
+    const kind = HOSTILE.has(a.type) || a.type === A.FIGHT ? 'host' : a.type === A.FLEE || a.type === A.AVOID ? 'flee' : 'friend';
+    // A hiss lasts 6-18 sim-seconds, which at 1x speed is under five seconds on screen: without a mark
+    // that outlives the act itself, the short exchanges are over before the eye gets to them, and the
+    // room reads as nothing but long grooming bouts.
+    c.flash = { kind, until: this.t + 25 }; o.flash = { kind: kind === 'friend' ? 'friend' : 'flee', until: this.t + 25 };
+    this.events.push({ t: this.t, clock: this.clock(), msg: `${c.name} ${v} ${o.name}`, me: c === this.player || o === this.player, kind });
+    if (this.events.length > 200) this.events.shift();
+  }
+  moveCat(c) {
+    if (c !== this.player) return super.moveCat(c);
+    const v = this.moveVec, a = c.act;
+    if ((v.x || v.y) && !(a && a.type === A.FLEE && !a.manual)) {
+      c.cmd = null; if (!a || !a.manual || a.type !== A.EXPLORE) c.act = this.idleAct(c, A.EXPLORE);
+      const sp = (v.run ? this.cfg.speeds.trot * 1.6 : this.cfg.speeds.walk * 1.2) * this.cfg.dt / this.cfg.tile, n = Math.hypot(v.x, v.y), ux = v.x / n, uy = v.y / n;
+      let x = c.x, y = c.y; const steps = Math.ceil(sp);
+      for (let i = 0; i < steps; i++) { const s = Math.min(1, sp - i); if (CS.walkable(this.map, x + ux * s, y + uy * s)) { x += ux * s; y += uy * s; } else if (CS.walkable(this.map, x + ux * s, y)) x += ux * s; else if (CS.walkable(this.map, x, y + uy * s)) y += uy * s; else break; }
+      this.setPos(c, x, y); return;
+    }
+    if (a && a.manual && a.type === A.EXPLORE) c.act = this.idleAct(c);
+    if (c.act && c.act.manual) return;
+    return super.moveCat(c);
+  }
+}
+
+// ---------- presentation helpers (shared with scenarios) ----------
+const CAT = { zoom: 'solo', sleep: 'rest', rest: 'rest', perch: 'rest', hide: 'rest', eat: 'need', drink: 'need', litter: 'need', wait_food: 'need', avoid: 'flee', groom: 'solo', explore: 'solo', window: 'solo', scratch: 'solo', toy: 'solo', sniff: 'friend', allogroom: 'friend', play: 'friend', seek_human: 'friend', stalk: 'host', chase: 'host', hiss: 'host', fight: 'host', flee: 'flee' };
+const CATNAME = { rest: 'Resting', need: 'Eating & needs', solo: 'Busy alone', friend: 'Friendly', host: 'Hostile', flee: 'Fleeing' };
+const CATTIP = { rest: 'Sleeping, resting, hiding, or lounging on the cat tree', need: 'Eating, drinking, litter box, or waiting for a free bowl', solo: 'Exploring, grooming itself, scratching, watching the window, toy play, tearing about', friend: 'Greeting, grooming or playing with another cat, or asking a person for attention', host: 'Stalking, chasing, hissing or fighting', flee: 'Running away from another cat' };
+const VERB = { zoom: 'tearing about', sleep: 'sleeping', rest: 'resting', groom: 'grooming', explore: 'exploring', eat: 'eating', drink: 'drinking', litter: 'litter box', hide: 'hiding', perch: 'on cat tree', window: 'at the window', scratch: 'scratching', toy: 'toy play', seek_human: 'wants a person', sniff: 'greeting', allogroom: 'grooming', play: 'playing with', stalk: 'stalking', chase: 'chasing', hiss: 'hissing at', fight: 'fighting', flee: 'fleeing', avoid: 'moving away from', wait_food: 'waiting for food' };
+function actInfo(sim, c) {
+  const a = c.act; if (!a) return { cat: 'rest', text: 'idle', short: 'idle', onWay: false, partner: null };
+  let type = a.type, verb = VERB[type] || type;
+  if (a.manual) verb = type === A.EXPLORE ? 'walking' : 'idle';
+  const o = a.target >= 0 ? sim.catById(a.target) : null;
+  const onWay = (a.station >= 0 && !a.arrived) || (o && a.type !== A.FLEE && a.type !== A.HISS && a.type !== A.STALK && sim.dist(c, o) > sim.m2t(sim.cfg.contactM) * 1.4);
+  const social = CS.SOCIAL.has(type);
+  if (!(o && social)) verb = verb.replace(/ (with|at)$/, '');
+  if (type === A.WAIT) { const st = a.waitBowl >= 0 ? sim.map.stations.find(s => s.id === a.waitBowl) : null; verb = st && st.type === T.LITTER ? 'waiting for litter box' : a.antic ? 'waiting for mealtime' : 'queueing for a bowl'; }
+  const short = (onWay ? '→ ' : '') + (o && social ? verb + ' ' + o.name : verb);
+  return { cat: CAT[type] || 'solo', text: short, short, onWay, partner: o };
+}
+
+if (typeof module !== 'undefined' && module.exports) { module.exports = { PlaySim, CMD, actInfo, CAT }; return; }
+
+// =====================================================================================
+// Browser UI
+// =====================================================================================
+const $ = id => document.getElementById(id);
+const COL = { rest: '#7f93ad', need: '#5c9a62', solo: '#c49a4e', friend: '#d9739a', host: '#cf4a42', flee: '#e2863a' };
+const COAT = { 'white': ['#fbfbfb', null], 'orange-tabby': ['#e9a35a', '#c97b35'], 'black': ['#3a3533', null], 'grey-tabby': ['#a7a5a3', '#7d7a77'], 'tuxedo': ['#3a3533', '#fbfbfb'], 'calico': ['#fbf6ee', '#e39a54'], 'brown-tabby': ['#a07a58', '#6f523a'], 'grey': ['#9a9ea6', null], 'white-orange': ['#fbf6ee', '#e9a35a'], 'tortie': ['#5a4033', '#c9813f'], 'cream': ['#f1dcb5', '#ddbf8e'], 'black-white': ['#fbfbfb', '#3a3533'], 'siamese': ['#efe4d2', '#6d5446'], 'orange': ['#e8a055', null] };
+const TRN = [['N', 'Neurotic'], ['E', 'Extraverted'], ['D', 'Dominant'], ['I', 'Impulsive'], ['A', 'Agreeable']];
+let sim, speed = 1, paused = false, acc = 0, selected = null, showAll = false, hover = null, mouse = null, toast = null;
+const cv = $('cv'), ctx = cv.getContext('2d'); let S = 3, W = 0, H = 0, dpr = 1, bg = null;
+const MAX_STEPS = 24, SP_MIN = 0.25, SP_MAX = 16, SP_STEPS = [0.25, 0.5, 1, 2, 4, 8, 16];
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
+const TICKS_PER_SEC = 2; // dt=2 s -> 1x = 4 sim-seconds per real second
+
+const PRESETS = {
+  standard: { name: 'Standard colony', cfg: {}, watch: 'Twelve cats, one shelter room: a normal day with dawn and dusk activity peaks and long naps.', cite: 'Activity rhythm: Parker et al. 2019; Bradshaw 2012' },
+  newcomer: { name: 'Newcomer day 1', cfg: { newcomers: 2 }, watch: 'Cats with the 🌱 badge just arrived. They hide and stay stressed; this fades over 3 to 5 days.', cite: 'Kry & Casey 2007; Kessler & Turner 1999' },
+  crowded: { name: 'Crowded', cfg: { layout: 'single', W: 100, H: 62, counts: { bowl: 3, water: 2, litter: 3, perch: 2, bed: 3, hide: 3, scratch: 1 } }, watch: 'About 1.2 m² per cat. Watch the Shelter pulse: stress and hissing run higher than in the standard room.', cite: 'Kessler & Turner 1999' },
+  litter: { name: 'Single litter box', cfg: { counts: { litter: 1 } }, watch: 'One box for 13 cats. Cats queue (⏳) and get tense while they wait. The guidance is one box per cat plus one.', cite: 'AAFP/ISFM guidance; Elzerman et al. 2020 (mixed evidence)' },
+  feeding: { name: 'Feeding time', cfg: { counts: { bowl: 3 } }, warmTo: 7.4, watch: 'Cats gather before the 08:00 meal. Bold, dominant cats eat first; others queue (⏳) or get displaced.', cite: 'Deng et al. 2014; Bernstein & Strack 1996' },
+  quiet: { name: 'Quiet ward', cfg: { rates: { noise: 0, visit: 0, bird: 0, toy: 0, vacuum: 0 } }, watch: 'No disturbances. Expect long naps, peaceful time-sharing of favourite spots and very little fighting.', cite: 'Bernstein & Strack 1996' },
+  visitor: { name: 'Visitor', cfg: { rates: { visit: 0 } }, warmTo: 9.5, sit: true, watch: 'A person sits on the floor. People-friendly cats come over for attention; shy cats keep their distance.', cite: 'McCune 1995' },
+};
+let showAffinity = false; let preset = 'standard', randomOn = true, evSeen = {}, rosterN = 0;
+// ---------- world events UI ----------
+
+// ---------- event artwork ----------
+// One drawing per event, described once as plain shapes on a 24x24 grid and rendered both as SVG
+// in the panels and onto the canvas on the map, so the button, the chip, the banner and the marker
+// are always the same picture. Each is a small depiction of the thing itself rather than a glyph.
+const EVART = {
+  feed: [{ c: [9, 8.6, 1.9], f: '#9a6a3c' }, { c: [12.4, 7.4, 1.9], f: '#9a6a3c' }, { c: [15.7, 8.6, 1.9], f: '#9a6a3c' },
+    { p: [[2.4, 11.4], [21.6, 11.4], [18.6, 19.4], [5.4, 19.4]], f: '#e39a6d', s: '#9d5230' }],
+  vacuum: [{ r: [2.6, 18.2, 13.5, 3.6, 1.8], f: '#5d6a85', s: '#3b465e' },
+    { r: [4.6, 7.6, 9.6, 10.8, 2.2], f: '#8273b0', s: '#4a3f6b' },
+    { l: [[9.4, 7.6], [9.4, 2.8], [14.4, 2.2]], s: '#4a3f6b', w: 1.9 },
+    { c: [9.4, 13, 2.3], f: '#e6e1f2', s: '#4a3f6b' }, { c: [18.6, 19, 2.2], f: '#3b465e' }],
+  visit: [{ c: [12, 5.8, 3.3], f: '#f0c9a8', s: '#a97c5c' },
+    { p: [[4.8, 21.2], [8.2, 10.6], [15.8, 10.6], [19.2, 21.2]], f: '#5d6a85', s: '#3b465e' },
+    { l: [[8.2, 14.6], [3.4, 18.4]], s: '#5d6a85', w: 2.2 }],
+  bird: [{ p: [[9, 12.6], [2.4, 8.6], [3.6, 15.4]], f: '#6d839e', s: '#3f5068' },
+    { c: [11.4, 13, 4.3], f: '#7f93ad', s: '#45566d' },
+    { c: [16.2, 8.9, 2.9], f: '#8ea2bb', s: '#45566d' },
+    { p: [[18.7, 8.3], [22.4, 9.4], [18.7, 10.6]], f: '#e0a23c', s: '#9d6b1e' },
+    { p: [[10.2, 11], [14.6, 13.4], [9.8, 15.6]], f: '#64798f', s: '#3f5068' },
+    { c: [17, 8.2, 0.7], f: '#23303d' },
+    { l: [[11, 17.2], [10.4, 20.4]], s: '#9d6b1e', w: 1.4 }, { l: [[13.4, 16.8], [13.4, 20.4]], s: '#9d6b1e', w: 1.4 }],
+  noise: [{ c: [12, 12.6, 2.6], f: '#cf4a42' },
+    { l: [[12, 8.6], [12, 3]], s: '#cf4a42', w: 2.2 }, { l: [[15.2, 10.2], [19.6, 6]], s: '#cf4a42', w: 2.2 },
+    { l: [[8.8, 10.2], [4.4, 6]], s: '#cf4a42', w: 2.2 }, { l: [[15.4, 14], [21, 15.6]], s: '#cf4a42', w: 2.2 },
+    { l: [[8.6, 14], [3, 15.6]], s: '#cf4a42', w: 2.2 }],
+  newcomer: [{ p: [[7.4, 8.4], [9, 4.8], [10.8, 8.4]], f: '#c98f45', s: '#7a5324' },
+    { p: [[13.2, 8.4], [15, 4.8], [16.6, 8.4]], f: '#c98f45', s: '#7a5324' },
+    { r: [3.4, 8, 17.2, 12.4, 2.2], f: '#c98f45', s: '#7a5324' },
+    { l: [[3.4, 12.4], [20.6, 12.4]], s: '#7a5324', w: 1.3 },
+    { c: [9.2, 16, 1 ], f: '#3b3127' }, { c: [14.8, 16, 1], f: '#3b3127' }],
+};
+const evSVG = (type, px) => {
+  const parts = (EVART[type] || []).map(o => {
+    const st = `${o.f ? `fill="${o.f}"` : 'fill="none"'} ${o.s ? `stroke="${o.s}" stroke-width="${o.w || 1.1}"` : ''} stroke-linejoin="round" stroke-linecap="round"`;
+    if (o.c) return `<circle cx="${o.c[0]}" cy="${o.c[1]}" r="${o.c[2]}" ${st}/>`;
+    if (o.r) return `<rect x="${o.r[0]}" y="${o.r[1]}" width="${o.r[2]}" height="${o.r[3]}" rx="${o.r[4]}" ${st}/>`;
+    if (o.p) return `<polygon points="${o.p.map(q => q.join(',')).join(' ')}" ${st}/>`;
+    return `<polyline points="${o.l.map(q => q.join(',')).join(' ')}" fill="none" stroke="${o.s}" stroke-width="${o.w || 1.1}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }).join('');
+  return `<svg class="evi" viewBox="0 0 24 24" width="${px}" height="${px}" aria-hidden="true">${parts}</svg>`;
+};
+function drawEvArt(g, type, x, y, size) {
+  const k = size / 24; g.save(); g.translate(x - size / 2, y - size / 2); g.scale(k, k); g.lineJoin = 'round'; g.lineCap = 'round';
+  for (const o of EVART[type] || []) {
+    g.beginPath();
+    if (o.c) g.arc(o.c[0], o.c[1], o.c[2], 0, 7);
+    else if (o.r) rr(g, o.r[0], o.r[1], o.r[2], o.r[3], o.r[4]);
+    else if (o.p) { o.p.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); }
+    else o.l.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]));
+    if (o.f) { g.fillStyle = o.f; g.fill(); }
+    if (o.s) { g.strokeStyle = o.s; g.lineWidth = o.w || 1.1; g.stroke(); }
+  }
+  g.restore();
+}
+const EVBTN = [['noise', 'Noise'], ['feed', 'Feed'], ['visit', 'Visitor'], ['newcomer', 'New cat'], ['vacuum', 'Vacuum'], ['bird', 'Bird']];
+function triggerEvent(type) { if (type === 'newcomer' && sim.cats.length >= (sim.cfg.maxCats || 16)) { sim.emit('🌱 The room is full (16 cats): no newcomer admitted', 'event'); renderLog(); return; } sim.trigger(type); renderEvents(performance.now()); renderLog(); }
+function fmtLeft(s) { s = Math.max(0, s); return s >= 3600 ? Math.round(s / 360) / 10 + ' h' : s >= 60 ? Math.round(s / 60) + ' min' : Math.round(s) + ' s'; }
+function renderEvents(now) { // banner (start: 6 s real), effect readout (20 s real), active chips with sim-time countdowns
+  const evs = sim.evLog || []; for (const ev of evs) { if (!evSeen[ev.id]) evSeen[ev.id] = { start: now }; if (ev.effect && !evSeen[ev.id].eff) evSeen[ev.id].eff = now; }
+  let ban = null; for (const ev of evs) { const z = evSeen[ev.id]; if (z.eff && now - z.eff < 20000) ban = { ev, eff: true, t: z.eff }; else if (now - z.start < 6000 && !ev.effect) ban = { ev, eff: false, t: z.start }; }
+  const b = $('evbanner'); const key = ban ? ban.ev.id + (ban.eff ? 'e' : 's') : '';
+  if (b.dataset.k !== key) { b.dataset.k = key; b.className = ban ? (ban.eff ? 'show eff' : 'show') : '';
+    b.innerHTML = ban ? (ban.eff ? `<span class="ei">${evSVG(ban.ev.type, 26)}</span><span><b>${esc(ban.ev.name)} · effect</b><br>${esc(ban.ev.effect)}</span>` : `<span class="ei">${evSVG(ban.ev.type, 26)}</span><span><b>${esc(ban.ev.name)}</b><br>${esc(ban.ev.hint)}</span>`) : ''; }
+  const act = sim.wev.filter(ev => sim.t < ev.until || !ev.effect);
+  const chips = act.map(ev => `<span class="evchip" data-tip="<b>${esc(ev.name)}</b><br>${esc(ev.hint)}${ev.effect ? '<br><i>' + esc(ev.effect) + '</i>' : '<br>Effect measured in ' + fmtLeft(ev.evalAt - sim.t) + ' (sim)'}">${evSVG(ev.type, 13)} ${esc(ev.name)} · ${sim.t < ev.until ? fmtLeft(ev.until - sim.t) + ' left' : 'measuring…'}</span>`).join('');
+  if ($('evchips').innerHTML !== chips) $('evchips').innerHTML = chips; $('evchips').style.display = chips ? '' : 'none'; }
+const SELF_DRAWN = new Set(['visit', 'vacuum', 'newcomer']); // these events put a real object in the room
+function drawEvents(now) { // ripple / marker at the event location while it is fresh or active
+  for (const ev of sim.wev) { const z = evSeen[ev.id]; if (!z) continue; const age = Math.max(0, (now - z.start) / 1000), live = sim.t < ev.until; if (age > 10 && !live) continue;
+    const x = ev.x * S, y = ev.y * S, col = ev.type === 'noise' ? '207,74,66' : ev.type === 'feed' ? '192,105,63' : ev.type === 'vacuum' ? '126,106,168' : '92,154,98';
+    if (age < 10) for (let k = 0; k < 3; k++) { const p = ((age * 0.7 + k / 3) % 1); ctx.beginPath(); ctx.arc(x, y, 8 + p * Math.max(40, 18 * S), 0, Math.PI * 2); ctx.strokeStyle = `rgba(${col},${(1 - p) * 0.75})`; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.globalAlpha = live ? 1 : Math.max(0, 1 - (age - 6) / 4);
+    // Only for events with nothing of their own in the room. A visitor, the vacuum and a newcomer cat are
+    // all drawn where they actually are, so a second little figure beside them is one object too many.
+    if (!SELF_DRAWN.has(ev.type)) drawEvArt(ctx, ev.type, x, y, 28);
+    ctx.globalAlpha = 1; } }
+function newColony(seed) {
+  const P = PRESETS[preset] || PRESETS.standard;
+  const pc = JSON.parse(JSON.stringify(P.cfg)); pc.rates = Object.assign({}, CS.DEFAULTS.rates, { newcomer: 0.5 }, pc.rates || {}); if (preset === 'quiet') pc.rates.newcomer = 0;
+  sim = new PlaySim(Object.assign({ seed: seed || (1 + Math.floor(Math.random() * 1e6)), nCats: 12, nachshon: true, maxCats: 16 }, pc)); sim.randomEvents = randomOn; evSeen = {}; rosterN = sim.cats.length;
+  if (P.warmTo) { sim.emitFights = false; while (sim.hour < P.warmTo) sim.step(); sim.emitFights = true; sim.log = sim.log.slice(-3); }
+  if (P.sit) sim.trigger('sit');
+  if ($('pnote')) { $('pnote').innerHTML = `<b>What to watch:</b> ${esc(P.watch)}`; $('pnote').dataset.tip = `<b>${esc(P.name)}</b><br>${esc(P.watch)}<br><i>${esc(P.cite)}</i>`; }
+  sim.setPlayer(null); selected = sim.nachshon; /* observer mode at start: the player takes a cat only on request (C) */ acc = 0; bg = null; buildRoster(); buildSel(); renderSel(); renderLog(); layout();
+}
+
+// ---------- fitting the room into the board ----------
+// The board is a grid: dashboard, room, dashboard, with a strip across the bottom. The room is
+// given the width first and the dashboards take only what it cannot use, so no width is wasted.
+// The strip keeps its own height: handing it the height left over by the room only starves the
+// dashboards, which need every row they can get for the roster.
+//
+// This settles in one pass: the card's height is whatever the grid row gives it, and the space for
+// the canvas is that minus the rows above it. Neither depends on the canvas.
+//
+// Nothing is written to the DOM unless the result differs from what is already there. Fitting the
+// room resizes the panels, which is what the observer below watches, so a fit that wrote
+// unconditionally would wake itself again and the board would shimmer.
+const SIDE_MAX = 430;
+const sideMin = w => (w < 1200 ? 190 : w < 1500 ? 200 : 236);
+let fitted = null;
+function fitCanvas() {
+  const main = document.querySelector('main'), card = $('mapcard'), wrap = $('mapwrap');
+  const cs = getComputedStyle(card), gap = parseFloat(getComputedStyle(main).rowGap) || 0;
+  const outer = e => { const m = getComputedStyle(e); return e.offsetHeight + parseFloat(m.marginTop) + parseFloat(m.marginBottom); };
+  const above = [...card.children].filter(e => e !== wrap).reduce((t, e) => t + outer(e), 0);
+  const availH = Math.max(120, card.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - above);
+  const frame = 2 * gap + (card.offsetWidth - card.clientWidth) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const SIDE_MIN = sideMin(main.clientWidth);
+  const roomy = Math.max(240, main.clientWidth - 2 * parseFloat(getComputedStyle(main).paddingLeft) - frame - 2 * SIDE_MIN);
+  const aspect = sim.map.W / sim.map.H;
+  const w = Math.round(Math.min(availH * aspect, roomy)), h = Math.round(w / aspect);
+  const side = Math.round(Math.min(SIDE_MAX, SIDE_MIN + Math.max(0, roomy - w) / 2));
+  const key = [w, h, side].join(',');
+  if (key === fitted) return w;                              // already laid out this way: touch nothing
+  fitted = key;
+  main.style.gridTemplateColumns = side + 'px auto ' + side + 'px';
+  dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  W = w; H = h; S = w / sim.map.W; bg = null;
+  return w;
+}
+// One pass is enough, but the dashboards can rewrap as their width changes, so confirm it settled.
+function layout() { for (let i = 0, last = -1; i < 3; i++) { const w = fitCanvas(); if (w === last) break; last = w; } }
+window.addEventListener('resize', () => layout());
+// The dashboards reflow as the window changes, which changes the width budget for the room, so
+// re-fit whenever the board resizes. The observer is detached while fitting, so the resizing it
+// causes does not call it straight back.
+if (typeof ResizeObserver !== 'undefined') {
+  const main = document.querySelector('main');
+  let seen = '';
+  const ro = new ResizeObserver(() => {
+    const size = Math.round(main.clientWidth) + 'x' + Math.round(main.clientHeight);
+    if (size === seen) return;                 // a wake-up that changed nothing we depend on
+    seen = size;
+    ro.disconnect(); layout(); ro.observe(main);
+  });
+  ro.observe(main);
+}
+
+// ---------- static background ----------
+function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function drawIcon(g, type, x, y, w, h, extra) { // furniture icons in a box (px)
+  const cx = x + w / 2, cy = y + h / 2, m = Math.min(w, h);
+  g.save(); g.lineJoin = 'round'; g.lineCap = 'round';
+  const soft = (fill, stroke) => { g.fillStyle = fill; g.fill(); if (stroke) { g.strokeStyle = stroke; g.lineWidth = Math.max(1, m * 0.08); g.stroke(); } };
+  if (type === T.BOWL) { g.beginPath(); g.arc(cx, cy, m * 0.48, 0, 7); soft('#e39a6d', '#9d5230'); const f = extra == null ? 1 : Math.min(1, extra / 1.6); if (f > 0.02) { g.beginPath(); g.arc(cx, cy, m * 0.32 * Math.sqrt(f), 0, 7); g.fillStyle = '#9a6a3c'; g.fill(); } }
+  else if (type === T.WATER) { g.beginPath(); g.arc(cx, cy, m * 0.48, 0, 7); soft('#cfe3ec', '#4f7d93'); g.beginPath(); g.arc(cx, cy, m * 0.3, 0, 7); g.fillStyle = '#6ca7c4'; g.fill(); }
+  else if (type === T.LITTER) { rr(g, x + m * 0.04, y + m * 0.04, w - m * 0.08, h - m * 0.08, m * 0.18); soft('#c7b69c', '#7d6a50'); g.fillStyle = '#fbf6ec'; rr(g, x + w * 0.16, y + h * 0.2, w * 0.68, h * 0.6, m * 0.12); g.fill(); }
+  else if (type === T.BED) { g.beginPath(); g.arc(cx, cy, m * 0.48, 0, 7); soft('#cd7f6a', '#8f4a38'); g.beginPath(); g.arc(cx, cy, m * 0.32, 0, 7); g.fillStyle = '#f4dbc8'; g.fill(); }
+  else if (type === T.PERCH) { rr(g, x + m * 0.04, y + m * 0.04, w - m * 0.08, h - m * 0.08, m * 0.22); soft('#a9793f', '#6d4823'); g.beginPath(); g.arc(cx, cy, m * 0.22, 0, 7); g.fillStyle = '#e9d6b6'; g.fill(); g.strokeStyle = '#86624a'; g.lineWidth = Math.max(1, m * 0.05); g.stroke(); }
+  else if (type === T.HIDE) { rr(g, x, y, w, h, m * 0.12); soft('#c98f45', '#7a5324'); g.beginPath(); g.ellipse(cx, cy + h * 0.06, w * 0.24, h * 0.28, 0, 0, 7); g.fillStyle = '#5f462f'; g.fill(); }
+  else if (type === T.SCRATCH) { g.beginPath(); g.arc(cx, cy, m * 0.46, 0, 7); soft('#b7ad6a', '#6f6730'); g.strokeStyle = '#6f6730'; g.lineWidth = Math.max(1, m * 0.06); for (const k of [-0.18, 0, 0.18]) { g.beginPath(); g.arc(cx, cy, m * (0.28 + k * 0.6), 0, 7); g.stroke(); } }
+  else if (type === T.WINDOW) { rr(g, x, y, w, h, Math.min(h * 0.45, 6)); soft('#bcdcee', '#5b8498'); g.strokeStyle = '#ffffff'; g.lineWidth = Math.max(1, h * 0.18); g.beginPath(); for (let k = 1; k < 4; k++) { g.moveTo(x + w * k / 4, y + h * 0.2); g.lineTo(x + w * k / 4, y + h * 0.8); } g.stroke(); }
+  else if (type === 'toy') { g.beginPath(); g.arc(cx, cy, m * 0.42, 0, 7); soft('#d9739a', '#ad4f74'); g.strokeStyle = '#fbd3e0'; g.lineWidth = Math.max(1, m * 0.07); g.beginPath(); g.arc(cx - m * 0.1, cy, m * 0.25, -1, 1); g.stroke(); }
+  g.restore();
+}
+function buildBg() {
+  const M = sim.map, c = document.createElement('canvas'); c.width = W * dpr; c.height = H * dpr; const g = c.getContext('2d'); g.scale(dpr, dpr);
+  // continuous warm floor with soft vignette
+  const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, '#fcf6ea'); grd.addColorStop(1, '#f5ebd9'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  const v = g.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, W * 0.7); v.addColorStop(0, 'rgba(255,255,255,0.28)'); v.addColorStop(1, 'rgba(150,100,55,0.09)'); g.fillStyle = v; g.fillRect(0, 0, W, H);
+  // quiet room tint
+  if (M.partitionX < M.W) { g.fillStyle = 'rgba(120,140,165,0.08)'; g.fillRect(M.partitionX * S, 0, W - M.partitionX * S, H); }
+  // walls / obstacles / door from grid runs
+  for (let y = 0; y < M.H; y++) { let x = 0; while (x < M.W) { const t = M.grid[y * M.W + x]; if (t === T.WALL || t === T.OBST || t === T.DOOR) { let e = x; while (e < M.W && M.grid[y * M.W + e] === t) e++; g.fillStyle = t === T.WALL ? '#7d5537' : t === T.OBST ? '#c3a680' : '#e0b981'; g.fillRect(x * S, y * S, (e - x) * S + 0.6, S + 0.6); x = e; } else x++; } }
+  g.fillStyle = '#6f4a38'; g.font = '700 13px Nunito, system-ui, sans-serif'; g.textAlign = 'center';
+  const dx = M.door.x * S; g.fillText('door', dx, H - 2 * S - 6);
+  g.fillStyle = 'rgba(111,74,56,0.55)'; g.font = '700 13px Nunito, system-ui, sans-serif';
+  if (M.partitionX < M.W) { g.textAlign = 'left'; g.fillText('QUIET ROOM', (M.partitionX + 8) * S, H - 4 * S - 6); }
+  g.textAlign = 'left'; g.fillText('MAIN ROOM', 6 * S, H - 4 * S - 6);
+  return c;
+}
+// A person seen from directly above, the way the cats are: shoulders broad across the line of travel and
+// shallow front to back, the head on top of them, arms down the sides and shoes showing in front. Facing
+// comes from where they are actually heading, with the last heading kept while they stand still.
+// Scaled true: shoulders span 0.6 m of the box, so m = 15 tiles puts them at ~0.45 m, wider than a cat.
+function drawPerson(g, h, x, y, m) {
+  const dx = h.x - (h._px === undefined ? h.x : h._px), dy = h.y - (h._py === undefined ? h.y : h._py);
+  if (Math.hypot(dx, dy) > 0.02) h._ang = Math.atan2(dy, dx);
+  else if (h._ang === undefined) h._ang = Math.atan2(h.gy - h.y, h.gx - h.x) || 0;
+  h._px = h.x; h._py = h.y;
+  const vac = h.mode === 'vacuum';
+  const cloth = vac ? '#6b7280' : '#5d6a85', edge = vac ? '#434a55' : '#3b465e', skin = '#f0c9a8', hair = '#43362f';
+  g.save(); g.translate(x, y);
+  g.rotate(h._ang);
+  g.fillStyle = 'rgba(90,60,30,0.15)'; g.beginPath(); g.ellipse(-m * 0.02, 0, m * 0.21, m * 0.34, 0, 0, 7); g.fill(); // turns with the body
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  if (vac) { g.fillStyle = '#9aa3ad'; g.strokeStyle = edge; g.lineWidth = Math.max(1, m * 0.035); rr(g, m * 0.3, -m * 0.22, m * 0.22, m * 0.44, m * 0.07); g.fill(); g.stroke(); }
+  g.strokeStyle = cloth; g.lineWidth = m * 0.085;               // arms, tucked along the sides
+  g.beginPath(); for (const sd of [-1, 1]) { g.moveTo(-m * 0.02, sd * m * 0.25); g.lineTo(m * 0.13, sd * m * 0.225); } g.stroke();
+  g.fillStyle = skin;                                           // hands
+  for (const sd of [-1, 1]) { g.beginPath(); g.arc(m * 0.15, sd * m * 0.222, m * 0.045, 0, 7); g.fill(); }
+  // Shoulders: from straight above a person is a narrow oblong, nearly twice as wide across as deep.
+  // Getting that ratio right is most of what separates a plan view from a figure seen from the side.
+  g.beginPath(); g.ellipse(0, 0, m * 0.16, m * 0.29, 0, 0, 7);
+  g.fillStyle = cloth; g.fill(); g.strokeStyle = edge; g.lineWidth = Math.max(1, m * 0.04); g.stroke();
+  // The head, seen from the crown: mostly hair, with the face showing at the front and the nose past it.
+  const hr = m * 0.135;
+  g.beginPath(); g.arc(m * 0.01, 0, hr, 0, 7); g.fillStyle = skin; g.fill(); g.strokeStyle = edge; g.lineWidth = Math.max(1, m * 0.03); g.stroke();
+  g.beginPath(); g.arc(m * 0.01, 0, hr, 1.15, -1.15); g.closePath(); g.fillStyle = hair; g.fill();
+  g.beginPath(); g.arc(m * 0.125, 0, m * 0.03, 0, 7); g.fillStyle = '#e0b08c'; g.fill(); // nose: shows the facing
+  g.restore();
+}
+// ---------- cats ----------
+// cat drawn at true scale: nose-to-rump is 2.33 R, so R = 3.85 tiles gives a 0.45 m body (1 tile = 5 cm); was 4.2 (0.49 m) with an 8 px floor
+function catR() { return Math.max(5, 3.85 * S); }
+function pos(c, f) { return [(c.px + (c.x - c.px) * f) * S, (c.py + (c.y - c.py) * f) * S]; }
+function drawCat(g, c, x, y, now, info) {
+  const R = catR(), ang = Math.atan2(c.fy, c.fx), asleep = c.act && c.act.type === A.SLEEP;
+  const br = 1 + (asleep ? 0.045 : 0.025) * Math.sin(now / (asleep ? 900 : 600) + c.id);
+  const [fill, patch] = COAT[c.coat] || ['#ccc', null], ink = '#4a3a33';
+  g.save(); g.translate(x, y);
+  g.fillStyle = 'rgba(90,60,30,0.17)'; g.beginPath(); g.ellipse(0, R * 0.55, R * 1.05, R * 0.45, 0, 0, 7); g.fill(); // shadow
+  g.rotate(ang);
+  // tail
+  const sw = Math.sin(now / (info.cat === 'host' ? 140 : asleep ? 1600 : 420) + c.id * 1.7) * (asleep ? 0.25 : 0.7);
+  g.strokeStyle = patch || fill; g.lineWidth = R * 0.32; g.lineCap = 'round'; g.beginPath(); g.moveTo(-R * 0.8, 0); g.quadraticCurveTo(-R * 1.5, sw * R * 0.9, -R * 1.85, sw * R * 1.4); g.stroke();
+  g.strokeStyle = ink; g.globalAlpha = 0.25; g.lineWidth = 1; g.stroke(); g.globalAlpha = 1;
+  g.scale(br, br);
+  // body
+  g.beginPath(); g.ellipse(-R * 0.15, 0, R * 0.95, R * 0.8, 0, 0, 7); g.fillStyle = fill; g.fill(); g.strokeStyle = 'rgba(74,58,51,0.35)'; g.lineWidth = 1; g.stroke();
+  if (patch) { g.save(); g.clip(); g.fillStyle = patch; g.beginPath(); g.ellipse(-R * 0.45, -R * 0.2, R * 0.5, R * 0.42, 0.4, 0, 7); g.fill(); g.restore(); }
+  // head + ears
+  const hx = R * 0.65, hr = R * 0.58;
+  g.fillStyle = fill; g.strokeStyle = 'rgba(74,58,51,0.45)';
+  for (const s of [-1, 1]) { g.beginPath(); g.moveTo(hx + hr * 0.15, s * hr * 0.35); g.lineTo(hx + hr * 0.85, s * hr * 1.15); g.lineTo(hx - hr * 0.35, s * hr * 0.95); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#f2b8b0'; g.beginPath(); g.moveTo(hx + hr * 0.2, s * hr * 0.5); g.lineTo(hx + hr * 0.6, s * hr * 0.98); g.lineTo(hx - hr * 0.12, s * hr * 0.85); g.closePath(); g.fill(); g.fillStyle = fill; }
+  g.beginPath(); g.arc(hx, 0, hr, 0, 7); g.fill(); g.stroke();
+  if (c.coat === 'siamese') { g.fillStyle = patch; g.beginPath(); g.arc(hx + hr * 0.4, 0, hr * 0.45, 0, 7); g.fill(); }
+  // eyes
+  const ex = hx + hr * 0.42, ey = hr * 0.38, er = Math.max(1.6, hr * 0.2);
+  if (asleep) { g.strokeStyle = ink; g.lineWidth = Math.max(1.2, R * 0.09); for (const s of [-1, 1]) { g.beginPath(); g.arc(ex - er * 0.4, s * ey, er, -0.9, 0.9); g.stroke(); } }
+  else for (const s of [-1, 1]) { g.fillStyle = c.eyes || '#c9b037'; g.beginPath(); g.arc(ex, s * ey, er, 0, 7); g.fill(); g.fillStyle = ink; g.beginPath(); g.ellipse(ex + er * 0.2, s * ey, er * 0.35, er * 0.75, 0, 0, 7); g.fill(); }
+  g.fillStyle = '#e58a92'; g.beginPath(); g.arc(hx + hr * 0.88, 0, Math.max(1.2, hr * 0.12), 0, 7); g.fill();
+  g.restore();
+}
+function heart(g, x, y, s, col) { g.save(); g.translate(x, y); g.scale(s / 10, s / 10); g.beginPath(); g.moveTo(0, 3); g.bezierCurveTo(-6, -2, -4, -8, 0, -4); g.bezierCurveTo(4, -8, 6, -2, 0, 3); g.fillStyle = col; g.fill(); g.restore(); }
+function spark(g, x, y, s, col) { g.save(); g.translate(x, y); g.beginPath(); for (let i = 0; i < 8; i++) { const r = i % 2 ? s * 0.25 : s * 0.6, a = i * Math.PI / 4; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.fillStyle = col; g.fill(); g.restore(); }
+
+// ---------- label placement ----------
+function measure(g, txt) { return g.measureText(txt).width + 18; }
+function layoutLabels(g, items) {
+  const R = catR(), ringR = R * 1.55, LH = 22, placed = [], bodies = items.map(it => ({ x: it.x - ringR, y: it.y - ringR, w: ringR * 2, h: ringR * 2, id: it.c.id }));
+  const hit = (r, selfId) => { if (r.x < 2 || r.y < 2 || r.x + r.w > W - 2 || r.y + r.h > H - 2) return 1e9; let o = 0; for (const p of placed) o += ov(r, p) * 4; for (const b of bodies) if (b.id !== selfId) o += ov(r, b); return o; };
+  const ov = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  let hidden = 0;
+  const order = items.slice().sort((a, b) => b.pri - a.pri);
+  for (const it of order) {
+    const w = measure(g, it.text), base = [[0, -(ringR + 4 + LH / 2)], [0, ringR + 4 + LH / 2], [ringR + 6 + w / 2, 0], [-(ringR + 6 + w / 2), 0], [ringR + w / 2, -(ringR + LH / 2)], [-(ringR + w / 2), -(ringR + LH / 2)], [ringR + w / 2, ringR + LH / 2], [-(ringR + w / 2), ringR + LH / 2]];
+    let best = null, bs = 1e18, far = false;
+    for (const [dx, dy] of base) { const r = { x: it.x + dx - w / 2, y: it.y + dy - LH / 2, w, h: LH }; const s = hit(r, it.c.id); if (s < bs) { bs = s; best = r; } if (s === 0) break; }
+    if (bs > 0 && (showAll || it.force)) { // search further out, connect with a leader line
+      for (let d = 1; d <= 6 && bs > 0; d++) for (let k = 0; k < 16; k++) { const a = -Math.PI / 2 + k * Math.PI / 8, rx = it.x + Math.cos(a) * (ringR + 10 + d * 20 + w * 0.35 * Math.abs(Math.cos(a))), ry = it.y + Math.sin(a) * (ringR + 8 + d * 16); const r = { x: rx - w / 2, y: ry - LH / 2, w, h: LH }; const s = hit(r, it.c.id); if (s < bs) { bs = s; best = r; far = true; } if (s === 0) break; }
+    }
+    if (bs > 0 && !(showAll || it.force)) { it.hidden = true; hidden++; continue; }
+    if (bs >= 1e9) { best.x = Math.max(2, Math.min(W - 2 - w, best.x)); best.y = Math.max(2, Math.min(H - 2 - LH, best.y)); }
+    placed.push(best); it.rect = best; it.far = far;
+  }
+  return hidden;
+}
+
+// ---------- frame ----------
+let lastFrame = performance.now(), labelItems = [], nearestId = -1;
+function frame(now) {
+  const dtr = Math.min(0.25, (now - lastFrame) / 1000); lastFrame = now;
+  if (!paused) { acc += dtr * TICKS_PER_SEC * speed; let n = 0; const cap = MAX_STEPS, t0 = performance.now(); while (acc >= 1 && n < cap) { readKeys(); sim.step(); acc -= 1; n++; if (performance.now() - t0 > 12) break; } if (acc > cap) acc = cap; /* drop backlog instead of spiralling */ }
+  draw(now, paused ? 1 : Math.min(1, acc));
+  if (now - (frame.ui || 0) > 220) { frame.ui = now; renderSel(); renderRoster(); renderLog(); renderPulse(); renderEvents(now); if (sim.cats.length !== rosterN) { rosterN = sim.cats.length; buildRoster(); } $('clock').textContent = sim.clock(); }
+  requestAnimationFrame(frame);
+}
+function draw(now, f) {
+  if (!bg) bg = buildBg();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); ctx.drawImage(bg, 0, 0, W, H);
+  const M = sim.map, minI = 15;
+  for (const s of M.stations) { let x = s.x * S, y = s.y * S, w = s.w * S, h = s.h * S; if (s.type !== T.WINDOW && Math.min(w, h) < minI) { const k = minI / Math.min(w, h); x -= (w * k - w) / 2; y -= (h * k - h) / 2; w *= k; h *= k; } drawIcon(ctx, s.type, x, y, w, h, s.type === T.BOWL ? s.food : null); }
+  for (const t of sim.toys) drawIcon(ctx, 'toy', t.x * S - 7, t.y * S - 7, 14, 14);
+  const R = catR(), ringR = R * 1.55, items = [];
+  const P = {}; for (const c of sim.cats) P[c.id] = pos(c, f);
+  // interaction lines
+  for (const c of sim.cats) { const a = c.act; if (!a || a.target < 0) continue; const o = sim.catById(a.target); if (!o) continue; const inf = actInfo(sim, c), [x1, y1] = P[c.id], [x2, y2] = P[o.id], d = Math.hypot(x2 - x1, y2 - y1); if (d < ringR * 2) continue;
+    const ux = (x2 - x1) / d, uy = (y2 - y1) / d; ctx.strokeStyle = COL[inf.cat]; ctx.globalAlpha = 0.7; ctx.lineWidth = 2; ctx.setLineDash(inf.cat === 'host' || inf.cat === 'flee' ? [5, 4] : []); ctx.beginPath(); ctx.moveTo(x1 + ux * ringR, y1 + uy * ringR); ctx.lineTo(x2 - ux * ringR, y2 - uy * ringR); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+  // affinity lines from the selected cat
+  if (showAffinity && selected && sim.cats.includes(selected)) { const [x1, y1] = P[selected.id]; for (const o of sim.cats) { if (o === selected) continue; const m = selected.mem[o.id]; if (!m || Math.abs(m.aff) < 0.05) continue; const [x2, y2] = P[o.id], d = Math.hypot(x2 - x1, y2 - y1); if (d < ringR * 2) continue; const ux = (x2 - x1) / d, uy = (y2 - y1) / d;
+    ctx.strokeStyle = m.aff >= 0 ? '#2f8f63' : '#c9433f'; ctx.globalAlpha = 0.25 + 0.45 * Math.min(1, Math.abs(m.aff)); ctx.lineWidth = 1 + 4 * Math.min(1, Math.abs(m.aff)); ctx.setLineDash(m.aff < 0 ? [2, 4] : []); ctx.beginPath(); ctx.moveTo(x1 + ux * ringR, y1 + uy * ringR); ctx.lineTo(x2 - ux * ringR, y2 - uy * ringR); ctx.stroke(); } ctx.globalAlpha = 1; ctx.setLineDash([]); }
+  // player's reach target
+  const pl = sim.player; nearestId = -1;
+  if (pl && sim.cats.includes(pl)) { const o = sim.nearestTo(pl); if (o) { nearestId = o.id; const [x, y] = P[o.id]; ctx.strokeStyle = '#c0693f'; ctx.lineWidth = 2; ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.arc(x, y, ringR + 6, 0, 7); ctx.stroke(); ctx.setLineDash([]); } const [x, y] = P[pl.id]; ctx.fillStyle = 'rgba(192,105,63,0.035)'; ctx.strokeStyle = 'rgba(192,105,63,0.22)'; ctx.lineWidth = 1; ctx.setLineDash([3, 6]); ctx.beginPath(); ctx.arc(x, y, sim.m2t(REACH_M) * S, 0, 7); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); }
+  ctx.font = '700 13px Nunito, system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  const sorted = sim.cats.slice().sort((a, b) => P[a.id][1] - P[b.id][1]);
+  for (const c of sorted) {
+    const [x, y] = P[c.id], inf = actInfo(sim, c), col = COL[inf.cat];
+    if (c === selected) { ctx.fillStyle = 'rgba(192,105,63,0.16)'; ctx.beginPath(); ctx.arc(x, y, ringR + 4, 0, 7); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, ringR, 0, 7); ctx.stroke();
+    const hiding = c.act && c.act.type === A.HIDE && c.act.arrived; if (hiding) { ctx.globalAlpha = 0.5; } drawCat(ctx, c, x, y, now, inf); ctx.globalAlpha = 1;
+    if (hiding) { ctx.strokeStyle = '#6c7a94'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(x, y, ringR + 1, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.font = '700 13px Nunito, system-ui, sans-serif';
+    if (c.arrivedT !== undefined && sim.t - c.arrivedT < 5 * 86400) ctx.fillText('🌱', x - ringR * 0.85, y + ringR * 0.8);
+    if (c.act && c.act.type === A.WAIT && c.act.arrived !== false && !c.act.antic) ctx.fillText('⏳', x + ringR * 0.9, y + ringR * 0.8);
+    if (c.startleT !== undefined && sim.t - c.startleT < 30) { ctx.fillStyle = '#cf4a42'; ctx.font = '900 16px Nunito, system-ui, sans-serif'; ctx.fillText('!', x, y - ringR - 9 - 3 * Math.sin(now / 90)); ctx.font = '700 13px Nunito, system-ui, sans-serif'; }
+    if (c.s.stress > 0.15) { ctx.strokeStyle = '#cf4a42'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(x, y, ringR + 3.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, c.s.stress)); ctx.stroke(); ctx.lineCap = 'butt'; }
+    if (c.s.hunger > 0.6) { ctx.fillStyle = '#e8a33a'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + ringR * 0.75, y - ringR * 0.75, 4.5, 0, 7); ctx.fill(); ctx.stroke(); }
+    if (c.act && c.act.type === A.SLEEP) { const ph = (now / 1600 + c.id * 0.3) % 1; ctx.globalAlpha = 1 - ph; ctx.fillStyle = '#6c7a94'; ctx.font = `800 ${13 + ph * 3}px Nunito, system-ui, sans-serif`; ctx.fillText('z', x + ringR * 0.6 + ph * 6, y - ringR * 0.5 - ph * 14); ctx.globalAlpha = 1; ctx.font = '700 13px Nunito, system-ui, sans-serif'; }
+    else if (inf.cat === 'friend' && inf.partner && !inf.onWay) heart(ctx, x - ringR * 0.7, y - ringR * 0.8 - 2 * Math.sin(now / 300), 11, '#d9739a');
+    else if (inf.cat === 'host' && !inf.onWay) spark(ctx, x - ringR * 0.7, y - ringR * 0.8, 9, '#cf4a42');
+    else if (c.flash && sim.t < c.flash.until) { // the act is over, but it only just happened
+      const fade = Math.min(1, (c.flash.until - sim.t) / 12); ctx.globalAlpha = 0.35 + 0.5 * fade;
+      if (c.flash.kind === 'host') spark(ctx, x - ringR * 0.7, y - ringR * 0.8, 8, '#cf4a42');
+      else if (c.flash.kind === 'flee') spark(ctx, x - ringR * 0.7, y - ringR * 0.8, 7, '#6c7a94');
+      else heart(ctx, x - ringR * 0.7, y - ringR * 0.8, 9, '#d9739a');
+      ctx.globalAlpha = 1; }
+    if (c === pl) { ctx.fillStyle = '#c0693f'; ctx.beginPath(); ctx.moveTo(x, y + ringR + 3); ctx.lineTo(x - 5, y + ringR + 10); ctx.lineTo(x + 5, y + ringR + 10); ctx.closePath(); ctx.fill(); }
+    items.push({ c, x, y, text: c.name + ' · ' + inf.short, cat: inf.cat, pri: (c === pl ? 100 : 0) + (c === selected ? 50 : 0) + (c === (hover && hover.c) ? 200 : 0) + (inf.cat === 'host' || inf.cat === 'flee' ? 5 : inf.cat === 'friend' ? 3 : 0), force: c === pl || c === selected || (hover && hover.c === c) });
+  }
+  for (const h of sim.humans) drawPerson(ctx, h, h.x * S, h.y * S, Math.max(30, 18 * S)); // people stand over the cats
+  const hidden = layoutLabels(ctx, items); labelItems = items;
+  for (const it of items) { if (!it.rect) continue; const r = it.rect, col = COL[it.cat];
+    if (it.far) { ctx.strokeStyle = 'rgba(74,58,51,0.7)'; ctx.lineWidth = 1.5; ctx.fillStyle = 'rgba(74,58,51,0.7)'; ctx.beginPath(); ctx.arc(it.x, it.y, 2.5, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(Math.max(r.x, Math.min(r.x + r.w, it.x)), Math.max(r.y, Math.min(r.y + r.h, it.y))); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(255,250,243,0.95)'; rr(ctx, r.x, r.y, r.w, r.h, r.h / 2); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = it.c === pl || it.c === selected ? 2 : 1.2; ctx.stroke();
+    ctx.fillStyle = '#3d2f28'; ctx.fillText(it.text, r.x + r.w / 2, r.y + r.h / 2 + 0.5); }
+  drawQueues(); drawEvents(now); $('hidden').textContent = hidden ? `${hidden} label${hidden > 1 ? 's' : ''} hidden in the crowd` : '';
+  if (toast && now < toast.until) { ctx.font = '700 14px Nunito, system-ui, sans-serif'; const w = ctx.measureText(toast.msg).width + 28; ctx.fillStyle = 'rgba(61,47,40,0.9)'; rr(ctx, W / 2 - w / 2, 12, w, 30, 15); ctx.fill(); ctx.fillStyle = '#fff8f0'; ctx.fillText(toast.msg, W / 2, 27.5); }
+}
+
+function drawQueues() { // bowls/litter with cats queueing: small count chip
+  ctx.font = '800 13px Nunito, system-ui, sans-serif';
+  for (const st of sim.map.stations) { if (st.type !== T.BOWL && st.type !== T.LITTER) continue; const n = sim.cats.filter(c => c.act && c.act.type === A.WAIT && c.act.waitBowl === st.id && !c.act.antic).length; if (!n) continue;
+    const txt = `⏳ ${n} waiting`, w = ctx.measureText(txt).width + 14, x = Math.max(2, Math.min(W - w - 2, st.cx * S - w / 2)), y = Math.max(2, st.y * S - 24); ctx.fillStyle = 'rgba(92,154,98,0.95)'; rr(ctx, x, y, w, 20, 10); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillText(txt, x + w / 2, y + 10.5); }
+}
+function renderPulse() { // shelter pulse: mean stress over the last 24 h + hiding / queue counts
+  const cats = sim.cats; if (!cats.length) return; const m = cats.reduce((s, c) => s + c.s.stress, 0) / cats.length;
+  const pulse = sim.pulse;
+  const hid = cats.filter(c => c.act && c.act.type === A.HIDE).length, q = cats.filter(c => c.act && c.act.type === A.WAIT && !c.act.antic).length, nw = cats.filter(c => c.arrivedT !== undefined && sim.t - c.arrivedT < 5 * 86400).length;
+  $('pstats').innerHTML = `<span data-tip="Average stress of all cats right now"><b>${Math.round(m * 100)}%</b> avg stress</span><span data-tip="Cats currently in a hide box"><b>${hid}</b> hiding</span><span data-tip="Cats waiting for a bowl or the litter box"><b>${q}</b> queueing</span>${nw ? `<span data-tip="Cats that arrived in the last few days"><b>${nw}</b> 🌱 new</span>` : ''}`;
+  const c = $('pcv'), w = c.clientWidth, h = c.clientHeight, r = window.devicePixelRatio || 1; if (c.width !== w * r) { c.width = w * r; c.height = h * r; } const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, w, h);
+  g.strokeStyle = '#e5d8c2'; g.lineWidth = 1; for (const f of [0.25, 0.5]) { const y = h - 4 - f * 2 * (h - 8); g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  if (pulse.length > 1) { const t0 = Math.max(sim.t - 86400, pulse[0].t), span = Math.max(3600, sim.t - t0), X = t => (t - t0) / span * w, Y = v => h - 4 - Math.min(1, v * 2) * (h - 8); g.beginPath(); g.moveTo(X(pulse[0].t), h); for (const p of pulse) g.lineTo(X(p.t), Y(p.v)); g.lineTo(X(pulse[pulse.length - 1].t), h); g.closePath(); g.fillStyle = 'rgba(207,74,66,0.13)'; g.fill(); g.beginPath(); pulse.forEach((p, i) => i ? g.lineTo(X(p.t), Y(p.v)) : g.moveTo(X(p.t), Y(p.v))); g.strokeStyle = '#cf4a42'; g.lineWidth = 2; g.stroke(); }
+  c.dataset.tip = `<b>Shelter pulse</b><br>Average stress over the last 24 h, or since the start (gridlines at 25% and 50%)<br>Now ${Math.round(m * 100)}%`;
+}
+// ---------- side panel ----------
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function buildSel() {
+  $('sel').innerHTML = `<h2>Selected cat</h2><div class="name"><span id="sName"></span><span class="badge" id="sYou">You</span></div><div class="meta" id="sMeta"></div>
+  <div class="now"><span class="ring" id="sRing"></span><span><span id="sAct"></span><small class="appr" id="sAppr"></small></span></div>
+  <div class="bars">${['hunger', 'stress', 'irritation', 'sleepiness'].map(k => `<span>${k[0].toUpperCase() + k.slice(1)}</span><div class="bar" id="b_${k}"><i></i></div>`).join('')}</div>
+  <div class="sub">Personality</div><div class="pers">${TRN.map(([k, n]) => `<span>${n}</span><div class="bar" id="p_${k}"><i></i></div>`).join('')}</div>
+  <div class="sub">Affinity <span class="q" data-tip="<b>Affinity</b> = how this cat feels about each other cat, from −1 (dislikes) to +1 (likes). It grows with friendly contact (sniffing, grooming, play), drops after hissing or fights, and fades toward 0 with a ~5-day half-life. It is one-directional: A can like B while B dislikes A. 🛡 = fear of that cat (fades in ~1 day).">ⓘ</span></div><ul id="affinity"></ul>
+  `;
+  document.querySelector('#actrow .acts').innerHTML = [['greet', '1', 'Greet'], ['groom', '2', 'Groom'], ['play', '3', 'Play'], ['hiss', '4', 'Hiss'], ['swat', '5', 'Swat'], ['eat', 'E', 'Eat'], ['sleep', 'Z', 'Sleep'], ['hide', 'H', 'Hide'], ['selfgroom', 'G', 'Self-groom']].map(([k, key, n]) => `<button class="pill" data-cmd="${k}"><kbd>${key}</kbd>${n}</button>`).join('');
+  $('ctrlbtn').onclick = toggleControl;
+  for (const b of document.querySelectorAll('[data-cmd]')) b.onclick = () => doCmd(b.dataset.cmd);
+}
+const BARC = { hunger: '#d79a3e', stress: '#cf4a42', irritation: '#e2863a', sleepiness: '#7f93ad' };
+function setBar(id, v, col, label) { const el = $(id); if (!el) return; el.firstChild.style.width = Math.round(v * 100) + '%'; if (col) el.firstChild.style.background = col; el.dataset.tip = `<b>${label}</b>: ${Math.round(v * 100)}%`; }
+function renderSel() {
+  const c = selected && sim.cats.includes(selected) ? selected : null; const pl = sim.player;
+  if (!c) { $('sName').textContent = 'Click a cat'; $('sYou').style.display = 'none'; }
+  const k = c || pl || sim.cats[0]; if (!k) return;
+  const inf = actInfo(sim, k);
+  $('sName').textContent = k.name; $('sYou').style.display = k === pl ? '' : 'none';
+  $('sMeta').textContent = (k.arrivedT !== undefined ? '🌱 Newcomer · ' : '') + `${k.sex === 'M' ? 'Male' : 'Female'} · ${k.age} y · ${k.coat.replace('-', ' ')} · ${k.origin}`;
+  $('sRing').style.borderColor = COL[inf.cat]; $('sAct').textContent = (inf.onWay ? 'On the way: ' : '') + inf.short.replace('→ ', '');
+  const ap = sim.cats.filter(o => o !== k && o.act && o.act.target === k.id).map(o => `${o.name} (${VERB[o.act.type] || o.act.type})`);
+  $('sAppr').textContent = ap.length ? 'Coming to it: ' + ap.join(', ') : 'Nobody is approaching';
+  setBar('b_hunger', k.s.hunger, BARC.hunger, 'Hunger'); setBar('b_stress', k.s.stress, BARC.stress, 'Stress'); setBar('b_irritation', k.s.irritation, BARC.irritation, 'Irritation'); setBar('b_sleepiness', k.s.sleep, BARC.sleepiness, 'Sleepiness');
+  for (const [t, n] of TRN) setBar('p_' + t, k.tr[t], null, n);
+  renderAffinity(k);
+  $('ctrlbtn').textContent = k === pl ? 'Release control  (C)' : `Play as ${k.name}  (C)`;
+  const near = pl ? sim.nearestTo(pl) : null;
+  $('actsHead').textContent = pl ? (near ? `nearest cat in reach: ${near.name}` : 'no cat within 2.5 m') : 'take control of a cat to act';
+  for (const b of document.querySelectorAll('[data-cmd]')) { const tg = TARGETED.has(b.dataset.cmd); b.disabled = !pl || (tg && !near); b.classList.toggle('on', !!(pl && pl.cmd && pl.cmd.name === b.dataset.cmd)); b.dataset.tip = !pl ? 'Take control of a cat first' : tg ? (near ? `${b.textContent.slice(1)} ${near.name}` : 'No cat within 2.5 m') : `${pl.name}: ${b.textContent.slice(1).toLowerCase()}`; }
+}
+function buildRoster() { if (!$('roster')) return; // the All cats panel was removed; kept as a no-op
+  $('roster').innerHTML = sim.cats.map(c => `<li data-id="${c.id}"><span class="dot"></span><div style="min-width:0"><div class="nm"></div></div><span class="bd"></span><div class="bar"><i style="background:#cf4a42"></i></div></li>`).join('');
+  for (const li of $('roster').children) { const c = sim.catById(+li.dataset.id); li.onclick = () => { selected = c; renderSel(); renderRoster(); }; li.ondblclick = () => { selected = c; toggleControl(); }; }
+  $('count').textContent = sim.cats.length + ' cats';
+}
+function affCol(a) { return a >= 0 ? (a > 0.15 ? '#4e9163' : '#9cbfa2') : (a < -0.15 ? '#c9433f' : '#b8a894'); }
+function affinityTip(a, b) { const m = a.mem[b.id] || { aff: 0, fear: 0 }, r = b.mem[a.id] || { aff: 0, fear: 0 }; const f = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+  return `<b>How ${esc(a.name)} feels about ${esc(b.name)}</b><br>Affinity ${f(m.aff)}${m.fear > 0.02 ? ` · fear ${Math.round(m.fear * 100)}%` : ''}<br><span style="opacity:.8">Reverse: ${esc(b.name)} → ${esc(a.name)} ${f(r.aff)}${r.fear > 0.02 ? ` · fear ${Math.round(r.fear * 100)}%` : ''}</span>`; }
+let affSig = '';
+function renderAffinity(k) { const ul = $('affinity'); if (!ul) return; const os = sim.cats.filter(o => o !== k).map(o => ({ o, m: k.mem[o.id] || { aff: 0, fear: 0 } })).sort((a, b) => b.m.aff - a.m.aff);
+  const sig = k.id + ':' + os.map(x => x.o.id + '/' + x.m.aff.toFixed(2) + '/' + Math.round(x.m.fear * 100)).join(','); if (sig === affSig) return; affSig = sig;
+  ul.innerHTML = os.length ? os.map(({ o, m }) => { const a = Math.max(-1, Math.min(1, m.aff)), w = Math.abs(a) * 50; return `<li data-id="${o.id}" data-tip="${affinityTip(k, o).replace(/"/g, '&quot;')}"><span class="bn">${esc(o.name)}</span><span class="dv"><i style="${a >= 0 ? 'left:50%' : 'right:50%'};width:${w.toFixed(1)}%;background:${affCol(a)}"></i></span><span class="bv" style="color:${affCol(a)}">${a >= 0 ? '+' : '−'}${Math.abs(a).toFixed(2)}</span><span class="bf">${m.fear > 0.05 ? '🛡' + Math.round(m.fear * 100) + '%' : ''}</span></li>`; }).join('') : '<li>No other cats</li>';
+  for (const li of ul.children) if (li.dataset.id) li.onclick = () => { selected = sim.catById(+li.dataset.id); renderSel(); renderRoster(); }; }
+function renderRoster() { if (!$('roster')) return;
+  for (const li of $('roster').children) { const c = sim.catById(+li.dataset.id); if (!c) continue; const inf = actInfo(sim, c);
+    li.querySelector('.dot').style.borderColor = COL[inf.cat]; li.querySelector('.dot').style.background = (COAT[c.coat] || ['#ccc'])[0];
+    const html = `${esc(c.name)}${c === sim.player ? ' 🎮' : ''}${c.arrivedT !== undefined && sim.t - c.arrivedT < 5 * 86400 ? ' 🌱' : ''} <span class="ac">· ${esc(inf.short)}</span>`; const nm = li.querySelector('.nm'); if (nm.innerHTML !== html) nm.innerHTML = html;
+    li.querySelector('.bar i').style.width = Math.round(c.s.stress * 100) + '%'; li.classList.toggle('sel', c === selected);
+    li.dataset.tip = catTip(c);
+    const bd = li.querySelector('.bd'), s = selected && sim.cats.includes(selected) ? selected : null; if (!s || s === c) { bd.textContent = ''; bd.removeAttribute('data-tip'); } else { const m = s.mem[c.id] || { aff: 0 }, a = m.aff; const g = a > 0.4 ? '♥' : a > 0.15 ? '●' : a < -0.4 ? '✕' : a < -0.15 ? '●' : '·'; bd.textContent = g; bd.style.color = affCol(a); bd.dataset.tip = affinityTip(s, c); } }
+}
+function catTip(c) { const inf = actInfo(sim, c), t = c.tr; const top = TRN.map(([k, n]) => [t[k], n]).sort((a, b) => b[0] - a[0]).slice(0, 2).map(x => x[1].toLowerCase()).join(' & ');
+  return `<b>${esc(c.name)}</b>${c === sim.player ? ' (you)' : ''}<br>${esc(CATNAME[inf.cat])}: ${esc(inf.short)}${inf.partner ? `<br>Target: ${esc(inf.partner.name)}` : ''}<br>Hunger ${Math.round(c.s.hunger * 100)}% · Stress ${Math.round(c.s.stress * 100)}%<br>Mostly ${top}${c.arrivedT !== undefined ? `<br>🌱 Newcomer: arrived ${((sim.t - c.arrivedT) / 3600).toFixed(0)} h ago` : ''}`; }
+let logSig = null;
+function renderLog() {
+  const evs = sim.log.filter(e => e.kind === 'event' || e.kind === 'fight' || e.kind === 'effect').map(e => ({ t: e.t, clock: e.clock, msg: e.msg, me: sim.player && e.msg.includes(sim.player.name), kind: e.kind === 'fight' ? 'host' : e.kind === 'effect' ? 'ev eff' : 'ev' }));
+  const all = evs.concat(sim.events).sort((a, b) => b.t - a.t).slice(0, 7); const sig = all.map(e => e.t + e.msg).join('|'); if (sig === logSig) return; logSig = sig;
+  $('log').innerHTML = all.map(e => `<li class="${e.me ? 'me' : ''} ${e.kind}" data-tip="${esc(e.clock + ': ' + e.msg)}"><span class="t">${esc(e.clock.replace(/^Day \d+ /, ''))}</span><span class="m">${esc(e.msg)}</span></li>`).join('') || '<li><span class="m">Quiet so far…</span></li>';
+}
+
+// ---------- input ----------
+const keys = new Set();
+function readKeys() { const v = sim.moveVec; v.x = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0); v.y = (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0); v.run = keys.has('shift'); }
+function say(msg) { toast = { msg, until: performance.now() + 1800 }; }
+function doCmd(name) { const r = sim.command(name); if (r) say(r); renderSel(); }
+function toggleControl() { const c = selected && sim.cats.includes(selected) ? selected : null; if (!c) return; if (sim.player === c) { sim.setPlayer(null); say(`${c.name} is back to being a cat`); } else { sim.setPlayer(c); say(`You are now ${c.name}`); } renderSel(); renderRoster(); }
+const KEYCMD = { '1': 'greet', '2': 'groom', '3': 'play', '4': 'hiss', '5': 'swat', e: 'eat', z: 'sleep', h: 'hide', g: 'selfgroom' };
+window.addEventListener('keydown', e => { const k = e.key.toLowerCase(); if (e.target.tagName === 'INPUT' && k !== ' ') return;
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(k)) { keys.add(k); e.preventDefault(); return; }
+  if (k === ' ') { e.preventDefault(); togglePause(); return; } if (k === '-' || k === '_') { stepSpeed(-1); return; } if (k === '+' || k === '=') { stepSpeed(1); return; } if (k === 'c') { toggleControl(); return; } if (KEYCMD[k]) doCmd(KEYCMD[k]); });
+window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase())); window.addEventListener('blur', () => keys.clear());
+function catAt(mx, my) { let b = null, bd = catR() * 1.7; for (const c of sim.cats) { const d = Math.hypot(c.x * S - mx, c.y * S - my); if (d < bd) { bd = d; b = c; } } if (!b) for (const it of labelItems) if (it.rect && mx >= it.rect.x && mx <= it.rect.x + it.rect.w && my >= it.rect.y && my <= it.rect.y + it.rect.h) return it.c; return b; }
+cv.addEventListener('click', e => { const r = cv.getBoundingClientRect(), c = catAt(e.clientX - r.left, e.clientY - r.top); if (c) { selected = c; renderSel(); renderRoster(); } });
+cv.addEventListener('dblclick', e => { const r = cv.getBoundingClientRect(), c = catAt(e.clientX - r.left, e.clientY - r.top); if (c) { selected = c; toggleControl(); } });
+cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(), c = catAt(e.clientX - r.left, e.clientY - r.top); hover = c ? { c } : null; cv.style.cursor = c ? 'pointer' : 'default'; });
+cv.addEventListener('mouseleave', () => { hover = null; });
+function togglePause() { paused = !paused; $('pause').textContent = paused ? '▶ Play' : '❚❚ Pause'; $('pause').classList.toggle('on', paused); }
+// tooltips
+const tip = $('tip');
+document.addEventListener('mousemove', e => { let html = null; if (e.target === cv) { if (hover) html = catTip(hover.c); } else { const el = e.target.closest && e.target.closest('[data-tip]'); if (el) html = el.dataset.tip; }
+  if (!html) { tip.style.opacity = 0; return; } if (tip.innerHTML !== html) tip.innerHTML = html; tip.style.opacity = 1; const w = tip.offsetWidth, h = tip.offsetHeight; let x = e.clientX + 16, y = e.clientY + 16; if (x + w > innerWidth - 8) x = e.clientX - w - 12; if (y + h > innerHeight - 8) y = e.clientY - h - 12; tip.style.left = x + 'px'; tip.style.top = y + 'px'; });
+
+// ---------- speed ----------
+function fmtX(s) { return (s >= 1 ? +s.toFixed(s < 10 ? 1 : 0) : +s.toFixed(2)) + '×'; }
+function friendly(s) { const m = 60 / (4 * s); /* real minutes per sim hour */ return m >= 1 ? `1 sim-hour ≈ ${+m.toFixed(m < 10 ? 1 : 0)} real min` : `1 sim-hour ≈ ${Math.round(m * 60)} real s`; }
+function setSpeed(s, save = true) { s = Math.min(SP_MAX, Math.max(SP_MIN, +s || 1)); speed = s;
+  const sl = $('spslider'); if (sl) sl.value = Math.round(1000 * Math.log(s / SP_MIN) / Math.log(SP_MAX / SP_MIN));
+  if ($('spx')) { $('spx').textContent = fmtX(s); $('sps').textContent = `${+(4 * s).toFixed(1)} sim-s per s`; $('spf').textContent = friendly(s); }
+  for (const o of document.querySelectorAll('[data-sp]')) o.classList.toggle('on', Math.abs(+o.dataset.sp - s) < 1e-6);
+  if (save) store.set('wh.speed', String(s)); }
+function stepSpeed(d) { const i = SP_STEPS.findIndex(v => v >= speed - 1e-6); let k = d > 0 ? (SP_STEPS[i] > speed + 1e-6 ? i : i + 1) : i - 1; k = Math.max(0, Math.min(SP_STEPS.length - 1, k)); setSpeed(SP_STEPS[k]); }
+// ---------- boot ----------
+function boot() {
+  $('legend').innerHTML = Object.keys(COL).map(k => `<span class="lg" data-tip="<b>${CATNAME[k]}</b><br>${CATTIP[k]}"><span class="ring" style="border-color:${COL[k]}"></span>${CATNAME[k]}</span>`).join('');
+  const F = [[T.BOWL, 'Food bowl'], [T.WATER, 'Water'], [T.LITTER, 'Litter box'], [T.BED, 'Bed'], [T.PERCH, 'Cat tree'], [T.HIDE, 'Hide box'], [T.SCRATCH, 'Scratch post'], [T.WINDOW, 'Window'], ['toy', 'Toy'], ['person', 'Person']];
+  $('furn').innerHTML = F.map((f, i) => `<span data-tip="${f[1]}"><canvas id="fi${i}" width="44" height="44"></canvas>${f[1]}</span>`).join('');
+  F.forEach((f, i) => { const g = $('fi' + i).getContext('2d'); g.scale(2, 2); if (f[0] === T.WINDOW) drawIcon(g, f[0], 1, 7, 20, 8); else drawIcon(g, f[0], 2, 2, 18, 18, f[0] === T.BOWL ? 1.6 : null); });
+  for (const b of document.querySelectorAll('[data-sp]')) b.onclick = () => setSpeed(+b.dataset.sp);
+  $('spslider').oninput = e => setSpeed(SP_MIN * Math.pow(SP_MAX / SP_MIN, e.target.value / 1000)); $('spslider').dataset.tip = 'Drag: 0.25× – 16× (keys − / +)';
+  const hp = $('howpop'), hb = $('howbtn'); const showHow = v => { hp.hidden = !v; hb.setAttribute('aria-expanded', v); };
+  hb.onclick = e => { e.stopPropagation(); showHow(hp.hidden); }; $('howclose').onclick = () => showHow(false);
+  document.addEventListener('click', e => { if (!hp.hidden && !hp.contains(e.target) && e.target !== hb) showHow(false); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') showHow(false); });
+  setSpeed(store.get('wh.speed') || 1, false); { const sp = store.get('wh.preset'); if (sp && PRESETS[sp]) preset = sp; }
+  $('preset').innerHTML = Object.entries(PRESETS).map(([k, p]) => `<option value="${k}">${esc(p.name)}</option>`).join(''); $('preset').value = preset; $('preset').onchange = e => { preset = e.target.value; store.set('wh.preset', preset); newColony(7); }; $('preset').dataset.tip = 'Load a documented shelter situation';
+  $('evbtns').innerHTML = EVBTN.map(([k, l]) => `<button class="pill" data-ev="${k}" data-tip="${esc(CS.EVDEF[k].hint)}">${evSVG(k, 15)}${l}</button>`).join('');
+  for (const b of document.querySelectorAll('[data-ev]')) b.onclick = () => triggerEvent(b.dataset.ev);
+  randomOn = store.get('wh.random') !== '0'; $('evrandom').checked = randomOn; $('evrandom').onchange = e => { randomOn = e.target.checked; sim.randomEvents = randomOn; store.set('wh.random', randomOn ? '1' : '0'); };
+  $('pause').onclick = togglePause; $('newcol').onclick = () => newColony();
+  $('showall').onchange = e => { showAll = e.target.checked; };
+  $('showaffinity').onchange = e => { showAffinity = e.target.checked; $('affleg').classList.toggle('on', showAffinity); };
+  for (const b of document.querySelectorAll('[data-sp]')) b.dataset.tip = `${b.dataset.sp}× speed · ${4 * b.dataset.sp} sim-seconds per second`;
+  $('pause').dataset.tip = 'Pause / resume (Space)'; $('newcol').dataset.tip = 'Start over with a new random set of cats';
+  newColony(7); requestAnimationFrame(() => { layout(); requestAnimationFrame(frame); }); // second pass once fonts and wrapping have settled
+}
+root.Play = { evSVG, get sim() { return sim; }, set selected(c) { selected = c; }, get selected() { return selected; }, setShowAll(v) { showAll = v; $('showall').checked = v; }, setShowAffinity(v) { showAffinity = v; $('showaffinity').checked = v; $('affleg').classList.toggle('on', v); }, setHover(c) { hover = c ? { c } : null; }, togglePause, newColony, layout, triggerEvent, setSpeed, get speed() { return speed; }, setPreset(k) { preset = k; $('preset').value = k; newColony(7); }, S: () => S, catR };
+boot();
+})(typeof self !== 'undefined' ? self : this);
+
+</script></body></html>
