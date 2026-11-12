@@ -357,6 +357,39 @@ const DEFAULTS = {
     fleeHideStress: 0.6,  // a fleeing cat this stressed (or afraid of its pursuer) runs for a hide box / perch, not just away
     fleeBreakM: 4,        // how far a fleeing cat runs before it feels clear
     chaseBase: -1.8,     // appetite for running another cat off; the clearest expression of rank
+    // Scales only the positive strangerHostile term on CHASE, and only when the chaser counts as a
+    // settled resident; familiar-calm is never scaled. The intent was to cut resident-on-newcomer
+    // chases in an open/turnover room, where chase rates ran well above Dantas-Divers 2011 (0.028
+    // chase/cat/h while awake). 1 = no scaling.
+    // Measured back to 1 from 0.5. "Settled resident" is implemented as "this cat has at least one
+    // familiar colony-mate", which every cat in an all-stranger room satisfies by about day 4, so 0.5
+    // scaled stranger-chases there too. Suppressing chases does not lower hostility, it redistributes
+    // it into shorter, more frequent acts: on seeds 10-18 day-6 hostile starts rose 0.306 -> 0.359 per
+    // cat-hour and SOC23 fell 1.40x -> 1.18x (0.7 / 0.85 / 0.9 all land 1.22-1.29x; only 1 reproduces
+    // the unscaled room exactly). Combined with the swat bump below it also collapsed the week-1
+    // newcomer Cat-Stress-Score (CSS02 > 4: 20.3% -> 3.5% on seeds 10-18), though either change alone
+    // was fine. Getting the open-room chase rate down without that cost needs a gate that cannot fire
+    // in an all-stranger room (time since arrival rather than "has a familiar mate"); that is a logic
+    // change, not a tune, and on its own it broke CSS03 on seeds 1-9, so it is left for its own pass.
+    chaseStrange: 1,
+    // One-sided close swipe (a FIGHT start that never becomes a resolved bout): the target gets a small
+    // stress and fear bump, once per 60 s encounter, only from a cat it is not yet fully familiar with.
+    // ASSUMPTION: far below a resolved fight (+0.25 stress / +0.35 fear); Dantas-Divers 2011 recorded
+    // paws as the commonest aggressive act (0.115/cat/h) and bites as rare (0.0037/cat/h).
+    swatStress: 0.03,
+    // Fear is the expensive half of the bump: a feared cat is given a wider berth, so a large swatFear
+    // makes residents avoid newcomers and quietly *lowers* week-1 newcomer stress (seeds 1-9, CSS02 >4:
+    // 16.1% unbumped, 9.3% at swatFear 0.05, 16.7% at 0.02). 0.02 keeps a stranger's paw aversive
+    // without buying the newcomer a cordon.
+    swatFear: 0.02,
+    // When false, a one-sided swipe does not bump a cat that arrived as a newcomer. ASSUMPTION:
+    // that cat is already at high arrival stress (Kessler & Turner 1997); the bump is for a
+    // settled cat on the receiving end of a stranger's paw.
+    // This also keeps the all-stranger room (every cat a newcomer at t=0) bit-identical to an unbumped
+    // run, which is why SOC17/23/24 cannot regress. Turning it on with a newcomer-specific stress does
+    // raise week-1 CSS, but it costs SOC23 on seeds 10-18 (1.40x -> 1.31x at 0.02, 1.23x at 0.06), so
+    // no swatNewcomerStress key is defined: there is nothing for it to buy that CSS02 needs.
+    swatNewcomers: false,
     hissBase: -2.45,      // baseline appetite for threatening
     fightBase: -3.2,      // and for actually swatting; the gap sets threats per fight
     partingP: 0.41,        // chance a finished bout ends with one cat getting up and going
@@ -531,7 +564,7 @@ return { sampleCat, makeCat };
 'use strict';
 const { A, T, INACTIVE } = C;
 
-function newStats() { return { fights: 0, hisses: 0, fightTicks: 0, fightDur: [], fightLog: [], playToFight: 0, cornered: 0, stuckEvents: 0, litterUses: 0, eatTicks: {}, byCat: {}, hourActive: new Array(24).fill(0), hourCount: new Array(24).fill(0), bowlCrowdMax: 0, bowlCrowdSum: 0, bowlCrowdN: 0, ticks: 0, eatBouts: {}, episodes: {}, initiated: {}, hourHostile: new Array(24).fill(0), litterBy: {} }; }
+function newStats() { return { fights: 0, swats: 0, fightStarts: 0, resolvedFights: 0, hisses: 0, fightTicks: 0, fightDur: [], fightLog: [], playToFight: 0, cornered: 0, stuckEvents: 0, litterUses: 0, eatTicks: {}, byCat: {}, hourActive: new Array(24).fill(0), hourCount: new Array(24).fill(0), bowlCrowdMax: 0, bowlCrowdSum: 0, bowlCrowdN: 0, ticks: 0, eatBouts: {}, episodes: {}, initiated: {}, hourHostile: new Array(24).fill(0), litterBy: {} }; }
 function collect(sim) {
   const S = sim.stats, hr = Math.floor(sim.hour); S.ticks++;
   for (const c of sim.cats) {
@@ -543,7 +576,7 @@ function collect(sim) {
   if (sim.lastFeed !== undefined && sim.t - sim.lastFeed < 900) { let n = 0; for (const c of sim.cats) for (const s of sim.map.stations) if (s.type === T.BOWL && Math.hypot(c.x - s.cx, c.y - s.cy) < sim.m2t(0.6)) { n++; break; } S.bowlCrowdMax = Math.max(S.bowlCrowdMax, n); S.bowlCrowdSum += n; S.bowlCrowdN++; }
 }
 function summary(sim) {
-  const S = sim.stats, days = Math.max(S.ticks, 1) * sim.cfg.dt / 86400, out = { days: +days.toFixed(2), cats: [], fightsPerDay: +(S.fights / days).toFixed(1), hissesPerDay: +(S.hisses / days).toFixed(1), meanFightSec: S.fightDur.length ? +(S.fightDur.reduce((a, b) => a + b, 0) / S.fightDur.length).toFixed(1) : 0, maxFightSec: S.fightDur.reduce((m, v) => Math.max(m, v), 0), simDays: S.ticks * sim.cfg.dt / 86400, stuckPerDay: +(S.stuckEvents / days).toFixed(1), litterPerCatDay: +(S.litterUses / days / sim.cats.length).toFixed(1), bowlCrowdMax: S.bowlCrowdMax, bowlCrowdMean: S.bowlCrowdN ? +(S.bowlCrowdSum / S.bowlCrowdN).toFixed(2) : 0,
+  const S = sim.stats, days = Math.max(S.ticks, 1) * sim.cfg.dt / 86400, out = { days: +days.toFixed(2), cats: [], swatsPerDay: +((S.swats || S.fights) / days).toFixed(1), fightStartsPerDay: +((S.fightStarts || S.swats || S.fights) / days).toFixed(1), resolvedFightsPerDay: +((S.resolvedFights || 0) / days).toFixed(2), fightsPerDay: +((S.swats || S.fights) / days).toFixed(1), /* fightsPerDay remains the swat-start count for older callers */ hissesPerDay: +(S.hisses / days).toFixed(1), meanFightSec: S.fightDur.length ? +(S.fightDur.reduce((a, b) => a + b, 0) / S.fightDur.length).toFixed(1) : 0, maxFightSec: S.fightDur.reduce((m, v) => Math.max(m, v), 0), simDays: S.ticks * sim.cfg.dt / 86400, stuckPerDay: +(S.stuckEvents / days).toFixed(1), litterPerCatDay: +(S.litterUses / days / sim.cats.length).toFixed(1), bowlCrowdMax: S.bowlCrowdMax, bowlCrowdMean: S.bowlCrowdN ? +(S.bowlCrowdSum / S.bowlCrowdN).toFixed(2) : 0,
     activityByHour: S.hourActive.map((a, i) => S.hourCount[i] ? +(a / S.hourCount[i]).toFixed(2) : 0) };
   for (const id in S.byCat) { const b = S.byCat[id]; if (!sim.catById(+id)) continue; const f = k => (b.acts[k] || 0) / Math.max(1, b.ticks), hpd = k => +(f(k) * 24).toFixed(1);
     out.cats.push({ name: b.name, sleepH: hpd('sleep'), restH: +((f('rest') + f('perch') + f('hide')) * 24).toFixed(1), groomH: hpd('groom'), eatMin: +(f('eat') * 1440).toFixed(0), mealsPerDay: +((S.eatBouts[id] || 0) / (Math.max(1, b.ticks) * sim.cfg.dt / 86400)).toFixed(1), socialMin: +(['sniff', 'allogroom', 'play'].reduce((s, k) => s + f(k), 0) * 1440).toFixed(0), agonMin: +(['stalk', 'chase', 'hiss', 'fight', 'flee'].reduce((s, k) => s + f(k), 0) * 1440).toFixed(1), hideH: hpd('hide') }); }
@@ -736,7 +769,8 @@ class Sim {
     // homeostatic sleep pressure: rises 1/4.5h awake, falls 1/2.6h asleep (=> ~63% asleep at balance before circadian/rest effects)
     s.sleep = clamp(s.sleep + (asleep ? -h / 5.4 : resting ? h / 14 : h / 4.0));
     const hl = 0.25 + 0.9 * tr.N; // stress half-life hours
-    const nov = this.novelty(c), base = Math.min(1, 0.03 + 0.2 * tr.N + (this.cfg.habit || {}).amp * (0.3 + tr.N) * nov) * (asleep ? TU0.sleepStressBase : 1); // newcomer: unfamiliar room & cats; sound sleep in safety settles a cat below its waking baseline
+    const nov = this.novelty(c), H = this.cfg.habit || {}, amp = H.amp != null ? H.amp : 0.8;
+    const base = Math.min(1, 0.03 + 0.2 * tr.N + amp * (0.3 + tr.N) * nov) * (asleep ? TU0.sleepStressBase : 1); // newcomer: unfamiliar room & cats; sound sleep in safety settles a cat below its waking baseline
     s.stress += (base - s.stress) * (1 - Math.pow(0.5, h / hl));
     s.irritation *= Math.pow(0.5, h / (0.25 + 0.3 * tr.D));
     s.irritation = clamp(s.irritation + h * 0.6 * Math.max(0, s.hunger - 0.6));
@@ -838,10 +872,12 @@ class Sim {
     // close range below, because stalking someone from eight metres away is not a thing cats do.
     const reach = this.m2t(this.cfg.tune.approachM);
     const inc = {}; for (const i of c.incoming) inc[i.from] = i.type;
+    // a settled resident (already familiar with someone here) chases strangers less than a cat that is new itself (tune.chaseStrange)
+    const chaseStrangeK = TU.chaseStrange != null && Object.values(c.mem).some(mm => mm && mm.n >= TU.familiarN) ? TU.chaseStrange : 1;
     for (const [o, d] of this.nearbyCats(c, reach, 8)) {
       const m = c.mem[o.id] || (c.mem[o.id] = { aff: 0, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 });
       const aff = m.aff, fear = m.fear, near = d < contact * 1.5, dd = 2 * (1 - this.falloff(d * this.cfg.tile, this.cfg.stimulus.catD0M)), oa = o.act ? o.act.type : null, oAsleep = oa === A.SLEEP;
-      const fam = Math.min(1, m.n / TU.familiarN), strange = TU.strangerHostile * (1 - fam) - TU.familiarCalm * fam * (1 - Math.min(tr.D, o.tr.D)); // familiarity: challenges peak at first contact and fade below the stranger level as the pair learns whom to avoid, except between two bold cats, who keep contesting rank (Levine et al. 2005; Kessler & Turner 1997)
+      const fam = Math.min(1, m.n / TU.familiarN), calm = TU.familiarCalm * fam * (1 - Math.min(tr.D, o.tr.D)), strange = TU.strangerHostile * (1 - fam) - calm, strangeChase = chaseStrangeK * TU.strangerHostile * (1 - fam) - calm; // familiarity: challenges peak at first contact and fade below the stranger level as the pair learns whom to avoid, except between two bold cats, who keep contesting rank (Levine et al. 2005; Kessler & Turner 1997)
       const ddA = TU.affiliativeDist * dd;  // affiliative bids tolerate distance far better than hostile ones
       const it = inc[o.id], hostileIn = it && HOSTILE.has(it), friendlyIn = it === A.PLAY || it === A.ALLOGROOM || it === A.SNIFF;
       const bidIn = friendlyIn && o.act && o.act.target === c.id; // a friendly bid aimed at this cat, still running
@@ -883,7 +919,7 @@ class Sim {
         + 1.6 * fear + 0.5 * s.sleep + 0.4 * tr.N - 1.4 * Math.max(0, aff) - 0.6 * tr.catSoc, { target: o.id });
       if (d < sense) {
       add(A.STALK, -1.6 + 0.8 * s.play + 0.5 * tr.I + 0.5 * dom - 0.4 * aff - dd + strange, { target: o.id });
-      add(A.CHASE, TU.chaseBase + 0.9 * dom + 0.4 * tr.D - 1.0 * tr.A + 0.8 * guard + 1.2 * s.irritation - 0.8 * aff + 0.4 * tr.I + 1.6 * jealous - 1.2 * fear - dd + (it === A.HISS ? 0.4 * tr.D : 0) + ((oa === A.EAT && s.hunger > 0.3) ? 0.6 * dom : 0) + strange + bully, { target: o.id });
+      add(A.CHASE, TU.chaseBase + 0.9 * dom + 0.4 * tr.D - 1.0 * tr.A + 0.8 * guard + 1.2 * s.irritation - 0.8 * aff + 0.4 * tr.I + 1.6 * jealous - 1.2 * fear - dd + (it === A.HISS ? 0.4 * tr.D : 0) + ((oa === A.EAT && s.hunger > 0.3) ? 0.6 * dom : 0) + strangeChase + bully, { target: o.id });
       if (d < sense * 0.6) add(A.HISS, (bidIn ? anchor + TU.respondHiss : TU.hissBase) + TU.unwantedHiss * unwanted + 1.5 * s.irritation + 0.9 * fear - 0.7 * aff + 0.3 * tr.N + 0.2 * tr.D - 0.8 * tr.A + 0.6 * guard + (hostileIn && it !== A.HISS ? 1.0 : it === A.HISS ? 0.3 : 0) + (it === A.PLAY && aff < 0 ? 0.8 : 0) + jealous + strange, { target: o.id });
       // a swat: the same unwantedness, weighted down, so escalation from a friendly start stays the rare case
       if (near && (hostileIn || s.irritation > 0.35 || jealous || guard > 0.4 || unwanted > 1.5)) add(A.FIGHT, 0.5 * TU.unwantedHiss * unwanted + (bidIn ? anchor + TU.respondHiss - TU.swatGap : TU.fightBase) + 1.2 * dom + 0.4 * tr.D - 0.7 * tr.A + 0.5 * guard + 1.4 * s.irritation - aff - 1.5 * fear - s.stress * tr.N + 0.3 * tr.I + (it === A.FIGHT ? 1.3 + tr.D : 0) + jealous + strange, { target: o.id });
@@ -931,7 +967,7 @@ class Sim {
       // the walk over is not part of the bout: hold the clock until the two of them are together
       if (SOCIAL_FRIENDLY.has(act.type)) act.contactT = this.t; // already together unless the walk below says otherwise
       if (SOCIAL_FRIENDLY.has(act.type) && this.dist(c, o) > this.m2t(this.cfg.contactM) * 1.5) { act.contactT = undefined; act.travel = true; act.until = this.tick + Math.round(this.cfg.tune.approachS / this.cfg.dt); act.span = act.until - act.start; } } }
-    if (act.type === A.FIGHT && (!c.act || c.act.type !== A.FIGHT)) { const o = this.catById(act.target); if (o && !(o.act && o.act.type === A.FIGHT && o.act.target === c.id)) { this.stats.fights++; this.stats.fightLog.push({ t: this.t, a: c.id, b: act.target }); if (this.emitFights !== false) this.emit(`⚔️ ${c.name} attacks ${o.name}`, 'fight'); } }
+    if (act.type === A.FIGHT && (!c.act || c.act.type !== A.FIGHT)) { const o = this.catById(act.target); if (o && !(o.act && o.act.type === A.FIGHT && o.act.target === c.id)) { this.stats.fights++; this.stats.swats = (this.stats.swats || 0) + 1; this.stats.fightStarts = (this.stats.fightStarts || 0) + 1; this.stats.fightLog.push({ t: this.t, a: c.id, b: act.target }); if (this.emitFights !== false) this.emit(`⚔️ ${c.name} swats at ${o.name}`, 'fight'); } }
     if (act.type === A.HISS) this.stats.hisses++;
     if (c.act && c.act.target >= 0) { const E = this.stats.episodes; (E[c.act.type] || (E[c.act.type] = [])).push((this.tick - c.act.start) * this.cfg.dt); }
     if (act.target >= 0) { const I = this.stats.initiated; const k = c.id + ':' + act.type; I[k] = (I[k] || 0) + 1; const hk = act.type; if (HOSTILE.has(hk) || hk === A.CHASE) this.stats.hourHostile[Math.floor(this.hour)]++; }
@@ -1240,11 +1276,31 @@ class Sim {
           const pw = x => x.tr.D * 0.6 + (x.sex === 'M' ? 0.1 : 0) + (x.age > 1.5 && x.age < 9 ? 0.1 : 0) - x.s.stress * 0.4 + r() * 0.5;
           const [w, l] = pw(c) >= pw(o) ? [c, o] : [o, c];
           w.mem[l.id].wins++; l.mem[w.id].losses++; l.mem[w.id].fear = clamp(l.mem[w.id].fear + 0.35); l.s.stress = clamp(l.s.stress + 0.25);
-          w.s.irritation = clamp(w.s.irritation * 0.4); l.s.irritation *= 0.5; this.stats.fightDur.push(c.fightTicks * this.cfg.dt); c.fightTicks = 0; o.fightTicks = 0;
+          w.s.irritation = clamp(w.s.irritation * 0.4); l.s.irritation *= 0.5; this.stats.fightDur.push(c.fightTicks * this.cfg.dt); this.stats.resolvedFights = (this.stats.resolvedFights || 0) + 1; c.fightTicks = 0; o.fightTicks = 0;
           this.startAction(l, { type: A.FLEE, target: w.id }); this.startAction(w, { type: A.HISS, target: l.id });
           if (this.emitFights !== false) this.emit(`🏁 ${w.name} wins vs ${l.name}`, 'fight'); if (this.onFight) this.onFight(w, l, this.stats.fightDur[this.stats.fightDur.length - 1]);
         }
-      } else if (oa.type !== A.FLEE && oa.type !== A.FIGHT) { o.act = null; } // defender reacts next tick
+      } else {
+        // one-sided close swipe (a paw, not a resolved fight). ASSUMPTION: much smaller than the resolved
+        // +0.25 stress / +0.35 fear; justified by Dantas-Divers 2011, where paws were common and bites rare.
+        // Once per close encounter, not once per re-decision of the same swipe (startAction
+        // replaces the act object). ASSUMPTION: a 60 s window is one paw, not a new bout.
+        // A further ASSUMPTION: the bump applies only when the target is not yet fully familiar
+        // with the swiper (a stranger's paw is aversive; a known cat's swipe is already priced
+        // into irritation and affinity). This matches Dantas-Divers' paw in a mixed group and
+        // leaves a settled closed colony's time-budget (van den Bos allogrooming) intact.
+        const last = (c.swatBumpT || {})[o.id] || -1e9;
+        const TU = this.cfg.tune;
+        const famO = Math.min(1, (om.n || 0) / ((TU.familiarN) || 1));
+        // Skip the bump on a newcomer unless tune.swatNewcomers is true (default is false).
+        const bumpNew = TU.swatNewcomers !== false || o.arrivedT === undefined;
+        if (famO < 1 && bumpNew && this.t - last > 60) {
+          (c.swatBumpT || (c.swatBumpT = {}))[o.id] = this.t;
+          om.fear = clamp(om.fear + (TU.swatFear != null ? TU.swatFear : 0.05));
+          o.s.stress = clamp(o.s.stress + (TU.swatStress != null ? TU.swatStress : 0.04));
+        }
+        if (oa.type !== A.FLEE && oa.type !== A.FIGHT) o.act = null; // defender reacts next tick
+      }
     }
   }
 
