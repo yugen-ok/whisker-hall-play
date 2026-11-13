@@ -406,6 +406,56 @@ const DEFAULTS = {
     approachS: 90,        // how long it may spend getting there before giving up
     tetherS: 150,         // how long a pair stays in company after a welcome exchange
     tetherM: 0.3,         // and how far apart they drift while it lasts
+    // ---- the litter box as a resource: soiling, avoiding it, and being worn down by it ----
+    // What the sources describe is a fouler box, reluctance to use it, and house-soiling as the
+    // clinical outcome: AAFP/ISFM 2014 house-soiling guidelines (soiled-box aversion, a despot cat
+    // monopolizing a box, n+1 as a rule of thumb), AAFP/ISFM 2013 environmental needs, Herron 2010,
+    // Neilson 2004 (J Feline Med Surg 6:5-11), Sung & Crowell-Davis 2006 (Am J Vet Res 67:1500).
+    // None of them measures colony stress or an agonistic rate against box count, which is why R7 and
+    // RES06 score the fouler box and the delay instead. Elimination outside the box is the missing
+    // half and is a feature in its own right (docs/TODO-next-feature.md), so delay stands in for it.
+    // Contention is in the model but cannot be the mechanism, and that is arithmetic rather than
+    // tuning: ~3.7 eliminations/cat/day of ~1.4 min each is a ~5% duty cycle, so a dozen cats sharing
+    // one box collide only occasionally (measured over 12 seeds: 2.08 waits and 0.46 displacement
+    // chases a day, against none of either with seven boxes). What does scale with boxes-per-cat is
+    // how dirty each box gets: one box takes every deposit in the room, a box in a set of seven takes
+    // a seventh of them.
+    // So a cat facing the one foul box does two things, and they are the same fact seen twice: it puts
+    // the trip off (soilAversion, in the LITTER score) and it is worn down by having put it off
+    // (litterFrustration, in the stress baseline). The aversion and frustration both
+    // read the soiling of the cleanest box on offer, Sim.latrineSoil().
+    // ASSUMPTION: the numbers below. soilPerUse 0.12 makes a box "a day's worth of one cat" (~4
+    // deposits) foul enough to put a cat off; between the two daily scoops the single box takes ~30
+    // deposits (saturated) while each of seven takes ~4.
+    soilPerUse: 0.12,     // how much one elimination adds to a box's soiling (0 = clean, 1 = unusable)
+    soilAversion: 5.0,    // how hard foul litter pushes a cat off going, scaled by (1 - bladder): a cat
+                          // that is bursting goes anyway, which is why this delays eliminations and does
+                          // not suppress them (PHY09 holds: uses/day is set by intake, not by the box)
+    soilPickAvoid: 2.5,   // and how strongly a cat picks the cleanest box when it has a choice of boxes
+    litterUrgeAt: 0.65,   // bladder at which a cat starts wanting the box. One threshold, read by the
+                          // LITTER score and by frustration.
+    // Frustration raises the stress BASELINE, because an unresolved need is a state and not an event.
+    // An earlier additive `bladder > 0.85` impulse could not carry the dirty-box job at all:
+    // stress relaxes to its baseline with a 0.25-1.15 h half-life, so an impulse paid only while over
+    // a threshold the cats sit above 4-8% of the time washed out to +0.008 on colony mean stress,
+    // against a seed-to-seed spread of +/-0.02. R7 and RES06 therefore saw nothing at any aversion
+    // strength (soilAversion 12 doubles the time spent holding on and still moved mean stress by 0.000).
+    // The whole term is
+    // `litterFrustration * max(0, bladder - litterUrgeAt) * latrineSoil`.
+    // Its maximum, a cat at a full bladder facing a box it will not use, is 1.5 * 0.35 * 1 = 0.525 of
+    // baseline stress, against the 0.64 a newcomer carries through its first day
+    // (habit.amp * (0.3 + N) at N = 0.5). Being unable to eliminate is a serious welfare insult.
+    // No check scores this number. R7 and RES06 are anchored to the sourced contrasts (a fouler box
+    // and delayed elimination), not to colony mean stress, because nothing in the literature measures
+    // colony stress or agonism against box count. 1.8 was tried and rejected: it existed only to clear
+    // the 15% effect-size helper in check.js on a stress contrast that is not itself sourced, and at
+    // 1.8 agonism ran the wrong way (-3.9%). See REPORT.md in wh-realism2 for the 1.0/1.5/1.8 sweep.
+    // The term is almost inert wherever boxes are adequate: measured mean
+    // `max(0, bladder - litterUrgeAt) * latrineSoil` is 0.033 with one box and 0.0003 with seven, so a
+    // scarce latrine's soil-stress cannot leak into the colony-wide anchors (CSS01-04, STR*). Dominance
+    // at scarce bowls (R6) is carried by the bowl mechanism itself (deference, concession and
+    // rank-gated release, Knowles et al. 2004), not by litter stress.
+    litterFrustration: 1.5,
   },
 };
 // ---------- map ----------
@@ -445,13 +495,13 @@ function buildMap(cfg) {
   const bowls = stations.filter(s => s.type === T.BOWL);
   place(T.WATER, 4, 4, K.water, ALL);
   const farFromFood = (cx, cy, cl) => bowls.every(b => Math.hypot(b.cx - cx, b.cy - cy) > (cl >= 5 ? 30 : 18)); // >=1.5 m preferred, >=0.9 m (ASPCApro) minimum
-  const [l1, l2] = split(K.litter, 4 / 7); place(T.LITTER, 10, 8, l1, [Math.round(PX * 0.5), 10, PX - 2, H - 4], {}, farFromFood); if (l2) place(T.LITTER, 10, 8, l2, QUIET, {}, farFromFood); // 50 x 40 cm
+  const [l1, l2] = split(K.litter, 4 / 7); place(T.LITTER, 10, 8, l1, [Math.round(PX * 0.5), 10, PX - 2, H - 4], { soil: 0 }, farFromFood); if (l2) place(T.LITTER, 10, 8, l2, QUIET, { soil: 0 }, farFromFood); // 50 x 40 cm
   const [p1, p2] = split(K.perch, 4 / 6); place(T.PERCH, 12, 12, p1, MAIN, { cap: 2, elevated: true }); if (p2) place(T.PERCH, 12, 12, p2, QUIET, { cap: 2, elevated: true }); // 60 cm cat-tree base
   const [b1, b2] = split(K.bed, 5 / 8); place(T.BED, 11, 11, b1, MAIN, { cap: 2 }); if (b2) place(T.BED, 11, 11, b2, QUIET, { cap: 2 }); // 55 cm beds
   const [h1, h2] = split(K.hide, 5 / 8); place(T.HIDE, 8, 6, h1, MAIN); if (h2) place(T.HIDE, 8, 6, h2, QUIET); // 40 x 30 cm boxes
   const [s1, s2] = split(K.scratch, 4 / 5); place(T.SCRATCH, 6, 6, s1, MAIN); if (s2) place(T.SCRATCH, 6, 6, s2, QUIET); // 30 cm post base
   let floor = 0; for (let i = 0; i < W * H; i++) if (grid[i] !== T.WALL && grid[i] !== T.DOOR) floor++;
-  return { W, H, grid, stations, partitionX: PX, door: { x: dx0 + dw / 2, y: H - 5 }, sitSpot: { x: Math.round(PX * 0.55), y: Math.round(H / 2) }, floorM2: floor * cfg.tile * cfg.tile };
+  return { W, H, grid, stations, litter: stations.filter(s => s.type === T.LITTER), partitionX: PX, door: { x: dx0 + dw / 2, y: H - 5 }, sitSpot: { x: Math.round(PX * 0.55), y: Math.round(H / 2) }, floorM2: floor * cfg.tile * cfg.tile };
 }
 function walkable(map, x, y) { x = x | 0; y = y | 0; if (x < 0 || y < 0 || x >= map.W || y >= map.H) return false; const t = map.grid[y * map.W + x]; return t !== T.WALL && t !== T.OBST && t !== T.DOOR; }
 function distField(map, s) { // BFS (8-neighbour) distance from station cells
@@ -564,19 +614,23 @@ return { sampleCat, makeCat };
 'use strict';
 const { A, T, INACTIVE } = C;
 
-function newStats() { return { fights: 0, swats: 0, fightStarts: 0, resolvedFights: 0, hisses: 0, fightTicks: 0, fightDur: [], fightLog: [], playToFight: 0, cornered: 0, stuckEvents: 0, litterUses: 0, eatTicks: {}, byCat: {}, hourActive: new Array(24).fill(0), hourCount: new Array(24).fill(0), bowlCrowdMax: 0, bowlCrowdSum: 0, bowlCrowdN: 0, ticks: 0, eatBouts: {}, episodes: {}, initiated: {}, hourHostile: new Array(24).fill(0), litterBy: {} }; }
+function newStats() { return { fights: 0, swats: 0, fightStarts: 0, resolvedFights: 0, hisses: 0, fightTicks: 0, fightDur: [], fightLog: [], playToFight: 0, cornered: 0, stuckEvents: 0, litterUses: 0, litterWaits: 0, litterChases: 0, soilSum: 0, soilN: 0, eatTicks: {}, byCat: {}, hourActive: new Array(24).fill(0), hourCount: new Array(24).fill(0), bowlCrowdMax: 0, bowlCrowdSum: 0, bowlCrowdN: 0, ticks: 0, eatBouts: {}, episodes: {}, initiated: {}, hourHostile: new Array(24).fill(0), litterBy: {} }; }
 function collect(sim) {
   const S = sim.stats, hr = Math.floor(sim.hour); S.ticks++;
   for (const c of sim.cats) {
     const b = S.byCat[c.id] || (S.byCat[c.id] = { name: c.name, ticks: 0, acts: {} });
-    b.ticks++; b.stress = (b.stress || 0) + c.s.stress; b.irr = (b.irr || 0) + c.s.irritation; b.playD = (b.playD || 0) + c.s.play; b.socialD = (b.socialD || 0) + c.s.social; b.hourAct = b.hourAct || new Array(24).fill(0); const t = c.act ? c.act.type : 'none'; b.acts[t] = (b.acts[t] || 0) + 1;
+    b.ticks++; b.stress = (b.stress || 0) + c.s.stress; b.irr = (b.irr || 0) + c.s.irritation; b.bladder = (b.bladder || 0) + c.s.bladder; b.playD = (b.playD || 0) + c.s.play; b.socialD = (b.socialD || 0) + c.s.social; b.hourAct = b.hourAct || new Array(24).fill(0); const t = c.act ? c.act.type : 'none'; b.acts[t] = (b.acts[t] || 0) + 1;
     S.hourCount[hr]++; if (!INACTIVE.has(t) && t !== 'groom' && t !== 'window') { S.hourActive[hr]++; b.hourAct[hr]++; }
     if (t === A.EAT && c.lastEatStart !== c.act.start) { c.lastEatStart = c.act.start; S.eatBouts[c.id] = (S.eatBouts[c.id] || 0) + 1; }
   }
+  // mean soiling across the room's boxes, for summary().litterSoilMean. Behaviour reads the cleanest
+  // box instead (Sim.latrineSoil); this is the room-hygiene figure R7 reports.
+  const boxes = sim.map.litter;
+  if (boxes.length) { let v = 0; for (const b of boxes) v += b.soil; S.soilSum += v / boxes.length; S.soilN++; }
   if (sim.lastFeed !== undefined && sim.t - sim.lastFeed < 900) { let n = 0; for (const c of sim.cats) for (const s of sim.map.stations) if (s.type === T.BOWL && Math.hypot(c.x - s.cx, c.y - s.cy) < sim.m2t(0.6)) { n++; break; } S.bowlCrowdMax = Math.max(S.bowlCrowdMax, n); S.bowlCrowdSum += n; S.bowlCrowdN++; }
 }
 function summary(sim) {
-  const S = sim.stats, days = Math.max(S.ticks, 1) * sim.cfg.dt / 86400, out = { days: +days.toFixed(2), cats: [], swatsPerDay: +((S.swats || S.fights) / days).toFixed(1), fightStartsPerDay: +((S.fightStarts || S.swats || S.fights) / days).toFixed(1), resolvedFightsPerDay: +((S.resolvedFights || 0) / days).toFixed(2), fightsPerDay: +((S.swats || S.fights) / days).toFixed(1), /* fightsPerDay remains the swat-start count for older callers */ hissesPerDay: +(S.hisses / days).toFixed(1), meanFightSec: S.fightDur.length ? +(S.fightDur.reduce((a, b) => a + b, 0) / S.fightDur.length).toFixed(1) : 0, maxFightSec: S.fightDur.reduce((m, v) => Math.max(m, v), 0), simDays: S.ticks * sim.cfg.dt / 86400, stuckPerDay: +(S.stuckEvents / days).toFixed(1), litterPerCatDay: +(S.litterUses / days / sim.cats.length).toFixed(1), bowlCrowdMax: S.bowlCrowdMax, bowlCrowdMean: S.bowlCrowdN ? +(S.bowlCrowdSum / S.bowlCrowdN).toFixed(2) : 0,
+  const S = sim.stats, days = Math.max(S.ticks, 1) * sim.cfg.dt / 86400, out = { days: +days.toFixed(2), cats: [], swatsPerDay: +((S.swats || S.fights) / days).toFixed(1), fightStartsPerDay: +((S.fightStarts || S.swats || S.fights) / days).toFixed(1), resolvedFightsPerDay: +((S.resolvedFights || 0) / days).toFixed(2), fightsPerDay: +((S.swats || S.fights) / days).toFixed(1), /* fightsPerDay remains the swat-start count for older callers */ hissesPerDay: +(S.hisses / days).toFixed(1), meanFightSec: S.fightDur.length ? +(S.fightDur.reduce((a, b) => a + b, 0) / S.fightDur.length).toFixed(1) : 0, maxFightSec: S.fightDur.reduce((m, v) => Math.max(m, v), 0), simDays: S.ticks * sim.cfg.dt / 86400, stuckPerDay: +(S.stuckEvents / days).toFixed(1), litterPerCatDay: +(S.litterUses / days / sim.cats.length).toFixed(1), litterSoilMean: S.soilN ? +(S.soilSum / S.soilN).toFixed(3) : 0, litterWaitsPerDay: +(S.litterWaits / days).toFixed(2), litterChasesPerDay: +(S.litterChases / days).toFixed(2), bowlCrowdMax: S.bowlCrowdMax, bowlCrowdMean: S.bowlCrowdN ? +(S.bowlCrowdSum / S.bowlCrowdN).toFixed(2) : 0,
     activityByHour: S.hourActive.map((a, i) => S.hourCount[i] ? +(a / S.hourCount[i]).toFixed(2) : 0) };
   for (const id in S.byCat) { const b = S.byCat[id]; if (!sim.catById(+id)) continue; const f = k => (b.acts[k] || 0) / Math.max(1, b.ticks), hpd = k => +(f(k) * 24).toFixed(1);
     out.cats.push({ name: b.name, sleepH: hpd('sleep'), restH: +((f('rest') + f('perch') + f('hide')) * 24).toFixed(1), groomH: hpd('groom'), eatMin: +(f('eat') * 1440).toFixed(0), mealsPerDay: +((S.eatBouts[id] || 0) / (Math.max(1, b.ticks) * sim.cfg.dt / 86400)).toFixed(1), socialMin: +(['sniff', 'allogroom', 'play'].reduce((s, k) => s + f(k), 0) * 1440).toFixed(0), agonMin: +(['stalk', 'chase', 'hiss', 'fight', 'flee'].reduce((s, k) => s + f(k), 0) * 1440).toFixed(1), hideH: hpd('hide') }); }
@@ -679,7 +733,7 @@ class Sim {
     const snap = this.evSnap();
     if (type === 'feed') { const bw = M.stations.filter(s => s.type === T.BOWL); bw.forEach(s => s.food = this.cats.length * this.cfg.tune.dailyRation / Math.max(1, this.cfg.feedTimes.length) / Math.max(1, bw.length)); /* a measured ration, not an all-day supply */ this.lastFeed = this.t; if (!this.cfg.noHumans) this.addHuman('feed'); this.emit('🍽️ Staff fill the food bowls', 'event'); this.interruptAll(0.6, c => c.s.hunger > 0.2); }
     else if (type === 'pickup') { if (!this.cfg.adLib) this.map.stations.forEach(st => { if (st.type === T.BOWL) st.food = 0; }); }
-    else if (type === 'clean') { if (!this.cfg.noHumans) this.addHuman('clean'); this.emit('🧹 Staff scoop litter boxes', 'event'); }
+    else if (type === 'clean') { if (!this.cfg.noHumans) this.addHuman('clean'); for (const b of M.litter) b.soil = 0; this.emit('🧹 Staff scoop litter boxes', 'event'); } // the round covers every box, however many there are
     else if (type === 'noise') { let k = 0; const [nx, ny] = this.evPlace('noise'); for (const c of this.cats) { const w = this.soundW(this.soundDb(this.cfg.stimulus.noiseDb, nx, ny, c)); c.s.stress = clamp(c.s.stress + 0.55 * (0.25 + c.tr.N) * w); if (r() < (0.4 + c.tr.N * 0.5) * w) { c.act = null; c.startleT = this.t; k++; } } this.emit(`💥 Sudden loud noise: ${k} cat${k === 1 ? '' : 's'} startle${k === 1 ? 's' : ''}`, 'event'); }
     else if (type === 'visit') { this.addHuman(r() < 0.5 ? 'sit' : 'visit'); this.emit('🧑 A person enters the room', 'event'); }
     else if (type === 'sit') { this.addHuman('sit'); this.emit('🧘 A person comes in and sits on the floor', 'event'); }
@@ -760,6 +814,11 @@ class Sim {
     if (this.humans.length < before) this.doorOpen = this.t + 20;
   }
 
+  // Soiling of the cleanest box the colony has on offer, 0 clean to 1 unusable. Cats head for the
+  // cleanest box (see the LITTER branch of pickStation), so this is the box every cat is weighing up
+  // and holding on against. No boxes at all is the same thing as an unusable one: nowhere to go.
+  latrineSoil() { let best = 1; for (const b of this.map.litter) best = Math.min(best, b.soil); return best; }
+
   // ----- per-cat internal state -----
   circ(h) { return 0.2 + 0.8 * Math.max(gauss(h, 6.5, 1.4), gauss(h, 18.5, 1.6), 0.35 * gauss(h, 12, 3)); } // crepuscular
   updateState(c) {
@@ -770,12 +829,15 @@ class Sim {
     s.sleep = clamp(s.sleep + (asleep ? -h / 5.4 : resting ? h / 14 : h / 4.0));
     const hl = 0.25 + 0.9 * tr.N; // stress half-life hours
     const nov = this.novelty(c), H = this.cfg.habit || {}, amp = H.amp != null ? H.amp : 0.8;
-    const base = Math.min(1, 0.03 + 0.2 * tr.N + amp * (0.3 + tr.N) * nov) * (asleep ? TU0.sleepStressBase : 1); // newcomer: unfamiliar room & cats; sound sleep in safety settles a cat below its waking baseline
+    // A toileting need the cat has not resolved is a state, not an event, so it sets the
+    // level stress settles at: a dirty or missing box wears the cat down from the same
+    // bladder threshold the LITTER score uses (litterUrgeAt).
+    const frustration = TU0.litterFrustration * Math.max(0, s.bladder - TU0.litterUrgeAt) * this.latrineSoil();
+    const base = Math.min(1, 0.03 + 0.2 * tr.N + amp * (0.3 + tr.N) * nov + frustration) * (asleep ? TU0.sleepStressBase : 1); // newcomer: unfamiliar room & cats; sound sleep in safety settles a cat below its waking baseline
     s.stress += (base - s.stress) * (1 - Math.pow(0.5, h / hl));
     s.irritation *= Math.pow(0.5, h / (0.25 + 0.3 * tr.D));
     s.irritation = clamp(s.irritation + h * 0.6 * Math.max(0, s.hunger - 0.6));
     s.irritation = clamp(s.irritation + h * TU0.stressIrritation * (0.5 + tr.D) * Math.max(0, s.stress - 0.2)); // stress lowers tolerance (Ellis 2009); a bold cat turns it outward, an anxious subordinate one keeps fleeing
-    if (s.bladder > 0.85) s.stress = clamp(s.stress + h * 1.5 * (s.bladder - 0.85)); // holding on because the box is taken
     s.social = clamp(s.social + h / 5 * (0.4 + tr.A * 0.6));
     s.play = clamp(s.play + (asleep ? 0 : h / 3 * (0.3 + tr.E)) * (c.age > 8 ? 0.5 : 1));
     // crowding: many non-friends within 0.5 m raises irritation & stress
@@ -787,6 +849,23 @@ class Sim {
   // ----- decision -----
   nearbyCats(c, r, keep) { const out = []; for (const o of this.cats) if (o !== c) { const d = this.dist(c, o); if (d < r) out.push([o, d]); } out.sort((a, b) => a[1] - b[1]); return out.slice(0, keep || 5); }
   stationOcc(s) { let n = 0; for (const o of this.cats) if (o.act && o.act.station === s.id) n++; return n; }
+  // Which waiter gets a bowl that has just come free. Rank decides it, not first-come: agonistic
+  // rank away from food predicts food-bowl rank (Knowles et al. 2004, AJVR 65:1548, r = 0.405,
+  // p = 0.043). It is a tendency and not a law, so each rival above this cat is read the wrong way
+  // round with probability 4/31, the 4 of 31 unambiguous dyads whose feeding order disagreed with
+  // their agonistic order. A dominant cat also does not always invoke the priority it has, and the
+  // reason given is that it is not particularly hungry (Crowell-Davis, Curtis & Knowles 2004): below
+  // the same hunger > 0.15 cut the supplanting branches use, a cat neither waits for its rank nor
+  // holds anyone else back. A rival is a cat queued for this same bowl, and the gap that counts as a
+  // clear rival is the 0.15 the deference branch uses.
+  bowlTurn(c, b) {
+    if (c.s.hunger <= 0.15) return true;
+    for (const o of this.cats) { if (o === c || !o.act || o.act.type !== A.WAIT || o.act.antic || o.act.waitBowl !== b.id) continue;
+      if (o.s.hunger <= 0.15 || o.tr.D <= c.tr.D + 0.15) continue;
+      if (this.rng() < 4 / 31) continue;
+      return false; }
+    return true;
+  }
   pickStation(c, types, scoreFn) {
     let best = null, bs = -1e9; const f = this.fields;
     for (const s of this.map.stations) { if (!types.includes(s.type)) continue; const d = f[s.id][(c.y | 0) * this.map.W + (c.x | 0)]; if (d === 65535) continue;
@@ -843,7 +922,10 @@ class Sim {
     // fresh food pulls the whole colony to the bowls, not only the cats that are already hungry
     if (anyFood) add(A.EAT, 4.5 * (s.hunger - 0.4) + wetFresh * (TU.freshFoodPull + 0.8 * tr.D) * (s.hunger > 0.05 ? 1 : 0) - s.stress * tr.N - 2 * threat);
     add(A.DRINK, 5 * (s.thirst - 0.6));
-    add(A.LITTER, 7 * (s.bladder - 0.65));
+    // A cat will not use a foul box while it can hold on: it goes elsewhere and comes back. The
+    // same soiling feeds frustration in updateState, so avoiding a dirty box and
+    // being worn down by one are one mechanism rather than two.
+    add(A.LITTER, 7 * (s.bladder - TU.litterUrgeAt) - TU.soilAversion * this.latrineSoil() * (1 - s.bladder));
     add(A.HIDE, -0.9 + 3.2 * s.stress * (0.4 + tr.N) + 0.35 * tr.N + 0.8 * this.novelty(c) + 4.5 * threat);
     const antic = this.anticipation(); const seek = anyFood || this.t < (c.noSeekT || 0) ? -Infinity : -1.5 + 10 * (s.hunger - 0.65) - 2 * Math.max(0, s.sleep - 0.5); // a hungry cat with empty bowls goes and waits at them
     if (antic > 0 || seek > -1.5) add(A.WAIT, (antic > 0 ? -0.5 + 5.0 * antic * (0.3 + s.hunger) + Math.max(0, seek + 1.5) : seek) - s.stress * tr.N - 2 * threat); // food-anticipatory activity: learned routine
@@ -950,13 +1032,45 @@ class Sim {
           const m2 = c.mem[o.id];
           p -= (o.tr.D > c.tr.D + 0.15 || (m2 && m2.fear > 0.15)) ? 3.0 : 0.6; } return p; };
       const pref = s => s.type === T.HIDE ? 1.2 * tr.N : s.type === T.PERCH ? 0.8 * tr.D : s.type === T.BED ? 0.5
-        : s.type === T.BOWL ? (s.food > 0.02 ? crowdedBy(s) : -50) : s.type === T.LITTER ? crowdedBy(s) : 0;
+        : s.type === T.BOWL ? (s.food > 0.02 ? crowdedBy(s) : -50) : s.type === T.LITTER ? crowdedBy(s) - this.cfg.tune.soilPickAvoid * s.soil : 0;
       const st = this.pickStation(c, rest, pref);
+      // Deference: a cat does not settle at a bowl a cat above it is already eating at. Agonistic rank
+      // away from food predicts food-bowl rank (Knowles et al. 2004, AJVR 65:1548, r = 0.405, p = 0.043),
+      // and giving way is the whole of it here: no threat is made and nothing is contested. Rank decides
+      // a bowl that comes free (bowlTurn, at the WAIT release); it does not stop a cat taking one that
+      // is standing empty, which is what measuring the queue rank here instead would have meant -- with
+      // twelve cats almost every cat has someone a rank above it waiting, so eating all but stopped
+      // (24-seed rho(D, eating) 0.103 +- 0.101 against 0.165 +- 0.131 with this branch left alone).
       if (st && ch.type === A.EAT && this.cats.some(o => o !== c && o.act && o.act.type === A.EAT && o.tr.D > c.tr.D + 0.15 && ((c.mem[o.id] && c.mem[o.id].fear > 0.15) || r() < 0.8 * (1 - c.tr.D)) && Math.hypot(o.x - (st.cx||st.x), o.y - (st.cy||st.y)) < this.m2t(1.5))) { act.type = A.WAIT; act.gx = (st.cx||st.x) + 5 + r() * 6; act.gy = (st.cy||st.y) + (r() - 0.5) * 10; act.waitBowl = st.id; } // deference to a dominant eater nearby
       else if (st) { act.station = st.id; act.gx = st.x + r() * st.w; act.gy = st.y + r() * st.h; }
-      else if (ch.type === A.EAT && (() => { const vic = this.cats.filter(o => o !== c && o.act && o.act.type === A.EAT && o.tr.D < c.tr.D - 0.1 && !(c.mem[o.id] && c.mem[o.id].fear > 0.2)); if (!vic.length || r() > c.tr.D) return false; const v = vic[Math.floor(r() * vic.length)]; act.type = A.CHASE; act.target = v.id; act.until = this.tick + Math.round(0.5 * m); ch = { type: A.CHASE, target: v.id }; return true; })()) { /* displacement */ }
+      // Supplanting, when every bowl is taken. The dominant cat is conceded the place on approach: the
+      // despot of a 14-cat house supplanted others one to several times a day and overt aggression was
+      // never observed during feeding (Bernstein & Strack 1996), so this is a place changing hands, not
+      // a fight over food. Priority of access goes with agonistic rank (Knowles et al. 2004), but it is
+      // a tendency, and the 4-of-31 dyads whose feeding order ran the other way are priced once, at the
+      // rank-gated release in bowlTurn. A cat that is not particularly hungry does not invoke the
+      // priority it has (Crowell-Davis, Curtis & Knowles 2004, JFMS review), which is the same
+      // hunger > 0.15 cut. "On approach" is literal, and it is the whole of what replaces the chase:
+      // the cat walks over to the bowl it has picked out and the occupant gives way when it gets there
+      // (the yield is in the EAT branch of tickAction). Evicting the occupant the moment the claim is
+      // made instead left the bowl standing empty for the walk and cost most of the rank signal
+      // (24-seed rho(D, eating) 0.113 +- 0.114 that way, against 0.229 +- 0.114 for the old chase).
+      // Chase-and-take survives only as the rare path through the CHASE option in decide().
+      else if (ch.type === A.EAT && (() => { if (c.s.hunger <= 0.15) return false;
+        // Bernstein & Strack 1996: the despot of a 14-cat house supplanted others one to
+        // several times a day, and this was rare outside the despot. After a fresh meal
+        // pulled many hungry cats to three bowls at once, mid-rank cats claiming with
+        // probability D produced about 12 place-changes a day, and the highest-ranking
+        // winner took only one in eight of them. Deference and bowlTurn still carry
+        // Knowles rank along the queue. Only the highest-D motivated cat may walk over
+        // to be conceded a place.
+        if (this.cats.some(o => o !== c && o.s.hunger > 0.15 && o.tr.D > c.tr.D)) return false;
+        const vic = this.cats.filter(o => o !== c && o.act && o.act.type === A.EAT && o.act.arrived && o.act.station >= 0 && o.tr.D < c.tr.D - 0.1 && !(c.mem[o.id] && c.mem[o.id].fear > 0.2));
+        if (!vic.length || r() > c.tr.D) return false;
+        const v = vic[Math.floor(r() * vic.length)], b2 = this.map.stations[v.act.station];
+        act.station = v.act.station; act.gx = b2.x + r() * b2.w; act.gy = b2.y + r() * b2.h; return true; })()) { /* heading over to be conceded the place */ }
       else if (ch.type === A.EAT) { act.type = A.WAIT; const bowls = this.map.stations.filter(s => s.type === T.BOWL && s.food > 0.02); const b = bowls[Math.floor(r() * bowls.length)] || this.map.stations[0]; act.gx = b.cx + 5 + r() * 6; act.gy = b.cy + (r() - 0.5) * 10; act.waitBowl = b.id; }
-      else if (ch.type === A.LITTER) { const boxes = this.map.stations.filter(x => x.type === T.LITTER); const b = boxes.reduce((p, x) => (!p || this.fields[x.id][(c.y | 0) * this.map.W + (c.x | 0)] < this.fields[p.id][(c.y | 0) * this.map.W + (c.x | 0)] ? x : p), null); const occ = b && this.cats.find(o => o !== c && o.act && o.act.type === A.LITTER && o.act.station === b.id && o.act.arrived); if (occ && occ.tr.D < c.tr.D && r() < c.tr.D * (0.5 + c.s.irritation)) { act.type = A.CHASE; act.target = occ.id; this.stats.litterChases = (this.stats.litterChases || 0) + 1; } /* dominant cat displaces the box occupant, as at bowls */ else if (b) { act.type = A.WAIT; act.gx = b.cx + (r() < 0.5 ? -1 : 1) * (9 + r() * 4); act.gy = b.cy + (r() - 0.5) * 8; act.waitBowl = b.id; c.s.irritation = clamp(c.s.irritation + 0.05); this.stats.litterWaits = (this.stats.litterWaits || 0) + 1; } else { act.type = A.REST; act.gx = c.x; act.gy = c.y; } } // box occupied: wait nearby
+      else if (ch.type === A.LITTER) { const boxes = this.map.stations.filter(x => x.type === T.LITTER); const b = boxes.reduce((p, x) => (!p || this.fields[x.id][(c.y | 0) * this.map.W + (c.x | 0)] < this.fields[p.id][(c.y | 0) * this.map.W + (c.x | 0)] ? x : p), null); const occ = b && this.cats.find(o => o !== c && o.act && o.act.type === A.LITTER && o.act.station === b.id && o.act.arrived); if (occ && occ.tr.D < c.tr.D && r() < c.tr.D * (0.5 + c.s.irritation)) { act.type = A.CHASE; act.target = occ.id; this.stats.litterChases++; } /* dominant cat displaces the box occupant, as at bowls */ else if (b) { act.type = A.WAIT; act.gx = b.cx + (r() < 0.5 ? -1 : 1) * (9 + r() * 4); act.gy = b.cy + (r() - 0.5) * 8; act.waitBowl = b.id; c.s.irritation = clamp(c.s.irritation + 0.05); this.stats.litterWaits++; } else { act.type = A.REST; act.gx = c.x; act.gy = c.y; } } // box occupied: wait nearby
       else if (ch.type === A.SLEEP || ch.type === A.REST) { act.gx = c.x; act.gy = c.y; } // sleep on floor where you are
       else { act.type = A.REST; act.gx = c.x; act.gy = c.y; }
     } else if (ch.type === A.WAIT) { const bowls = this.map.stations.filter(x => x.type === T.BOWL); const b = bowls[Math.floor(r() * bowls.length)]; if (b) { act.gx = b.cx + 5 + r() * 6; act.gy = b.cy + (r() - 0.5) * 10; act.waitBowl = b.id; act.antic = true; act.t0 = this.t; if (!(this.anticipation() > 0)) { const TU = this.cfg.tune; act.until = this.tick + Math.round(TU.seekCheckS / this.cfg.dt); c.noSeekT = this.t + TU.seekRefractS * (this.t - (this.lastFeed ?? -Infinity) > TU.missedMealH * 3600 ? 0.1 : 1); /* a missed meal makes it check far more often */ } /* unreinforced bowl-checking extinguishes: a short check, then a pause */ } else { act.type = A.REST; act.gx = c.x; act.gy = c.y; } }
@@ -1173,6 +1287,16 @@ class Sim {
     // cats do to each other, and the feeding model already has its own path for it.)
     const ca = c.act, cres = ca && (ca.type === A.EAT || ca.type === A.DRINK || ca.type === A.LITTER);
     if (cres && (!ca.arrived || ca.type !== A.EAT)) return;
+    // van den Bos 1998 (J. Ethol. 16:1-13): of 83 allogrooming interactions, 29 (34.9%)
+    // included agonistic behaviour (offensive or defensive) and 10 (12%) ended with the
+    // flight of an animal. Table 1 lists fleeing under defensive behaviour, so those 10
+    // flights are among the 29 agonistic interactions. A soured bout is the model's
+    // agonistic-element interaction, so a soured withdrawal is a FLEE with probability
+    // 10/29 and an EXPLORE walk-away otherwise. This is the paper's own proportion, not a
+    // tuning knob. Always fleeing here put the partner in A.FLEE before a post-groom
+    // FIGHT could become reciprocal, which is why resolvedFightsPerCatDay went to 0.
+    const soured = (c.act && c.act.type === A.ALLOGROOM && c.act.soured) || (o.act && o.act.type === A.ALLOGROOM && o.act.soured);
+    if (soured && this.rng() < 10 / 29) { this.startAction(c, { type: A.FLEE, target: o.id }); return; }
     const away = Math.atan2(c.y - o.y, c.x - o.x) || 0, r = this.m2t(this.cfg.tune.withdrawM);
     c.act = { type: A.EXPLORE, target: -1, start: this.tick, until: this.tick + Math.round(20 / this.cfg.dt), station: -1,
       gx: clamp(c.x + Math.cos(away) * r, 3, this.map.W - 4), gy: clamp(c.y + Math.sin(away) * r, 3, this.map.H - 4), arrived: false, recip: false };
@@ -1187,9 +1311,17 @@ class Sim {
   // ----- interactions & consumption -----
   resolve(c) {
     const a = c.act, s = c.s, h = this.cfg.dt / 3600, contact = this.m2t(this.cfg.contactM), r = this.rng, k = this.cfg.dt / 2, pk = p => 1 - Math.pow(1 - Math.min(1, p), k);
-    if (a.type === A.EAT && a.arrived) { const b = this.map.stations[a.station]; if (b.food > 0.005) { const e = Math.min(0.006 * k, b.food, s.hunger); b.food -= e; s.hunger = clamp(s.hunger - e); this.stats.eatTicks[c.id] = (this.stats.eatTicks[c.id] || 0) + 1; if (s.hunger < 0.04) a.until = this.tick; } else a.until = this.tick; }
+    // Giving way at the bowl. A cat above this one has picked this bowl out and walked over; the place
+    // is conceded when it arrives, which is how the despot of a 14-cat house took feeding places --
+    // on approach, one to several times a day, with no overt aggression ever seen during feeding
+    // (Bernstein & Strack 1996). Priority goes with agonistic rank (Knowles et al. 2004) and is not
+    // invoked by a cat that is not particularly hungry (Crowell-Davis, Curtis & Knowles 2004), the
+    // same hunger > 0.15 cut as the claim. The cat keeps its place in the queue for the bowl.
+    if (a.type === A.EAT && a.arrived) { const b = this.map.stations[a.station];
+      if (this.cats.some(o => o !== c && o.act && o.act.type === A.EAT && o.act.station === a.station && !o.act.arrived && o.tr.D > c.tr.D + 0.1 && o.s.hunger > 0.15 && this.dist(c, o) < this.m2t(1.5))) {
+        this.startAction(c, { type: A.WAIT }); c.act.waitBowl = b.id; c.act.antic = false; c.act.gx = b.cx + 5 + r() * 6; c.act.gy = b.cy + (r() - 0.5) * 10; this.stats.supplants = (this.stats.supplants || 0) + 1; return; } if (b.food > 0.005) { const e = Math.min(0.006 * k, b.food, s.hunger); b.food -= e; s.hunger = clamp(s.hunger - e); this.stats.eatTicks[c.id] = (this.stats.eatTicks[c.id] || 0) + 1; if (s.hunger < 0.04) a.until = this.tick; } else a.until = this.tick; }
     if (a.type === A.DRINK && a.arrived) { s.thirst = clamp(s.thirst - (0.06) * k); if (s.thirst < 0.03) a.until = this.tick; }
-    if (a.type === A.LITTER && a.arrived) { s.bladder = clamp(s.bladder - (0.05) * k); if (s.bladder < 0.02) { a.until = this.tick; this.stats.litterUses++; this.stats.litterBy[c.id] = (this.stats.litterBy[c.id] || 0) + 1; } }
+    if (a.type === A.LITTER && a.arrived) { s.bladder = clamp(s.bladder - (0.05) * k); if (s.bladder < 0.02) { a.until = this.tick; this.stats.litterUses++; this.stats.litterBy[c.id] = (this.stats.litterBy[c.id] || 0) + 1; this.map.stations[a.station].soil = clamp(this.map.stations[a.station].soil + this.cfg.tune.soilPerUse); } } // the deposit stays until staff scoop
     if (a.type === A.ZOOM) {
       c.lastZoomT = this.t;
       s.play = clamp(s.play - 0.02 * k); s.sleep = clamp(s.sleep + 0.003 * k); s.hunger = clamp(s.hunger + 0.004 * k);
@@ -1206,7 +1338,7 @@ class Sim {
     if (a.type === A.GROOM) { s.stress *= Math.pow(1 - 0.0006, k); }
     if (a.type === A.HIDE && a.arrived) s.stress *= Math.pow(1 - 0.0012, k);
     if (a.type === A.PERCH && a.arrived) s.stress *= Math.pow(1 - 0.0006, k);
-    if (a.type === A.WAIT) { const b = this.map.stations[a.waitBowl]; if (b) { if (a.antic ? ((this.lastFeed || -1) >= a.t0 || b.food > 0.02) : (this.stationOcc(b) < b.cap && (b.type !== T.BOWL || b.food > 0.02))) { c.act = null; return; } } }
+    if (a.type === A.WAIT) { const b = this.map.stations[a.waitBowl]; if (b) { if (a.antic ? ((this.lastFeed || -1) >= a.t0 || b.food > 0.02) : (this.stationOcc(b) < b.cap && (b.type !== T.BOWL ? true : b.food > 0.02 && this.bowlTurn(c, b)))) { c.act = null; return; } } }
     // Cats that lie down together are affiliating: allo-resting is one of the standard measures of a
     // preferred association. Without it a pair that has settled side by side gains nothing from the hours
     // it spends in contact, and with affinity no longer coming free from every sniff that is most of the
@@ -1218,14 +1350,25 @@ class Sim {
     }
     if (a.target < 0) return;
     const o = this.catById(a.target); if (!o) { c.act = null; return; }
-    const d = this.dist(c, o), m = c.mem[o.id], om = o.mem[c.id] || (o.mem[c.id] = { aff: 0, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 });
+    const dNow = this.dist(c, o), m = c.mem[o.id], om = o.mem[c.id] || (o.mem[c.id] = { aff: 0, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 });
+    // moveCat runs before resolve, so a partner who fled this tick would already be out of
+    // range for the hiss/chase/fight affinity update even when the bout started next to them.
+    // That became common after soured withdrawals could end in FLEE (van den Bos 1998, 10/29):
+    // SOC02.standard saw 11 hiss/chase/fight bouts of at least 4 s with dAffRev = 0, most of
+    // them aimed at a fleeing cat, versus 3 such bouts on main. The same update still runs
+    // only in resolve, and only when the pair was in range; pre-move positions are snapped
+    // at the start of the step (c.px). Flee-break keeps present distance, because that is
+    // about how far the cat has already run.
+    const dPre = (c.px != null && o.px != null) ? Math.hypot(c.px - o.px, c.py - o.py) : dNow;
+    const dClose = Math.min(dNow, dPre);
+    const d = dNow;
     // Bonds are built only by contact the other cat takes up (see accepts()). Before that rule a sniff
     // credited affinity whatever the other cat did, which was most of the colony's affinity; with the
     // bug gone the gain per accepted tick carries the whole job, so it is a setting and is calibrated.
     const ka = k * this.cfg.tune.affAccept;
     const oa = o.act || {}; const recip = oa.target === c.id && oa.type === a.type;
     const notify = (type) => { if (!o.incoming.find(i => i.from === c.id && i.type === type)) o.incoming.push({ from: c.id, type }); };
-    const inContact = d < contact * 1.3;
+    const inContact = dClose < contact * 1.3;
     if (a.type === A.FLEE) { if (d > this.m2t(this.cfg.tune.fleeBreakM)) a.until = this.tick; m.fear = clamp(m.fear + (0.004) * k); return; }
     // Walking away from a cat: the asker is told (so its bid counts as refused) and neither warms to the
     // other for it. The walker holds off asking this cat for a while itself.
@@ -1233,7 +1376,7 @@ class Sim {
       m.last = Math.max(m.last, this.t + 300);
       if (c.nearMate && c.nearMate.id === o.id) { c.nearMate = null; if (o.nearMate && o.nearMate.id === c.id) o.nearMate = null; }
       return; }
-    if (a.type === A.HISS && d < this.m2t(2.5)) { notify(A.HISS); s.irritation = clamp(s.irritation - (0.04) * k); o.s.stress = clamp(o.s.stress + (0.042 * (0.4 + o.tr.N)) * k); om.fear = clamp(om.fear + (0.03 * (1 - o.tr.D)) * k); om.aff = clamp(om.aff - 0.016 * k, -1, 1); m.aff = clamp(m.aff - 0.005 * k, -1, 1);
+    if (a.type === A.HISS && dClose < this.m2t(2.5)) { notify(A.HISS); s.irritation = clamp(s.irritation - (0.04) * k); o.s.stress = clamp(o.s.stress + (0.042 * (0.4 + o.tr.N)) * k); om.fear = clamp(om.fear + (0.03 * (1 - o.tr.D)) * k); om.aff = clamp(om.aff - 0.016 * k, -1, 1); m.aff = clamp(m.aff - 0.005 * k, -1, 1);
       if (!(o.act && (o.act.type === A.FLEE || o.act.type === A.FIGHT))) {
         const bidding = o.act && SOCIAL_FRIENDLY.has(o.act.type) && o.act.target === c.id;
         const press = bidding ? pk(this.cfg.tune.escalateP * (0.2 + o.tr.D + o.tr.I) * (om.aff < 0 ? 1.8 : 1 - Math.max(0, om.aff))) : 0;
@@ -1245,7 +1388,7 @@ class Sim {
     if (a.type === A.STALK) { if (d < this.m2t(1.2)) { if (r() < 0.15 + 0.3 * (1 - o.tr.D)) notify(A.STALK);
         om.aff = clamp(om.aff - 0.006 * k, -1, 1); om.fear = clamp(om.fear + (0.004 * (1 - o.tr.D)) * k); m.aff = clamp(m.aff - 0.002 * k, -1, 1); }
       s.play = clamp(s.play - (0.003) * k); return; }
-    if (a.type === A.CHASE) { if (d < this.m2t(2.0)) { notify(A.CHASE); o.s.stress = clamp(o.s.stress + (0.034 * (0.5 + o.tr.N)) * k); om.fear = clamp(om.fear + (0.018) * k); om.aff = clamp(om.aff - 0.016 * k, -1, 1); m.aff = clamp(m.aff - 0.003 * k, -1, 1); s.irritation = clamp(s.irritation - (0.02) * k); if (o.act && o.act.type === A.EAT && o.tr.D < c.tr.D) { const wasArrived = o.act.arrived; this.startAction(o, { type: A.FLEE, target: c.id }); if (wasArrived && c.s.hunger > 0.15) { this.stats.supplants = (this.stats.supplants || 0) + 1; this.startAction(c, { type: A.EAT }); return; } } /* displaced from bowl: winner takes it */ else if (o.act && o.act.type !== A.FLEE && o.act.type !== A.FIGHT && r() < pk(0.6)) o.act = null; } return; }
+    if (a.type === A.CHASE) { if (dClose < this.m2t(2.0)) { notify(A.CHASE); o.s.stress = clamp(o.s.stress + (0.034 * (0.5 + o.tr.N)) * k); om.fear = clamp(om.fear + (0.018) * k); om.aff = clamp(om.aff - 0.016 * k, -1, 1); m.aff = clamp(m.aff - 0.003 * k, -1, 1); s.irritation = clamp(s.irritation - (0.02) * k); if (o.act && o.act.type === A.EAT && o.tr.D < c.tr.D) { const wasArrived = o.act.arrived; this.startAction(o, { type: A.FLEE, target: c.id }); if (wasArrived && c.s.hunger > 0.15) { this.stats.supplants = (this.stats.supplants || 0) + 1; this.startAction(c, { type: A.EAT }); return; } } /* displaced from bowl: winner takes it */ else if (o.act && o.act.type !== A.FLEE && o.act.type !== A.FIGHT && r() < pk(0.6)) o.act = null; } return; }
     if (!inContact) return;
     if (a.type === A.SNIFF) { notify(A.SNIFF); const ok = this.accepts(c, o, recip);
       if (ok) { m.aff = clamp(m.aff + 0.004 * ka * (1 - Math.abs(m.aff)), -1, 1); om.aff = clamp(om.aff + 0.004 * ka * (1 - Math.abs(om.aff)), -1, 1); }
@@ -1330,6 +1473,15 @@ class Sim {
       // a contact bout (groom, play, sniff) is over once the partner has walked off: the cat does not trail after it
       if (a && !redo && a.target >= 0 && (a.type === A.ALLOGROOM || a.type === A.PLAY || a.type === A.SNIFF)) { if (a.phase === 'act') a.contacted = 1; else if (a.contacted && a.phase === 'approach') redo = true; else if (a.recip && !a.contacted) { const o = this.catById(a.target); if (o && !(o.act && o.act.target === c.id)) redo = true; } } /* an answer to a bid that has been withdrawn is dropped */
       if (a && a.type === A.SLEEP && !redo && (c.s.sleep < 0.05 || c.s.stress > 0.5 || c.s.hunger > 0.85)) redo = true;
+      // A fresh meal pulls a hungry cat out of a long sleep, rest, perch, hide, or leftover
+      // flight. The sleep hunger redo above only fires at 0.85, and feed interruptAll is
+      // only probability 0.6 at hunger > 0.2, so a motivated cat (the same hunger cut the
+      // feed interrupt already uses) could otherwise sleep or hide through the first 30 min
+      // of a meal. That is not a dominant declining priority at the bowl (Knowles 2004);
+      // it is the cat never arriving to invoke it.
+      const freshMeal = this.lastFeed !== undefined && this.t - this.lastFeed < 1800;
+      if (a && !redo && freshMeal && c.s.hunger > 0.2 &&
+          (a.type === A.SLEEP || a.type === A.HIDE || a.type === A.FLEE || a.type === A.REST || a.type === A.PERCH)) redo = true;
       if (a && a.target >= 0 && !this.catById(a.target)) redo = true;
       if (redo) this.decide(c);
     }
