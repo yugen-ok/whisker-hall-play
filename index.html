@@ -264,7 +264,14 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .goals.m-big .fullstats{width:auto;height:var(--sz-target);color:var(--accent);margin-left:auto}
 .goals.big .ctl{flex-wrap:wrap}
 .goals.m-big{display:grid;grid-template-columns:auto 1fr;grid-template-rows:var(--sz-target) 1fr;gap:var(--sp-sm)}
-.goals.m-big .plot{grid-column:1 / -1}
+.goals.m-big .plot{grid-column:1 / 3}
+/* The top-cats column beside the enlarged plot: four blocks, a heading and a line of three cat names each. */
+.goals.m-big .ctl{grid-column:2 / -1}
+.goals.m-big .tops{grid-column:3;grid-row:2;display:flex;flex-direction:column;gap:var(--sp-sm);min-width:0}
+.goals .tops h3{margin:0;font-size:var(--fs-ui);line-height:var(--lh-ui);font-weight:var(--fw-bold)}
+.goals .tops .trow{display:flex;align-items:center;height:var(--sz-target);white-space:pre;color:var(--muted)}
+.goals .tops .tcat{border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;min-height:var(--sz-target);min-width:var(--sz-target)}
+.goals .tops .tcat:hover{text-decoration:underline}
 /* An editor's two parts stack; on a wide editor (phone landscape's view) they sit side by side. */
 .editor .epart{display:flex;flex-direction:column;gap:4px;min-width:0}
 .editor.two{flex-direction:row;gap:var(--sp-md)}
@@ -283,8 +290,6 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .editor .slabs .llitter::before{background:var(--staffLitter)}
 .editor .slabs .lfree::before{background:var(--track);box-shadow:inset 0 0 0 1px var(--lineStrong)}
 .editor .visallow{display:flex;flex-direction:column}
-.editor .staff > .llitter.solo{display:flex;align-items:center;gap:4px}
-.editor .staff > .llitter.solo::before{content:"";width:10px;height:10px;border-radius:2px;flex:none;background:var(--staffLitter)}
 .editor .vshort{color:var(--alert);font-weight:var(--fw-bold)}
 .editor .snote{margin:0;color:var(--ink)}
 /* The editor's header row: its icon, its name, its close button. */
@@ -2618,7 +2623,7 @@ return { Sim };
 'use strict';
 
 return {
- "generated": "2026-11-16T07:44:38.779Z",
+ "generated": "2026-11-16T13:07:26.778Z",
  "engine": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
  "fontStack": "\"Segoe UI\", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif",
  "size": {
@@ -2734,10 +2739,10 @@ return {
    "w": 76
   },
   "guide": {
-   "text": "Guide",
+   "text": "How to play",
    "px": 14,
-   "chars": 5,
-   "w": 39
+   "chars": 11,
+   "w": 80
   },
   "btnControls": {
    "text": "Controls",
@@ -2954,6 +2959,18 @@ return {
    "px": 14,
    "chars": 4,
    "w": 36
+  },
+  "topHead": {
+   "text": "Most in fights",
+   "px": 14,
+   "chars": 14,
+   "w": 92
+  },
+  "topLine": {
+   "text": "Nachshon 100%, Biscuit 100%, Pumpkin 100%",
+   "px": 14,
+   "chars": 41,
+   "w": 304
   },
   "perWord": {
    "text": "Per",
@@ -3380,7 +3397,10 @@ const feedHeight = w => (w >= 4 * CHART_LEG_W + 2 * CHART_SEL_W + TARGET + 4 * G
 // The enlarged chart on desktop: a panel over the foot of the room, inside the room's view, the view's
 // width less its frame. Its header row holds the legend, the selects, "Open full stats" and the close
 // button; under it a plot of CHART_BIG_PLOT_H and its time ticks. The room does not resize.
-const CHART_BIG_PLOT_H = 240;
+const CHART_BIG_PLOT_H = 270;   // 240 before the top-cats column; its four blocks of 44px name targets set it now
+// Beside the enlarged plot (desktop), a column with the three top cats for each goal over the span.
+const CHART_TOP_W = px(Math.max(TX('topHead'), TX('topLine')) + 2 * GAP);
+const CHART_TOP_BLOCK_H = LINE + TARGET;   // a heading, and one row of three cat names, each a 44px target
 const CHART_BIG_H = TARGET + GAP + CHART_BIG_PLOT_H + TICK_H + 2 * PAD;
 function chartBigIn(view, frame) { const h = CHART_BIG_H; return { x: view.x + frame, y: view.y + view.h - frame - h, w: view.w - 2 * frame, h }; }
 
@@ -3590,7 +3610,7 @@ function framedRoom(maxW, maxH, frame) {
 // carries the cat readout, an open schedule editor and the event log; the room is centred in a frame
 // and is the dominant region; the shelter goals strip runs under it in main's footprint.
 //   The bar: the clock, Play/Pause, speed; the four plan chips as one group; then Restart (an icon),
-//   Show stats and Guide as links in the corner.
+//   Show stats and How to play as links in the corner.
 function desktop(W, H, st) {
   const F = FRAME.desktop;
   // ---- the top bar. Fixed cells at their minimums; spare width goes first to Play/Pause's word, then
@@ -3643,7 +3663,7 @@ function desktop(W, H, st) {
   out.push(R(st.editor.length ? 'editor-' + st.editor[0] : 'readout', 0, BAR_H, leftW, panelH));
   out.push(R('log', 0, BAR_H + panelH, leftW, H - BAR_H - panelH));
   return { rects: out, form: 'desktop', feedMode: 'values', chart: chartLayout(bandW - 2 * F, feedHeight(bandW - 2 * F)),
-    chartBig: chartBigIn(out.find(r => r.id === 'view'), F), frame: F, feedPad: F, cardChips: true,
+    chartBig: chartBigIn(out.find(r => r.id === 'view'), F), chartTops: true, frame: F, feedPad: F, cardChips: true,
     chipLong, pauseLabel, restartLabel: restartWord, toggleLong,
     readoutShows: st.selected && !st.editor.length ? fit.shown : null,
     readoutPlacement: st.selected && st.editor.length ? 'displaced by the open editor, which takes the same panel'
@@ -3831,7 +3851,7 @@ return { TX, px, FS, LINE, TARGET, GAP, PAD, BAR_H, CARD_H, ASPECT, FILL_MIN, BA
   GUIDE_W, MARKER_W, MARKERS, CARDS, PLAN_CARDS, CONTROL_CARDS, EDITABLE, CARD_CHIP_W, CARD_CHIP_LONG_W, TRI_W, TIMELINE_BIG_H, EDITOR_GAP, STAFF_BAR_H,
   PAUSE_W, PAUSE_ICON_W, RESTART_W, LOG_HEADER, LOG_PAD, LOG_MSGS,
   LOG_MIN_MSGS, CANVAS_MIN_W, FRAME, LEFT_W, canvasIn, framedRoom, NEED_LABELS,
-  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, chartBigIn, CHART_LEG_W, CHART_SEL_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
+  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, CHART_LEG_W, CHART_SEL_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
   desktop, phonePortrait, phoneLandscape, contentBox, fillOf, FORMS, VIEWS, VIEWPORTS, formFor, solve, METRICS };
 });
 
@@ -5170,6 +5190,7 @@ function drawDoorway(g, x, y, w, h, open, lw, swing = true) {
 // live in the selected-cat readout, and the room carries the icon only. Declared on a 24 x 24 grid as
 // strokes and fills so they scale with the canvas and never pull in an emoji font.
 //   l: polyline   p: filled polygon   c: circle [cx, cy, r]   a: arc [cx, cy, r, from, to]
+//   f: filled   k: [cx, cy, r] an arc cut into that filled circle, in the badge colour
 const ICON = {
   sleep:      [{ l: [[6, 7], [13, 7], [6, 13], [13, 13]] }, { l: [[15, 14], [20, 14], [15, 19], [20, 19]] }],
   rest:       [{ a: [12, 14, 6, Math.PI, 0] }, { l: [[6, 14], [18, 14]] }],
@@ -5182,7 +5203,8 @@ const ICON = {
   perch:      [{ l: [[5, 8], [19, 8], [19, 12], [5, 12], [5, 8]] }, { l: [[12, 12], [12, 19]] }, { l: [[8, 19], [16, 19]] }],
   window:     [{ c: [13, 12, 4], f: 1 }, { p: [[9, 12], [4, 9], [5, 15]] }, { p: [[17, 11], [21, 12], [17, 13]] }],
   scratch:    [{ l: [[7, 5], [10, 19]] }, { l: [[12, 5], [15, 19]] }, { l: [[17, 5], [20, 19]] }],
-  toy:        [{ c: [12, 12, 6] }, { a: [12, 12, 6, 2.4, 4.0] }, { l: [[7, 9], [17, 15]] }],
+  // a ball of yarn: a filled ball with its wound strands as three parallel curves cut into it, and a loose end
+  toy:        [{ c: [11, 11, 6.5], f: 1 }, { a: [2, 2, 10, 0, Math.PI / 2], k: [11, 11, 6.5] }, { a: [2, 2, 13.5, 0, Math.PI / 2], k: [11, 11, 6.5] }, { a: [2, 2, 17, 0, Math.PI / 2], k: [11, 11, 6.5] }, { l: [[15.5, 15.5], [18, 19.5], [21.5, 18.5]] }],
   seek_human: [{ c: [12, 7, 3] }, { l: [[12, 10], [12, 17]] }, { l: [[7, 13], [17, 13]] }, { l: [[9, 21], [12, 17], [15, 21]] }],
   zoom:       [{ l: [[4, 8], [14, 8]] }, { l: [[6, 12], [18, 12]] }, { l: [[4, 16], [14, 16]] }],
   avoid:      [{ l: [[17, 6], [7, 12], [17, 18]] }],
@@ -5212,7 +5234,9 @@ function drawActivityIcon(g, type, cx, cy, size, fill) {
     else if (o.a) g.arc(o.a[0], o.a[1], o.a[2], o.a[3], o.a[4]);
     else if (o.p) { o.p.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); }
     else o.l.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]));
-    if (o.f) g.fill(); else g.stroke();
+    // k: the line is cut into the filled shape it names [cx, cy, r], clipped to it, in the badge colour
+    if (o.k) { const p = new Path2D(); p.arc(o.a[0], o.a[1], o.a[2], o.a[3], o.a[4]); g.save(); g.beginPath(); g.arc(o.k[0], o.k[1], o.k[2], 0, Math.PI * 2); g.clip(); g.strokeStyle = fill; g.lineWidth = 1.6; g.stroke(p); g.restore(); }
+    else if (o.f) g.fill(); else g.stroke();
   }
   g.restore();
 }
@@ -5287,6 +5311,29 @@ const CURSOR = { grab: handSVG(false), grabbing: handSVG(true) };
 // The caregiver's hand shooing on the room: the open hand of the cursor, drawn at size px and turned by angle (radians)
 // about the wrist, in the same two tokens. Purely visual: no random numbers, no sim state.
 const HAND_PATH = 'M8 20 v-9 a2 2 0 0 1 4 0 v-3 a2 2 0 0 1 4 0 v1 a2 2 0 0 1 4 0 v2 a2 2 0 0 1 4 0 v8 a7 7 0 0 1 -7 7 h-3 a6 6 0 0 1 -6 -6 z';
+// Where the petting hand is at time t (ms since the pet began), for a cat at (cx, cy) facing ang (radians,
+// nose direction) with body radius R, starting from the pointer (px, py):
+//   reaching  : the hand travels from the pointer to the cat's shoulders over REACH_MS;
+//   stroking  : slow strokes from the shoulders down the back to the base of the tail, STROKE_MS each, the
+//               hand pressed flat going back and lifted a little on the return;
+//   rejected  : the hand reaches, and stops a body length short where the cat was.
+// Returns { x, y, angle, lift } with angle along the back, so the fingers point toward the tail.
+const REACH_MS = 450, STROKE_MS = 1600;
+function petPose(t, phase, cx, cy, ang, R, px, py) {
+  const ux = Math.cos(ang), uy = Math.sin(ang), along = a => [cx + ux * a * R, cy + uy * a * R];
+  const ease = k => k < 0 ? 0 : k > 1 ? 1 : k * k * (3 - 2 * k);
+  const [sx, sy] = along(0.45);                                     // the shoulders
+  const back = ang + Math.PI / 2 + Math.PI;                         // the hand's axis along the back, toward the tail
+  if (phase === 'rejected') {
+    const k = ease(t / REACH_MS) * 0.7;                             // reaches 70% of the way, then stops
+    return { x: px + (sx - px) * k, y: py + (sy - py) * k, angle: back, lift: 0 };
+  }
+  if (phase === 'reaching' || t < REACH_MS) { const k = ease(t / REACH_MS); return { x: px + (sx - px) * k, y: py + (sy - py) * k, angle: back, lift: 0 }; }
+  const u = ((t - REACH_MS) % STROKE_MS) / STROKE_MS, down = u < 0.7;  // 70% of a stroke is the slow pass down the back
+  const a = down ? 0.45 - 1.25 * ease(u / 0.7) : -0.8 + 1.25 * ease((u - 0.7) / 0.3);
+  const [x, y] = along(a);
+  return { x, y, angle: back, lift: down ? 0 : Math.sin(Math.PI * (u - 0.7) / 0.3) };
+}
 function drawHand(g, x, y, size, angle) {
   if (typeof Path2D === 'undefined') return;
   const k = size / 32; g.save(); g.translate(x, y); g.rotate(angle); g.scale(k, k); g.translate(-16, -27);
@@ -5295,7 +5342,7 @@ function drawHand(g, x, y, size, angle) {
 }
 
 return { OBJECT_NAME, MOVABLE, SPRITE, drawObject, drawBench, drawToy, drawDoorway, ICON, drawActivityIcon, drawTooltip,
-  MARKER, drawMarker, CURSOR, drawHand, rr, ell };
+  MARKER, drawMarker, CURSOR, drawHand, petPose, rr, ell };
 });
 
 /* Whisker Hall simulation engine. Assembles the src/ modules into one API, for Node (require) and the browser (window.CatSim).
@@ -5339,13 +5386,16 @@ class PlaySim extends Sim {
   // writes out: there is no second place where these numbers are computed.
   sample() {
     const cs = this.cats; if (!cs.length) return;
+    // Friendly approaches each cat has started so far, from the sim's per-cat tally (initiated is "id:type").
+    const frBy = {}; for (const [k, v] of Object.entries(this.stats.initiated)) if (FRIENDLY_STARTS.has(k.slice(k.indexOf(':') + 1))) { const id = k.slice(0, k.indexOf(':')); frBy[id] = (frBy[id] || 0) + v; }
     const per = {}; let st = 0, hu = 0, th = 0, bl = 0, ir = 0, sl = 0, so = 0, pl = 0, hid = 0, qu = 0, fr = 0, ho = 0, nNew = 0, hidNew = 0;
     // A new cat is one in the fast phase of settling in (cfg.habit.fastDays), when it hides the most.
     const newFor = ((this.cfg.habit && this.cfg.habit.fastDays) || 3) * 86400;
     for (const c of cs) {
       const ty = c.act ? c.act.type : A.REST, kind = CAT[ty] || 'solo';
       per[c.id] = { name: c.name, stress: c.s.stress, hunger: c.s.hunger, thirst: c.s.thirst, bladder: c.s.bladder,
-        irritation: c.s.irritation, sleepiness: c.s.sleep, social: c.s.social, play: c.s.play };
+        irritation: c.s.irritation, sleepiness: c.s.sleep, social: c.s.social, play: c.s.play,
+        hid: ty === A.HIDE ? 1 : 0, fr: frBy[c.id] || 0 };
       st += c.s.stress; hu += c.s.hunger; th += c.s.thirst; bl += c.s.bladder;
       ir += c.s.irritation; sl += c.s.sleep; so += c.s.social; pl += c.s.play;
       if (ty === A.HIDE) hid++; if (ty === A.WAIT) qu++; if (kind === 'friend') fr++; if (kind === 'host') ho++;
@@ -5494,7 +5544,7 @@ function icon(name) {
 // The kinds of control the top bar carries, so each reads as what it is before it is read:
 //   primary    a filled face with an icon and a label: Pause (the one solid accent face) and Controls
 //              on phone landscape. The budget cards are faces of their own, built below.
-//   nav        a link set in the bar's corner: Restart, Show stats / Show room and the Guide, which
+//   nav        a link set in the bar's corner: Restart, Show stats / Show room and How to play, which
 //              start over or change what the main area shows rather than act on the shelter
 // A face sits in a 'face' region, which insets it so neighbouring faces read as separate.
 function control(node, kind, iconName, label) {
@@ -5516,6 +5566,7 @@ const UI = {
   pointer: 'idle',       // idle | hover-object | dragging
   selected: null,        // the selected cat
   sweep: null,           // { start } : a shoo sweep running; the hand is drawn at the live pointer, the cursor hidden
+  pet: null,             // { cat, start, from: [px, py], rec } : petting the selected cat; the cursor is hidden while it runs
   marker: null,          // { kind, x, y, index, until } : a fight or an arrival, painted on the room
   guidePage: 0,
   chart: { span: 'today', grain: '1h', hidden: new Set(), big: false },   // the goals chart: its span, bucket size, hidden series
@@ -5667,8 +5718,8 @@ BUILD['speed'] = node => {
 };
 
 // One button labelled with where it goes, reserving the wider of its two labels so the bar cannot
-// reflow when the label flips. The Guide is never a third state of it.
-// It is marked pressed while statistics are up, the same way the Guide is while the guide is.
+// reflow when the label flips. How to play is never a third state of it.
+// It is marked pressed while statistics are up, the same way How to play is while its page is up.
 BUILD['toggle-view'] = node => {
   const b = control(node, 'nav', null, 'Show stats');
   b.onclick = () => setView(UI.view === 'room' ? 'stats' : 'room');
@@ -5682,7 +5733,7 @@ BUILD['toggle-view'] = node => {
   } };
 };
 BUILD['btn-guide'] = node => {
-  const b = control(node, 'nav', null, 'Guide'); b.title = 'How to play';
+  const b = control(node, 'nav', null, 'How to play'); b.title = 'How Whisker Hall works and how to play it';
   b.onclick = () => setView(UI.view === 'guide' ? 'room' : 'guide');
   return { tick: () => b.setAttribute('aria-pressed', String(UI.view === 'guide')) };
 };
@@ -5909,9 +5960,10 @@ function buildEditor(key, node) {
   const vis = el('div', 'visallow'), vHead = el('div', 'shead'), vBar = el('div', 'sbar'), vUsed = el('i', 'cats'), vLine = el('div', 'vline'), vNote = el('p', 'snote'), vShort = el('div', 'vshort');
   vBar.appendChild(vUsed); vis.append(vHead, vBar, vLine, vShort, vNote);
   vNote.textContent = 'You can split this time into as many or as few visits as you like.';
-  // The Visitors editor names only the litter part of the staff bar: the time for visits under it
+  // The Visitors editor names the litter part of the staff bar and, beside it on the same row, any staff
+  // minutes no plan uses (Erwin, Nov 16: at 0 rounds visits cap at 50 of 53); the time for visits under it
   // says the rest. Its plan is the "Used" line, so it carries no separate plan line.
-  if (key === 'visitors') { staff.append(sHead, sBar, lLit, vis); lLit.classList.add('solo'); } else staff.append(sHead, sBar, sLabs, sNote);
+  if (key === 'visitors') { const row = el('div', 'slabs'); row.append(lLit, sLeft); staff.append(sHead, sBar, row, vis); } else staff.append(sHead, sBar, sLabs, sNote);
   const legend = el('div', 'legend');
   for (const t of LEGEND[key]) legend.appendChild(el('div', null, t));
   // The small pointer over the strip marks the time now; it carries no label, so it is the tooltip.
@@ -6108,6 +6160,24 @@ function chartData(spanKey, grainKey) {
   }));
   return { t0, t1, g, edges, partial, series };
 }
+// The three cats at the top of each goal over the chart's span, from the per-cat records: mean stress and
+// the share of samples hidden (sample.cats), fights each cat was in on either side (stats.fightLog), and
+// friendly approaches started (the rise of sample.cats[id].fr across the span).
+const TOP_HEAD = { stress: 'Most stressed', conflict: 'Most in fights', friendly: 'Most friendly', hiding: 'Most hidden' };
+function topCats(spanKey) {
+  const d = chartData(spanKey, '1h'), xs = sim.samples.filter(s => s.t > d.t0 && s.t <= d.t1), out = {};
+  const acc = {}, name = {};
+  for (const s of xs) for (const [id, p] of Object.entries(s.cats)) {
+    const a = acc[id] || (acc[id] = { st: 0, hid: 0, n: 0, fr0: p.fr, fr1: p.fr }); a.st += p.stress; a.hid += p.hid; a.n++; a.fr1 = p.fr; name[id] = p.name; }
+  const fights = {}; for (const f of sim.stats.fightLog) if (f.t > d.t0 && f.t <= d.t1) for (const id of [f.a, f.b]) fights[id] = (fights[id] || 0) + 1;
+  const rank = (val, fmt) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, 3).map(x => ({ ...x, text: fmt(x.v) }));
+  out.stress = rank(id => acc[id].st / acc[id].n, v => U.toCSS(v).toFixed(1));
+  out.conflict = rank(id => fights[id] || 0, v => String(v));
+  out.friendly = rank(id => acc[id].fr1 - acc[id].fr0, v => String(v));
+  out.hiding = rank(id => acc[id].hid / acc[id].n, v => Math.round(v * 100) + '%');
+  return out;
+}
+const topLine = list => list.length ? list.map(x => x.name + ' ' + x.text).join(', ') : 'none yet';
 // The legend's value: a level is its reading now; a count is the last full bucket's, per bucket.
 const PER = { '10m': '/10 min', '1h': '/hour', '1d': '/day' };
 function legendValue(G, d, i) {
@@ -6135,6 +6205,16 @@ function buildChart(host, big) {
   const box = el('div', 'goals' + (big ? ' big' : '')); host.appendChild(box);
   const legend = el('div', 'legend'), plotBox = el('div', 'plot'), cv = document.createElement('canvas'), ctl = el('div', 'ctl');
   plotBox.appendChild(cv); box.append(legend, ctl, plotBox);
+  // The enlarged chart's top-cats column: four blocks, a heading and three cat names each; a name selects its cat.
+  const tops = big ? el('div', 'tops') : null, topRows = {};
+  if (tops) { for (const G of GOALS) { const blk = el('div', 'tblk'), row = el('div', 'trow'); blk.append(el('h3', null, TOP_HEAD[G.id]), row); blk.dataset.goal = G.id; tops.appendChild(blk); topRows[G.id] = row; }
+    box.appendChild(tops); }
+  const fillTops = list => { for (const G of GOALS) { const row = topRows[G.id], L = list[G.id], sig = JSON.stringify(L.map(x => [x.id, x.text]));
+    if (row.dataset.sig === sig) continue; row.dataset.sig = sig; row.textContent = '';
+    if (!L.length) { row.append(el('span', 'none', 'none yet')); continue; }
+    L.forEach((x, i) => { const b = el('button', 'tcat', x.name + ' ' + x.text); b.dataset.cat = x.id; b.title = 'Select ' + x.name;
+      b.onclick = () => { const c = sim.cats.find(k => k.id === x.id); if (c) { closeBigChart(); selectCat(c); } };
+      row.append(b); if (i < L.length - 1) row.append(document.createTextNode(', ')); }); } };
   let grow = null;
   if (!big) {
     grow = el('button', 'grow', '+'); grow.title = 'Enlarge chart'; grow.setAttribute('aria-label', 'Enlarge chart');
@@ -6152,10 +6232,15 @@ function buildChart(host, big) {
   const labelled = (word, s) => { const l = el('label', 'csel'); l.append(el('span', 'w', word), s); l.style.width = LAY.CHART_SEL_W + 'px'; return l; };
   ctl.prepend(labelled('Show', spanSel), labelled('Per', grainSel));
   const fixGrain = () => { const spanS = (UI.chart.span === 'all' ? Math.max(3600, sim.t - sim.samples[0].t) : UI.chart.span === 'today' ? 86400 : SPANS.find(s => s[0] === UI.chart.span)[2]);
-    // Written only when it changes: touching an open select's options or value every frame shuts its menu
-    // in Chrome, which is why choosing a span or a bucket did nothing.
-    [...grainSel.options].forEach((o, i) => { const off = !grainOk(spanS, GRAINS[i]); if (o.disabled !== off) o.disabled = off; });
-    if (grainSel.options[grainSel.selectedIndex] && grainSel.options[grainSel.selectedIndex].disabled) UI.chart.grain = GRAINS[[...grainSel.options].findIndex(o => !o.disabled)][0]; };
+    // Only the bucket sizes that suit the span are listed (none shown disabled). The list is rebuilt only when
+    // that set changes: touching an open select's options or value every frame shuts its menu in Chrome.
+    const ok = GRAINS.filter(g => grainOk(spanS, g)), sig = ok.map(g => g[0]).join();
+    if (grainSel.dataset.sig !== sig) {
+      grainSel.dataset.sig = sig; grainSel.textContent = '';
+      for (const [k, t] of ok) { const o = document.createElement('option'); o.value = k; o.textContent = t; grainSel.appendChild(o); }
+    }
+    if (!ok.some(g => g[0] === UI.chart.grain)) UI.chart.grain = ok.some(g => g[0] === '1h') ? '1h' : ok[0][0];
+    if (grainSel.value !== UI.chart.grain) grainSel.value = UI.chart.grain; };
   spanSel.onchange = () => { UI.chart.span = spanSel.value; fixGrain(); renderAll(); };
   grainSel.onchange = () => { UI.chart.grain = grainSel.value; renderAll(); };
   const entries = GOALS.map(G => {
@@ -6225,6 +6310,8 @@ function buildChart(host, big) {
       box.style.padding = big ? `${pad}px` : `0 ${pad}px ${pad}px`;
       box.className = 'goals m-' + c.mode + (big ? ' big' : '');   // m-row, m-stacked or m-big ("row" alone is the readout's class)
       legend.style.gridTemplateColumns = `repeat(${c.legendCols},${LAY.CHART_LEG_W}px)`;
+      // the enlarged chart on desktop: the top-cats column after the plot, at the width the solver reserved
+      if (big) box.style.gridTemplateColumns = FORM === 'desktop' && sol.chartTops ? `auto 1fr ${LAY.CHART_TOP_W}px` : '';
       // Stacked, the Enlarge button joins the selects' row (chartLayout); in a row it ends the strip.
       if (grow) (c.mode === 'stacked' ? ctl : box).appendChild(grow);
       requestAnimationFrame(draw);
@@ -6235,11 +6322,13 @@ function buildChart(host, big) {
       if (grainSel.value !== UI.chart.grain) grainSel.value = UI.chart.grain;
       const unitWord = GRAINS.find(x => x[0] === UI.chart.grain)[3];
       data = chartData(UI.chart.span, UI.chart.grain);
+      const top = topCats(UI.chart.span);
+      if (tops) { tops.classList.toggle('hidden', !(FORM === 'desktop' && SOL.chartTops)); fillTops(top); }
       entries.forEach(({ G, b, v }, i) => {
         v.textContent = legendValue(G, data, i);
         const off = UI.chart.hidden.has(G.id);
         b.classList.toggle('off', off); b.setAttribute('aria-pressed', String(!off));
-        b.title = `${G.name}: ${v.textContent}${G.count ? ' (' + unitWord + ', the last full bucket)' : ' (now)'}. ${G.tip} Click to ${off ? 'show' : 'hide'} it on the chart.`;
+        b.title = `${G.name}: ${v.textContent}${G.count ? ' (' + unitWord + ', the last full bucket)' : ' (now)'}. ${TOP_HEAD[G.id]} over the span shown: ${topLine(top[G.id])}. ${G.tip} Click to ${off ? 'show' : 'hide'} it on the chart.`;
       });
       draw();
     },
@@ -6501,7 +6590,7 @@ const ROOM = (() => {
       if (!k && doorAt(mx, my)) { sim.setDoor('partition', !sim.doors.partition); renderAll(); return; }
       // Empty floor shoos: the caregiver's hand sweeps over the spot and the sim moves the cats near it.
       // One hand: the cursor is hidden for the sweep and the same hand is drawn at the live pointer.
-      if (!k && !pressOn && !objectAt(mx, my)) { sim.shoo(mx / S, my / S); UI.sweep = { start: performance.now() }; cv.style.cursor = 'none'; renderAll(); return; } if (k !== UI.selected || !k) selectCat(k); else selectCat(null); });
+      if (!k && !pressOn && !objectAt(mx, my)) { sim.shoo(mx / S, my / S); UI.sweep = { start: performance.now() }; cv.style.cursor = 'none'; renderAll(); return; } if (k && k === UI.selected) startPet(k, mx, my); else selectCat(k); });
     addEventListener('mousemove', e => { if (drag || downAt) onMove(e); });
     addEventListener('mouseup', onUp); addEventListener('touchend', onUp);
   }
@@ -6609,17 +6698,19 @@ const ROOM = (() => {
       ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
     const sorted = sim.cats.slice().sort((a, b) => P[a.id][1] - P[b.id][1]);
+    const icons = [];   // drawn after the name tags, so no tag or later cat ever covers one
     for (const c of sorted) {
       const [x, y] = P[c.id], inf = actInfo(sim, c), col = TK.activity[inf.cat];
       if (c === UI.selected) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, ringR + 3, 0, 7); ctx.stroke(); }
       // Every cat is drawn opaque, a hiding one included: its hiding is said by the activity icon over it.
       drawCat(ctx, c, x, y, now, inf);
       // the activity, as an icon over the cat. The words live in the readout, where they can be read.
-      const type = c.act ? c.act.type : A.REST;
-      SPR.drawActivityIcon(ctx, type, x + ringR * 0.75, y - ringR * 0.75, Math.max(14, R * 0.9), col);
+      // The selected cat's sits just outside its selection ring, so the ring never runs through it.
+      const type = c.act ? c.act.type : A.REST, size = Math.max(14, R * 0.9), off = c === UI.selected ? (ringR + 3 + size / 2) / Math.SQRT2 : ringR * 0.75;
+      icons.push([type, x + off, y - off, size, col]);
     }
-    // the shoo's hand is drawn as the sweep, not as a person
-    for (const h of sim.humans) if (h.mode !== 'shoo') drawPerson(ctx, h, h.x * S, h.y * S, Math.max(26, 16 * S));
+    // the shoo's and the pet's hands are drawn as the sweep and the stroke, not as people
+    for (const h of sim.humans) if (h.mode !== 'shoo' && h.mode !== 'pet') drawPerson(ctx, h, h.x * S, h.y * S, Math.max(26, 16 * S));
     // The room names sit over the cats on a light backing, so a cat walking past never hides one.
     ctx.font = `${TK.font.weight.bold} ${TK.font.size.ui}px ${TK.font.stack}`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -6641,11 +6732,15 @@ const ROOM = (() => {
       ctx.fillStyle = TK.room.tooltipInk; ctx.fillText(c.name, bx + w / 2, by + h / 2);
       nameTags.push({ x: bx, y: by, w, h });
     }
+    for (const [type, ix, iy, size, col] of icons) SPR.drawActivityIcon(ctx, type, ix, iy, size, col);
     if (drag && !drag.obj.mv) {
       const st = drag.obj, ok = sim.canPlaceStation(st, drag.x, drag.y);
       ctx.globalAlpha = 0.8; SPR.drawObject(ctx, st.type, drag.x * S, drag.y * S, st.w * S, st.h * S, lw); ctx.globalAlpha = 1;
       ctx.strokeStyle = ok ? TK.color.good : TK.color.alert; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
       ctx.strokeRect(drag.x * S, drag.y * S, st.w * S, st.h * S); ctx.setLineDash([]);
+    } else if (hoverCat && hoverCat === UI.selected && !UI.pet && typeof sim.pet === 'function') {
+      const [x, y] = P[hoverCat.id];
+      SPR.drawTooltip(ctx, 'Click to pet', x, y - ringR - 4, W, H);
     } else if (hoverDoor) {
       const d = doorBox();
       SPR.drawTooltip(ctx, sim.doors.partition ? 'Quiet-room door: open. Click to close' : 'Quiet-room door: shut. Click to open', d.x + d.w / 2, d.y, W, H);
@@ -6662,9 +6757,17 @@ const ROOM = (() => {
       SPR.drawTooltip(ctx, `Event ${UI.marker.index} in the event log`, UI.markerBox.x + UI.markerBox.w / 2, UI.markerBox.y, W, H);
     } else if (!hoverCat && mouse) {
       // A person under the pointer is named by role, the way a cat is named.
-      const h = sim.humans.find(q => q.mode !== 'shoo' && Math.hypot(q.x * S - mouse[0], q.y * S - mouse[1]) < Math.max(13, 8 * S));
+      const h = sim.humans.find(q => q.mode !== 'shoo' && q.mode !== 'pet' && Math.hypot(q.x * S - mouse[0], q.y * S - mouse[1]) < Math.max(13, 8 * S));
       if (h) SPR.drawTooltip(ctx, personOf(h).tag, h.x * S, h.y * S - Math.max(13, 8 * S), W, H);
     }
+    if (UI.pet) {
+      const p = UI.pet, c = p.cat, r = sim.petting;
+      if (!r || r.catId !== c.id || r.phase === 'done' || !sim.cats.includes(c)) { UI.pet = null; cv.style.cursor = SPR.CURSOR.grab; }
+      // A refusal is drawn where the cat was when the hand set off: the hand stops there as the cat slips away.
+      else { const [x, y] = r.phase === 'rejected' ? p.at : P[c.id], ang = r.phase === 'rejected' ? p.ang : Math.atan2(c.fy, c.fx);
+        const q = SPR.petPose(now - p.start, r.phase, x, y, ang, catR(), p.from[0], p.from[1]);
+        SPR.drawHand(ctx, q.x, q.y - q.lift * catR() * 0.35, Math.max(28, catR() * 2.4), q.angle); }
+    } else if (!UI.sweep && cv.style.cursor === 'none') cv.style.cursor = SPR.CURSOR.grab;   // a pet ended by Escape
     if (UI.sweep) { const k = (now - UI.sweep.start) / SWEEP_MS;
       if (k >= 1 || !mouse) { UI.sweep = null; cv.style.cursor = SPR.CURSOR.grab; }
       else SPR.drawHand(ctx, mouse[0], mouse[1], Math.max(28, catR() * 2.4), 0.6 * Math.sin(k * 2 * Math.PI)); }
@@ -6680,6 +6783,15 @@ const ROOM = (() => {
   // and asserts the geometry is identical in all of them.
   const at = e => { const r = cv.getBoundingClientRect(), p = e.touches && e.touches[0] ? e.touches[0] : e; return [p.clientX - r.left, p.clientY - r.top]; };
   function catAt(mx, my) { let b = null, bd = catR() * 1.8; for (const c of sim.cats) { const d = Math.hypot(c.x * S - mx, c.y * S - my); if (d < bd) { bd = d; b = c; } } return b; }
+  // Petting: the sim decides (sim.pet); the room draws the one hand at the pose for the phase the sim reports.
+  // The sim's live record is sim.petting ({ catId, phase, until }, null when idle); UI.pet only keeps what the
+  // drawing needs: when the hand set off, from where, and where the cat was then.
+  // Petting needs the sim's sim.pet; in a tree without it, a click on the selected cat does nothing.
+  function startPet(c, mx, my) {
+    if (typeof sim.pet !== 'function' || !sim.pet(c.id)) return;
+    UI.pet = { cat: c, start: performance.now(), from: [mx, my], at: [c.x * S, c.y * S], ang: Math.atan2(c.fy, c.fx) };
+    cv.style.cursor = 'none'; renderAll();
+  }
   // The quiet-room doorway, padded to a full pointer target around its 4-tile gap.
   function doorBox() {
     const g = sim.map.doorway, t = LAY.TARGET, cx = (g.x + g.w / 2) * S, cy = (g.y + g.h / 2) * S;
@@ -6718,7 +6830,7 @@ const ROOM = (() => {
     hoverObject = c || hoverDoor ? null : objectAt(mx, my);
     // The player's hand everywhere over the room; the pointing hand on the door, which a click operates.
     // During a shoo sweep the cursor stays hidden: the sweep is the hand.
-    if (UI.sweep) cv.style.cursor = 'none';
+    if (UI.sweep || UI.pet) cv.style.cursor = 'none';
     else if (hoverDoor) { cv.style.cursor = 'pointer'; UI.pointer = 'idle'; } else { setPointer(hoverObject ? 'hover-object' : 'idle'); cv.style.cursor = SPR.CURSOR.grab; }
   }
   function onUp() {
@@ -6927,55 +7039,41 @@ function watchForMarkers() {
 // Reference, on demand, reached from its own button. It replaces the room while it is open, and it
 // pages rather than scrolls: the event log is the only scrolling region in the interface.
 const GUIDE_SECTIONS = [
-  ['What this is', `<p>Whisker Hall is a <b>simulation of a two-room cat shelter</b>. It is more a simulation than a game:
-   there is nothing to win, only a shelter to make better. Around twelve cats live here, and cats arrive and are adopted. Each cat has its
-   own personality on the Feline Five axes (neurotic, extraverted, dominant, impulsive, agreeable), its own hunger,
-   thirst, bladder, sleepiness, stress, irritation, social need and play need, and its own opinion of every other cat.
-   Everything they do comes out of those states, tick by tick.</p>`],
-  ['Grounded in research', `<p>Activity rhythms, grooming and play rates, agonistic rates, feeding competition, newcomer
-   stress and its decay, space and resource guidance, and the effect of noise and visitors are each calibrated against
-   published colony and shelter studies (van den Bos 1998; Bernstein and Strack 1996; Kessler and Turner 1997, 1999;
-   Dantas-Divers 2011; Parker et al. 2019; McCune 1995; NRC 2006; AAFP and ISFM guidance). Where no figure exists, the
-   model says so and the value is labelled an assumption. REALISM.md and VALIDATION.md list every target and source.</p>`],
-  ['Your part: you are the caregiver', `<p>You are not a cat. You control only what a human caregiver controls, and each
-   thing has a fixed budget you cannot exceed.</p>
-   <ul><li><b>Litter cleaning.</b> You set how many times/day the litter boxes are scooped, and when.</li>
-   <li><b>Feeding.</b> The daily ration is fixed at a maintenance portion per cat. You decide how many meals it is
-   split into and at what times.</li>
-   <li><b>Vacuum.</b> A fixed number of minutes/week has to happen. You choose the sessions, their length and the hours
-   they fall in. The vacuum is loud and cats scatter from it.</li>
-   <li><b>Visitors.</b> Visits use the staff time the litter rounds leave. People-friendly cats come over; shy cats keep away.</li>
-   <li><b>Move furniture.</b> Free. Drag any bowl, litter box, bed, cat tree, hide box or scratching post to a new spot. The
-   number of each never changes.</li>
-   <li><b>Quiet-room door.</b> Free. Click the doorway in the wall between the rooms to shut or open it. Shut, no cat can cross
-   between the rooms; the food bowls are all in the main room.</li>
-   <li><b>Staff.</b> Your staff have a fixed amount of time each day: every litter round is time not spent with the cats.
-   Coming in at times the cats do not expect startles them.</li></ul>`],
-  ['Reading the room', `<p>A cat wears a ring in the colour of what it is doing, and an icon saying which activity. Click
-   a cat to see its name, what it is doing in words, all eight of its needs, its personality and how it feels about the
-   others. Hover any movable object to see what it is; the cursor turns into an open hand, and into a closed fist while
-   you are holding it. When a fight breaks out or a cat arrives, a numbered marker appears where it happened and the
-   matching numbered line appears in the event log.</p>`],
-  ['People in the shelter', `<p>Four kinds of people walk into the room, and the cats react to each of them as to any
-   person. <b>Visitors</b> sit, pet and play with the cats. Staff look and walk like visitors but carry what they
-   came for: the <b>feeder</b> a food scoop, to fill the bowls; the <b>cleaner</b> a litter scoop, to clean the litter boxes at the times on the <b>Litter cleaning</b> card;
-   the <b>vacuum operator</b> the vacuum. Hover a person to see who they are.</p>`],
-  ['Reading the numbers', `<p>The <b>Shelter goals</b> chart at the bottom is your score: four things to improve with your
-   controls, drawn over time. <b>Stress</b> is the Cat-Stress-Score (CSS) averaged over the cats, 1 relaxed to 7
-   terrified (lower is better). <b>Conflict</b> is fights and swats (lower is better). <b>Friendly contact</b> is how often
-   cats groom, play with or greet each other (higher is better). <b>Hiding</b> is the share of cats hiding (lower is
-   better). Each line has its own colour, dash and end shape, and its own scale. The legend shows each value now; click
-   an entry to hide or show its line, and hover the chart to read all four at one time. Choose how far back it goes and
-   how much time each point covers; counts are per point. Click the chart to open the statistics. <b>Show stats</b> opens the
-   full view: trends as small multiples, one panel and one axis per metric, the colony per cat, the distribution of
-   stress across the colony, the relationship matrix, and the colony table. The Legend there defines every metric and
-   names the one assumption in the Cat-Stress-Score.</p>`],
-  ['How to play it', `<p><b>Experiment.</b> Change one thing, run a few days and look at what moved. Three meals or two?
-   Visits in one long block or spread thin? The vacuum in one weekly blitz or ten minutes a day? Bowls bunched together
-   or spread out? Quiet room open or shut at night?</p>
-   <p><b>There is no right strategy.</b> The point is to make the cats' lives better: less stress, fewer
-   fights, more positive interactions. The Shelter goals show how you are doing.</p>
-   <p><kbd>Space</kbd> pauses. <kbd>-</kbd> and <kbd>+</kbd> change speed. <kbd>Esc</kbd> goes back to the room.</p>`],
+  ['The goal', `<p>You run a two room cat shelter with about twelve cats. Your aim is calm, friendly cats that seldom fight
+   and seldom hide. Each cat has its own personality, needs and feelings about the others, and everything it does
+   follows from them. The model is calibrated against published shelter and colony studies, listed in REALISM.md.</p>`],
+  ['The four goals and the chart', `<p><b>Stress</b> is the average Cat Stress Score, from 1 for relaxed to 7 for
+   terrified. Lower is better.</p>
+   <p><b>Conflict</b> counts fights and swats between cats. Lower is better.</p>
+   <p><b>Friendly</b> counts the times a cat starts grooming, playing with or greeting another cat. Higher is better.</p>
+   <p><b>Hiding</b> is the share of cats in a hiding place. Lower is better.</p>
+   <p>The chart under the room draws all four over time. <b>Show</b> picks how far back it reaches, and <b>Per</b> picks how
+   much time each point covers. Click a goal to hide or show its line, and hover it to see the three cats at its top.
+   The plus button enlarges the chart, with the top three cats for each goal beside it. Click a name to select that cat.</p>`],
+  ['Your plans and their costs', `<p><b>Feeding</b> splits the fixed daily ration into meals at the times you choose.
+   More meals mean less crowding at the bowls.</p>
+   <p><b>Litter</b> sets how often staff scoop the boxes. Clean boxes keep cats calm, and every round takes staff time
+   away from visits.</p>
+   <p><b>Visitors</b> spend the staff time the litter rounds leave with the cats. You decide how many visits and how
+   long each lasts. People friendly cats come over and shy cats keep away.</p>
+   <p><b>Vacuum</b> needs a fixed number of minutes each week. You choose the sessions and their hours. Cats scatter
+   from the noise.</p>
+   <p>Your staff have a fixed amount of time each day, shared between litter rounds and visits. The Litter and
+   Visitors editors show how it is split.</p>`],
+  ['Your hands in the room', `<p>Click a cat to see its needs, personality and friendships in the panel on the left.
+   Click the selected cat again to pet it. It may accept and calm down, or it may slip away.</p>
+   <p>Click empty floor to shoo the cats near that spot.</p>
+   <p>Drag a toy to play with the cats, or click it for a short jiggle.</p>
+   <p>Click the doorway between the rooms to open or close the quiet room door. With the door closed, cats stay in
+   the room they are in.</p>
+   <p>Drag a bowl, litter box, bed, cat tree, hide box or scratching post to move it.</p>`],
+  ['Time and the other buttons', `<p><b>Play</b> and <b>Pause</b> start and stop time, and the slider sets its speed.
+   <b>Restart</b> begins again with new cats. <b>Show stats</b> opens the full statistics on trends, each cat, stress
+   across the colony and the relationships between cats. A numbered marker in the room points to the matching line in
+   the event log.</p>
+   <p>The space bar pauses, the minus and plus keys change speed, and Esc goes back to the room.</p>`],
+  ['How to play it', `<p>Change one thing, run a few days and watch what moves. Try three meals against two, visits in
+   one block against several, or the quiet room open against closed at night. The goals show how the cats are doing.</p>`],
 ];
 const GUIDE = (() => {
   let host = null, pages = null, foot = null, at = null, prev = null, next = null, nPages = 1, rect = null;
@@ -7009,7 +7107,9 @@ const GUIDE = (() => {
       src.innerHTML = `<h3>${title}</h3>${html}`;
       for (const node of [...src.children]) { probe.appendChild(node); blocks.push(node); }
     }
-    const heights = blocks.map(d => d.offsetHeight);
+    // Each block's height includes its margins (counted in full, never collapsed), so many short paragraphs
+    // cannot add up past the page the way their bare heights would.
+    const heights = blocks.map(d => { const cs = getComputedStyle(d); return d.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom); });
     probe.remove();
     // Then deal them out, in order, into pages that fit.
     const out = [[]];
@@ -7644,7 +7744,7 @@ addEventListener('keydown', e => {
   if (k === ' ') { e.preventDefault(); togglePause(); }
   else if (k === '-' || k === '_') stepSpeed(-1);
   else if (k === '+' || k === '=') stepSpeed(1);
-  else if (k === 'escape') { if (UI.chart.big || UI.view === 'chart') closeBigChart(); else if (UI.editor.length) { UI.editor = []; applyLayout(); } else if (UI.stats.open !== 'none') { UI.stats.open = 'none'; applyLayout(); } else if (UI.view !== 'room') setView('room'); else if (UI.selected) selectCat(null); }
+  else if (k === 'escape') { if (UI.chart.big || UI.view === 'chart') closeBigChart(); else if (UI.editor.length) { UI.editor = []; applyLayout(); } else if (UI.stats.open !== 'none') { UI.stats.open = 'none'; applyLayout(); } else if (UI.view !== 'room') setView('room'); else if (UI.pet) { if (sim.endPet) sim.endPet(); UI.pet = null; } else if (UI.selected) selectCat(null); }
 });
 
 // ---------------------------------------------------------------- the run
