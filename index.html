@@ -96,6 +96,8 @@ body{background:var(--bg);color:var(--ink);
    region looks like once it has been put there. */
 #app{position:absolute;inset:0;overflow:hidden}
 .region{position:absolute;overflow:hidden;display:flex}
+/* Canvases draw left to right in every language (axes, the floor plan); right-to-left text on one is placed explicitly. */
+canvas{direction:ltr}
 .panel{position:absolute;inset:1px;background:var(--surface);border:1px solid var(--line);
  border-radius:var(--r-lg);box-shadow:var(--el-card);overflow:hidden;display:flex;flex-direction:column}
 .panel.flat{background:transparent;border:0;box-shadow:none}
@@ -1496,6 +1498,7 @@ const CARRY_ON = 0.6;
 // A cat busy with a need is not broken off by a moving toy: eating, drinking, the litter box, fleeing, fighting. Waiting
 // at an empty bowl is not one of them (Hall & Bradshaw 1998: hungry cats played more, not less).
 const TOY_BUSY = new Set([A.EAT, A.DRINK, A.LITTER, A.FLEE, A.FIGHT]);
+const CS = c => c ? { name: c.name, sex: c.sex } : null;   // a cat as a log line needs it: name and sex (for gender agreement)
 const TOY_RANK = { watch: 1, stalk: 2, chase: 3, pounce: 4 }, TOY_VERB = { watch: 'watches', stalk: 'stalks it', chase: 'chases it', pounce: 'pounces on it' };
 function turnAtBay(c, o) { c.s.stress = Math.min(1, c.s.stress + 0.1); c.incoming.push({ from: o.id, type: 'hiss' }); }
 
@@ -1534,8 +1537,9 @@ class Sim {
   m2t(m) { return m / this.cfg.tile; }
   // n numbers every entry for the life of the run, so a row keeps its number after the 400-row window moves past it.
   // A paced log line: `key` names the subject (a pair, a cat); the same kind and key are logged at most once per LOG_REPEAT_S.
-  logPaced(kind, key, msg, logKind) { const m = this.logSeen || (this.logSeen = {}), k = kind + ':' + key; if (this.t - (m[k] ?? -1e9) < LOG_REPEAT_S[kind]) return; m[k] = this.t; this.emit(msg, logKind || 'event'); }
-  emit(msg, kind) { this.logN = (this.logN || 0) + 1; this.log.push({ n: this.logN, t: this.t, clock: this.clock(), msg, kind: kind || 'info' }); if (this.log.length > 400) this.log.shift(); }
+  logPaced(kind, key, msg, logKind, ev) { const m = this.logSeen || (this.logSeen = {}), k = kind + ':' + key; if (this.t - (m[k] ?? -1e9) < LOG_REPEAT_S[kind]) return; m[k] = this.t; this.emit(msg, logKind || 'event', ev); }
+  // ev: the line as data for the UI to phrase in any language ({ k, c: [{ name, sex }], ...numbers }); msg stays the English line.
+  emit(msg, kind, ev) { this.logN = (this.logN || 0) + 1; this.log.push({ n: this.logN, t: this.t, clock: this.clock(), msg, kind: kind || 'info', ev: ev || null }); if (this.log.length > 400) this.log.shift(); }
   pointField(px, py) { return distField(this.map, { x: px | 0, y: py | 0, w: 1, h: 1 }); }
   randFloor(mainOnly) { for (let k = 0; k < 500; k++) { const x = 3 + this.rng() * ((mainOnly ? this.map.partitionX : this.map.W) - 6), y = 3 + this.rng() * (this.map.H - 6); if (walkable(this.map, x, y) && this.map.grid[(y | 0) * this.map.W + (x | 0)] === T.FLOOR && (k > 300 || this.map.clear[(y | 0) * this.map.W + (x | 0)] >= 5)) return [x, y]; /* goals in open floor, not wedged against walls or furniture */ } return [100, 80]; }
   addCat(cat, newcomer, quiet) { // quiet: the caller writes the one log line (an arrival event)
@@ -1546,7 +1550,7 @@ class Sim {
       o.mem[cat.id] = { aff: newcomer ? -0.1 : base, fear: 0, n: newcomer ? 0 : this.cfg.tune.familiarN + this.rng() * 20, wins: 0, losses: 0, last: -1e9 };
       cat.mem[o.id] = { aff: newcomer ? -0.1 : base + (this.rng() - 0.5) * 0.1, fear: 0, n: newcomer ? 0 : this.cfg.tune.familiarN + this.rng() * 20, wins: 0, losses: 0, last: -1e9 };
     }
-    this.cats.push(cat); if (newcomer && !quiet && this.tick > 0) this.emit(`${cat.name} enters the colony`, 'event');
+    this.cats.push(cat); if (newcomer && !quiet && this.tick > 0) this.emit(`${cat.name} enters the colony`, 'event', { k: 'enters', c: [CS(cat)] });
   }
   // newcomer = stranger to everyone, arrival time stamped; elevated stress baseline that habituates over days (Kessler & Turner 1999; Kry & Casey 2007)
   markNewcomer(cat) { cat.arrivedT = this.t; cat.mem.meals = {}; for (const o of this.cats) if (o !== cat) { o.mem[cat.id] = { aff: -0.1, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 }; cat.mem[o.id] = { aff: -0.1, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 }; } cat.s.stress = Math.max(cat.s.stress, 0.35 + 0.3 * cat.tr.N); }
@@ -1554,7 +1558,7 @@ class Sim {
   novelty(c) { // two-phase habituation (Kessler & Turner 1997): a fast fall over the first days, then a slow tail over weeks
     if (c.arrivedT === undefined) return 0; const d = (this.t - c.arrivedT) / 86400, H = this.cfg.habit || {};
     const w = H.fastShare != null ? H.fastShare : 0.6; return w * Math.exp(-d / (H.fastDays || 1.2)) + (1 - w) * Math.exp(-d / (H.slowDays || 14)); }
-  removeCat(cat, quiet) { this.cats = this.cats.filter(c => c !== cat); for (const o of this.cats) { if (o.act && o.act.target === cat.id) o.act = null; o.incoming = o.incoming.filter(i => i.from !== cat.id); } if (!quiet) this.emit(`${cat.name} removed from the colony`, 'event'); }
+  removeCat(cat, quiet) { this.cats = this.cats.filter(c => c !== cat); for (const o of this.cats) { if (o.act && o.act.target === cat.id) o.act = null; o.incoming = o.incoming.filter(i => i.from !== cat.id); } if (!quiet) this.emit(`${cat.name} removed from the colony`, 'event', { k: 'removed', c: [CS(cat)] }); }
   setNachshon(on) { const has = this.cats.includes(this.nachshon); if (on && !has) { this.nachshon.mem = {}; this.addCat(this.nachshon, true); } else if (!on && has) this.removeCat(this.nachshon); }
   catById(id) { return this.cats.find(c => c.id === id); }
   dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
@@ -1627,7 +1631,7 @@ class Sim {
     const parts = named.map(cid => `${this.catById(cid).name} ${TOY_VERB[best[cid]]}`);
     if (ignored.length) parts.push(`${ignored.length} cat${ignored.length === 1 ? '' : 's'} ignore${ignored.length === 1 ? 's' : ''} it`);
     const line = parts.length ? `You wiggle a toy: ${parts.join(', ')}.` : 'You wiggle a toy; no cat is close enough to notice.';
-    this.emit(line, 'toy');
+    this.emit(line, 'toy', { k: named.length || ignored.length ? 'toyWiggle' : 'toyWiggleNone', c: named.map(cid => CS(this.catById(cid))), v: named.map(cid => best[cid]), ign: ignored.length });
     if (this.onToyGesture) this.onToyGesture(toy, { t0: g.t0, t1: this.t, best: Object.fromEntries(named.map(cid => [cid, best[cid]])), ignored, line });
   }
   // A cat's phase on its toy changed: the record, the hand gesture's tally, and the pounce and knock lines.
@@ -1636,10 +1640,10 @@ class Sim {
     const g = toy.gesture; if (g && TOY_RANK[phase] && (!g.best[c.id] || TOY_RANK[phase] > TOY_RANK[g.best[c.id]])) g.best[c.id] = phase;
     // At most one pounce line per cat per gesture: during the hand's gesture its summary line names the pounce; after it,
     // a cat's first pounce gets a line and later ones do not (moveToy clears the record when a new gesture starts).
-    if (phase === 'pounce' && !(toy.pounced || (toy.pounced = new Set())).has(c.id)) { toy.pounced.add(c.id); if (!g) this.emit(`${c.name} pounces on the toy.`, 'toy'); }
+    if (phase === 'pounce' && !(toy.pounced || (toy.pounced = new Set())).has(c.id)) { toy.pounced.add(c.id); if (!g) this.emit(`${c.name} pounces on the toy.`, 'toy', { k: 'toyPounce', c: [CS(c)] }); }
     const by = toy.mv.by;
     if (typeof by === 'number' && by !== c.id && (phase === 'stalk' || phase === 'chase') && (prev == null || prev === 'watch')) {
-      const o = this.catById(by); this.emit(`${o ? o.name : 'A cat'} knocks the toy; ${c.name} ${phase === 'chase' ? 'gives chase' : 'stalks it'}.`, 'toy'); }
+      const o = this.catById(by); this.emit(`${o ? o.name : 'A cat'} knocks the toy; ${c.name} ${phase === 'chase' ? 'gives chase' : 'stalks it'}.`, 'toy', { k: 'toyKnock', c: [CS(o), CS(c)], chase: phase === 'chase' }); }
   }
   // The TOY action, phase by phase (Leyhausen 1979; Amat & Manteca 2019: stalk, chase, catch). A toy moving under someone
   // else's paw or hand is prey: watched from afar, stalked at a creep, chased at a run when it moves away within reach,
@@ -1728,21 +1732,21 @@ class Sim {
     if (!this.wev) this.wev = [];
     if (scheduled && !this.doors.entrance && DOOR_EV.has(type)) return this.deferAtDoor(type, ent);
     const durS = ent && ent.durS; let mealShare = 0;
-    if (type === 'adopt') { if (this.cats.length > 1) { const cat = this.cats[Math.floor(r() * this.cats.length)]; this.removeCat(cat, true); this.stats.adoptions++; this.emit(`🏡 ${cat.name} is adopted`, 'event'); } return; }
-    if (type === 'newcomer' || type === 'intake') { if (this.cats.length >= ((this.cfg.turnover && this.cfg.turnover.cap) || this.cfg.maxCats || 16)) return; const nc = this.admit(); this.stats.intakes++; this.emit(`🌱 ${nc.name} arrives as a newcomer`, 'event'); this.beginEvent('newcomer', { cat: nc }); return; }
+    if (type === 'adopt') { if (this.cats.length > 1) { const cat = this.cats[Math.floor(r() * this.cats.length)]; this.removeCat(cat, true); this.stats.adoptions++; this.emit(`🏡 ${cat.name} is adopted`, 'event', { k: 'adopted', c: [CS(cat)] }); } return; }
+    if (type === 'newcomer' || type === 'intake') { if (this.cats.length >= ((this.cfg.turnover && this.cfg.turnover.cap) || this.cfg.maxCats || 16)) return; const nc = this.admit(); this.stats.intakes++; this.emit(`🌱 ${nc.name} arrives as a newcomer`, 'event', { k: 'newcomer', c: [CS(nc)] }); this.beginEvent('newcomer', { cat: nc }); return; }
     const snap = this.evSnap();
-    if (type === 'feed') { this.learnMeal(); const bw = M.stations.filter(s => s.type === T.BOWL); const RP = this.rationPlan && this.rationPlan.day === this.day ? this.rationPlan : null; mealShare = RP ? RP.perMeal : 1 / Math.max(1, this.cfg.feedTimes.length); bw.forEach(s => s.food = RP ? this.cats.length * this.cfg.tune.dailyRation * RP.perMeal / Math.max(1, bw.length) : this.cats.length * this.cfg.tune.dailyRation / Math.max(1, this.cfg.feedTimes.length) / Math.max(1, bw.length)); /* a measured ration, not an all-day supply */ this.lastFeed = this.t; this.addHuman('feed'); this.emit('🍽️ Staff fill the food bowls', 'event'); this.interruptAll(0.6, c => c.s.hunger > 0.2); }
+    if (type === 'feed') { this.learnMeal(); const bw = M.stations.filter(s => s.type === T.BOWL); const RP = this.rationPlan && this.rationPlan.day === this.day ? this.rationPlan : null; mealShare = RP ? RP.perMeal : 1 / Math.max(1, this.cfg.feedTimes.length); bw.forEach(s => s.food = RP ? this.cats.length * this.cfg.tune.dailyRation * RP.perMeal / Math.max(1, bw.length) : this.cats.length * this.cfg.tune.dailyRation / Math.max(1, this.cfg.feedTimes.length) / Math.max(1, bw.length)); /* a measured ration, not an all-day supply */ this.lastFeed = this.t; this.addHuman('feed'); this.emit('🍽️ Staff fill the food bowls', 'event', { k: 'feed' }); this.interruptAll(0.6, c => c.s.hunger > 0.2); }
     else if (type === 'pickup') { if (!this.cfg.adLib) this.map.stations.forEach(st => { if (st.type === T.BOWL) st.food = 0; }); }
-    else if (type === 'clean') { this.addHuman('clean'); for (const b of M.litter) b.soil = 0; this.emit('🧹 Staff scoop litter boxes', 'event'); } // the round covers every box, however many there are
-    else if (type === 'noise') { let k = 0; const [nx, ny] = this.evPlace('noise'); for (const c of this.cats) if (this.startle(c, this.soundW(this.soundDb(this.cfg.stimulus.noiseDb, nx, ny, c)), 'noise')) k++; this.emit(`💥 Sudden loud noise: ${k} cat${k === 1 ? '' : 's'} startle${k === 1 ? 's' : ''}`, 'event'); }
-    else if (type === 'visit') { this.addHuman(r() < 0.5 ? 'sit' : 'visit', durS); this.emit('🧑 A person enters the room', 'event'); }
-    else if (type === 'sit') { this.addHuman('sit'); this.emit('🧘 A person comes in and sits on the floor', 'event'); }
-    else if (type === 'bird') { this.birdUntil = this.t + 300 + r() * 300; this.emit('🐦 Bird outside the window', 'event'); this.interruptAll(0.5, c => c.act && c.act.type !== A.SLEEP); }
-    else if (type === 'toy') { if (this.cfg.noToys) return; const [x, y] = this.randFloor(); this.toys.push(this.spawnToyAt(x, y)); if (this.toys.length > 4) this.toys.shift(); this.emit('🧶 New toy dropped in', 'event'); }
+    else if (type === 'clean') { this.addHuman('clean'); for (const b of M.litter) b.soil = 0; this.emit('🧹 Staff scoop litter boxes', 'event', { k: 'clean' }); } // the round covers every box, however many there are
+    else if (type === 'noise') { let k = 0; const [nx, ny] = this.evPlace('noise'); for (const c of this.cats) if (this.startle(c, this.soundW(this.soundDb(this.cfg.stimulus.noiseDb, nx, ny, c)), 'noise')) k++; this.emit(`💥 Sudden loud noise: ${k} cat${k === 1 ? '' : 's'} startle${k === 1 ? 's' : ''}`, 'event', { k: 'noise', n: k }); }
+    else if (type === 'visit') { this.addHuman(r() < 0.5 ? 'sit' : 'visit', durS); this.emit('🧑 A person enters the room', 'event', { k: 'visit' }); }
+    else if (type === 'sit') { this.addHuman('sit'); this.emit('🧘 A person comes in and sits on the floor', 'event', { k: 'sit' }); }
+    else if (type === 'bird') { this.birdUntil = this.t + 300 + r() * 300; this.emit('🐦 Bird outside the window', 'event', { k: 'bird' }); this.interruptAll(0.5, c => c.act && c.act.type !== A.SLEEP); }
+    else if (type === 'toy') { if (this.cfg.noToys) return; const [x, y] = this.randFloor(); this.toys.push(this.spawnToyAt(x, y)); if (this.toys.length > 4) this.toys.shift(); this.emit('🧶 New toy dropped in', 'event', { k: 'toyNew' }); }
     else if (type === 'vacuum') { const h = this.addHuman('vacuum', durS); this.vacuum = h;
       if (!h) return;                                     // nobody to push it: there is no vacuum pass
       for (const c of this.cats) this.startle(c, this.soundW(this.soundDb(this.cfg.stimulus.vacuumDb, h.x, h.y, c)), 'vacuum'); // start-up noise, by distance
-      this.emit('🌀 The vacuum starts up', 'event'); }
+      this.emit('🌀 The vacuum starts up', 'event', { k: 'vacuum' }); }
     if (scheduled && BUDGETED.has(type)) { this.scheduleLog.push(type === 'feed' ? { t: this.t, type, durS: 0, share: mealShare } : { t: this.t, type, durS: durS || 0 }); if (this.scheduleLog.length > 2000) this.scheduleLog.shift(); }
     if (EVDEF[type]) this.beginEvent(type, { snap, startled: type === 'noise' ? this.cats.filter(c => c.startleT === this.t).length : 0 });
   }
@@ -1753,19 +1757,19 @@ class Sim {
   deferAtDoor(type, ent) {
     const e = ent || {}, dl = e.deadline == null ? (Math.floor(this.t / 86400) + 1) * 86400 : e.deadline;
     const label = type === 'vacuum' ? 'Vacuum session' : type === 'visit' || type === 'sit' ? 'Visit' : 'Intake';
-    if (this.t + 900 >= dl) { this.emit(`\u{1F6AA} ${label} missed: the entrance stayed closed all day`, 'event'); return; }
-    if (!e.deferred) this.emit(`\u{1F6AA} ${label} is waiting: the entrance is closed`, 'event');
+    if (this.t + 900 >= dl) { this.emit(`\u{1F6AA} ${label} missed: the entrance stayed closed all day`, 'event', { k: 'missed', what: type === 'vacuum' ? 'vacuum' : type === 'visit' || type === 'sit' ? 'visit' : 'intake' }); return; }
+    if (!e.deferred) this.emit(`\u{1F6AA} ${label} is waiting: the entrance is closed`, 'event', { k: 'waiting', what: type === 'vacuum' ? 'vacuum' : type === 'visit' || type === 'sit' ? 'visit' : 'intake' });
     this.schedule.push({ t: this.t + 900, type, durS: e.durS, deadline: dl, deferred: (e.deferred || 0) + 1 });
     this.schedule.sort((a, b) => a.t - b.t);
   }
   setDoor(which, open) {
     if (!this.doors || this.doors[which] === !!open) return;
-    if (which === 'entrance') { this.doors.entrance = !!open; this.emit(open ? '\u{1F6AA} The entrance door is opened' : '\u{1F6AA} The entrance door is closed', 'event'); return; }
+    if (which === 'entrance') { this.doors.entrance = !!open; this.emit(open ? '\u{1F6AA} The entrance door is opened' : '\u{1F6AA} The entrance door is closed', 'event', { k: open ? 'entranceOpen' : 'entranceClosed' }); return; }
     // Nobody may be shut into the quiet room: any person in there is sent out first and the doorway closes behind them.
     if (!open) { const inQuiet = this.humans.filter(h => h.x > this.map.partitionX);
-      if (inQuiet.length) { for (const h of inQuiet) h.until = Math.min(h.until, this.t); this.pendingPartition = true; this.emit('\u{1F6AA} The quiet-room doorway will close once the person is out', 'event'); return; } }
+      if (inQuiet.length) { for (const h of inQuiet) h.until = Math.min(h.until, this.t); this.pendingPartition = true; this.emit('\u{1F6AA} The quiet-room doorway will close once the person is out', 'event', { k: 'quietWillClose' }); return; } }
     this.pendingPartition = false; this.doors.partition = !!open; this.applyPartition();
-    this.emit(open ? '\u{1F6AA} The quiet-room doorway is opened' : '\u{1F6AA} The quiet-room doorway is closed', 'event');
+    this.emit(open ? '\u{1F6AA} The quiet-room doorway is opened' : '\u{1F6AA} The quiet-room doorway is closed', 'event', { k: open ? 'quietOpen' : 'quietClosed' });
   }
   // The doorway is the gap buildMap leaves in the partition wall. Filling it with DOOR cells makes it unwalkable
   // for cats and people alike; everything derived from walkability is rebuilt.
@@ -1815,15 +1819,23 @@ class Sim {
         if (ev.type === 'newcomer' && ev.cat && ev.cat.act && ev.cat.act.type === A.HIDE) ev.acc++;
         if (ev.type === 'vacuum' || ev.type === 'noise') ev.near = Math.max(ev.near, this.cats.filter(c => c.act && (c.act.type === A.HIDE || c.act.type === A.FLEE)).length);
         if (now >= ev.evalAt) { const a = this.evSnap(), b = ev.snap, pct = v => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v * 100)) + '%'; ev.after = a;
-          ev.effect = ev.type === 'noise' || ev.type === 'shoo' ? `${ev.startled} of ${b.n} cats startled, avg stress ${pct(a.stress - b.stress)}`
-            : ev.type === 'feed' ? `${a.bowls} cats at the bowls (was ${b.bowls}), ${this.cats.filter(c => c.act && c.act.type === A.WAIT).length} waiting`
-            : ev.type === 'visit' ? `${ev.near} cats came within 1.5 m · ${a.hideFlee} hiding/fleeing (was ${b.hideFlee})`
-            : ev.type === 'vacuum' ? `up to ${ev.near} cats fled or hid (was ${b.hideFlee}), avg stress ${pct(a.stress - b.stress)}`
-            : ev.type === 'bird' ? `${a.window} cats at the window (was ${b.window})`
-            : ev.type === 'newcomer' ? `${ev.cat.name} hid ${Math.round(100 * ev.acc / Math.max(1, ev.n))}% of the first hour · stress ${Math.round(ev.cat.s.stress * 100)}% vs residents ${Math.round(100 * this.cats.filter(c => c !== ev.cat).reduce((s, c) => s + c.s.stress, 0) / Math.max(1, this.cats.length - 1))}%` : '';
+          // The effect as data (fx: the numbers the line states, read off the same snapshots; no draw, no write), then
+          // its English line from that record. i18n.js phrases the same record in each language.
+          const fx = ev.type === 'noise' || ev.type === 'shoo' ? { startled: ev.startled, n: b.n, ds: a.stress - b.stress }
+            : ev.type === 'feed' ? { bowls: a.bowls, was: b.bowls, wait: this.cats.filter(c => c.act && c.act.type === A.WAIT).length }
+            : ev.type === 'visit' ? { near: ev.near, hide: a.hideFlee, was: b.hideFlee }
+            : ev.type === 'vacuum' ? { near: ev.near, was: b.hideFlee, ds: a.stress - b.stress }
+            : ev.type === 'bird' ? { win: a.window, was: b.window }
+            : ev.type === 'newcomer' ? { hid: Math.round(100 * ev.acc / Math.max(1, ev.n)), st: Math.round(ev.cat.s.stress * 100), res: Math.round(100 * this.cats.filter(c => c !== ev.cat).reduce((s, c) => s + c.s.stress, 0) / Math.max(1, this.cats.length - 1)) } : {};
+          ev.effect = ev.type === 'noise' || ev.type === 'shoo' ? `${fx.startled} of ${fx.n} cats startled, avg stress ${pct(fx.ds)}`
+            : ev.type === 'feed' ? `${fx.bowls} cats at the bowls (was ${fx.was}), ${fx.wait} waiting`
+            : ev.type === 'visit' ? `${fx.near} cats came within 1.5 m · ${fx.hide} hiding/fleeing (was ${fx.was})`
+            : ev.type === 'vacuum' ? `up to ${fx.near} cats fled or hid (was ${fx.was}), avg stress ${pct(fx.ds)}`
+            : ev.type === 'bird' ? `${fx.win} cats at the window (was ${fx.was})`
+            : ev.type === 'newcomer' ? `${ev.cat.name} hid ${fx.hid}% of the first hour · stress ${fx.st}% vs residents ${fx.res}%` : '';
           { const R = this.m2t(1.5), kinds = { shoo: [A.HIDE, A.FLEE, A.AVOID], noise: [A.HIDE, A.FLEE], vacuum: [A.HIDE, A.FLEE], visit: [A.SEEKH, A.HIDE, A.FLEE], bird: [A.WINDOW], feed: [A.EAT, A.WAIT], newcomer: [A.HIDE] }[ev.type] || []; // machine-readable effect for headless/validation: who reacted, and the colony stress change
             ev.dStress = a.stress - b.stress; ev.affected = this.cats.filter(c => (ev.cat && c === ev.cat) || (c.act && kinds.includes(c.act.type)) || (c.s.stress - (ev.s0.get(c.id) ?? c.s.stress)) > 0.05 || (ev.type === 'visit' && Math.hypot(c.x - ev.x, c.y - ev.y) < R)).map(c => c.id); }
-          ev.effectT = now; this.emit(`${ev.icon} ${ev.name} effect: ${ev.effect}`, 'effect');
+          ev.effectT = now; this.emit(`${ev.icon} ${ev.name} effect: ${ev.effect}`, 'effect', Object.assign({ k: 'effect', type: ev.type, icon: ev.icon, text: ev.effect, c: ev.cat ? [CS(ev.cat)] : [] }, fx));
           if (ev.shoo) this.endShoo(ev.shoo); } } }
     this.wev = this.wev.filter(ev => !ev.effect || now < Math.max(ev.until, ev.effectT + 120)); }
   // The one startle: the loud noise, the door, the vacuum starting up. Stress jumps by amp x (base + N) x w, w being the
@@ -1873,7 +1885,7 @@ class Sim {
   }
   endShoo(g) {
     g.done = true; g.line = this.shooLine(g);
-    this.emit(g.line, 'event');
+    this.emit(g.line, 'event', { k: g.reach.length ? 'shoo' : 'shooNone', c: Object.entries(g.response).filter(([, r]) => r !== 'ignore').map(([id]) => CS(this.catById(+id)) || { name: '?', sex: 'F' }), v: Object.values(g.response).filter(r => r !== 'ignore'), ign: Object.values(g.response).filter(r => r === 'ignore').length });
     if (this.onShoo) this.onShoo({ t0: g.t0, t1: this.t, x: g.x, y: g.y, reach: g.reach.slice(), startled: g.startled.slice(), response: Object.assign({}, g.response), line: g.line, dStress: g.dStress });
     this.shoos = this.shoos.filter(x => x !== g);
   }
@@ -1883,7 +1895,7 @@ class Sim {
   // (the contact memory petCalm reads) is now, and jealous cats nearby are irritated.
   petCat(h, c) {
     c.petted = this.t; c.s.social = clamp(c.s.social - 0.04); c.s.stress = clamp(c.s.stress - 0.02); h.petting = c.id; h.petS = (h.petS || 0) + this.cfg.dt;
-    if (h.mode === 'visit' || h.mode === 'sit') this.logPaced('bout', 'pet' + c.id, `🤲 The visitor pets ${c.name}`);
+    if (h.mode === 'visit' || h.mode === 'sit') this.logPaced('bout', 'pet' + c.id, `🤲 The visitor pets ${c.name}`, undefined, { k: 'visitorPets', c: [CS(c)] });
     for (const o of this.cats) if (o !== c && o.tr.jealousy > 0.3 && this.dist(o, c) < this.m2t(this.cfg.senseM)) { o.s.irritation = clamp(o.s.irritation + 0.03 * o.tr.jealousy); o.jealousOf = c.id; o.jealousT = this.t; }
   }
   // ----- the player petting one cat (the visitor path, aimed at one cat) -----
@@ -1909,9 +1921,9 @@ class Sim {
     const he = c.sex === 'M' ? 'he' : 'she';
     if (p.phase === 'reaching' && p.decided) {
       // Accepting is what accepts() counts for a friendly bid: answering it (seek_human), or staying put and at ease.
-      if (c.act && (c.act.type === A.SEEKH || PET_STAY.has(c.act.type))) { p.phase = 'stroking'; p.until = this.t + (c.act.until - this.tick) * this.cfg.dt; this.emit(`You pet ${c.name}: ${he} leans in.`, 'event'); }
+      if (c.act && (c.act.type === A.SEEKH || PET_STAY.has(c.act.type))) { p.phase = 'stroking'; p.until = this.t + (c.act.until - this.tick) * this.cfg.dt; this.emit(`You pet ${c.name}: ${he} leans in.`, 'event', { k: 'petLean', c: [CS(c)] }); }
       else { if (!c.act || ![A.AVOID, A.FLEE, A.HIDE].includes(c.act.type)) { this.startAction(c, { type: A.AVOID }); c.act.from = p.hand; }
-        p.phase = 'rejected'; p.until = this.t + PET_SLIP_S; this.emit(`${c.name} slips away.`, 'event'); }
+        p.phase = 'rejected'; p.until = this.t + PET_SLIP_S; this.emit(`${c.name} slips away.`, 'event', { k: 'petSlip', c: [CS(c)] }); }
       return; }
     if (p.phase === 'stroking') { if (!c.act || !(c.act.type === A.SEEKH || PET_STAY.has(c.act.type)) || this.t >= p.until) { this.endPet(); return; }
       if (Math.hypot(c.x - p.hand.x, c.y - p.hand.y) < this.m2t(0.6)) this.petCat(p.hand, c); return; }
@@ -1975,7 +1987,7 @@ class Sim {
       h.attending = attending;
       if (!h.sitting && !attending) { if (h.goal != null && !leaving) this.walkField(h, this.fields[h.goal], sp); else { const hf = this.humanField || (this.humanField = this.pointField(this.map.door.x, this.map.door.y)); const inQuiet = h.x > this.map.partitionX; if (leaving && inQuiet) this.walkField(h, hf, sp); else { const dx = h.gx - h.x, dy = h.gy - h.y, d = Math.hypot(dx, dy); if (d > 0.5) { const k = Math.min(1, sp / d); h.x += dx * k; h.y += dy * k; } } } }
       h.done = leaving && Math.hypot(h.x - this.map.door.x, h.y - this.map.door.y) < 3;
-      if (h.done && (h.mode === 'visit' || h.mode === 'sit')) this.emit(`🧑 The visitor leaves${h.petS ? ` after ${Math.max(1, Math.round(h.petS / 60))} min of petting` : ', having petted no one'}`, 'event');
+      if (h.done && (h.mode === 'visit' || h.mode === 'sit')) this.emit(`🧑 The visitor leaves${h.petS ? ` after ${Math.max(1, Math.round(h.petS / 60))} min of petting` : ', having petted no one'}`, 'event', { k: h.petS ? 'visitorLeftPet' : 'visitorLeft', n: h.petS ? Math.max(1, Math.round(h.petS / 60)) : 0 });
       // petting: friendly humans pet one nearby cat that wants it
       if (h.mode === 'visit' || h.mode === 'sit' || h.mode === 'feed') {
         const near = this.cats.filter(c => Math.hypot(c.x - h.x, c.y - h.y) < this.m2t(0.6) && c.act && c.act.type === A.SEEKH);
@@ -1988,7 +2000,7 @@ class Sim {
     const people = () => this.humans.filter(h => h.mode !== 'shoo' && h.mode !== 'pet').length, before = people(); this.humans = this.humans.filter(h => !h.done); if (this.vacuum && !this.humans.includes(this.vacuum)) this.vacuum = null;
     if (people() < before) this.doorOpen = this.t + 20;
 
-    if (this.pendingPartition && !this.humans.some(h => h.x > this.map.partitionX)) { this.pendingPartition = false; this.doors.partition = false; this.applyPartition(); this.emit('\u{1F6AA} The quiet-room doorway is closed', 'event'); }
+    if (this.pendingPartition && !this.humans.some(h => h.x > this.map.partitionX)) { this.pendingPartition = false; this.doors.partition = false; this.applyPartition(); this.emit('\u{1F6AA} The quiet-room doorway is closed', 'event', { k: 'quietClosed' }); }
   }
 
   // Soiling of the cleanest box the colony has on offer, 0 clean to 1 unusable. Cats head for the
@@ -2037,8 +2049,8 @@ class Sim {
     // level stress settles at: a dirty or missing box wears the cat down from the same
     // bladder threshold the LITTER score uses (litterUrgeAt).
     const frustration = TU0.litterFrustration * Math.max(0, s.bladder - TU0.litterUrgeAt) * this.latrineSoil();
-    if (c.arrivedT !== undefined && !c.settledLogged && this.novelty(c) < 0.5) { c.settledLogged = true; this.emit(`🌱 ${c.name} is settling in`, 'event'); }
-    if (s.bladder > TU0.litterUrgeAt + 0.15 && this.latrineSoil() > 0.5 && !(c.act && c.act.type === A.LITTER)) this.logPaced('hold', c.id, `🚽 ${c.name} is holding on: the boxes are dirty`);
+    if (c.arrivedT !== undefined && !c.settledLogged && this.novelty(c) < 0.5) { c.settledLogged = true; this.emit(`🌱 ${c.name} is settling in`, 'event', { k: 'settling', c: [CS(c)] }); }
+    if (s.bladder > TU0.litterUrgeAt + 0.15 && this.latrineSoil() > 0.5 && !(c.act && c.act.type === A.LITTER)) this.logPaced('hold', c.id, `🚽 ${c.name} is holding on: the boxes are dirty`, undefined, { k: 'holding', c: [CS(c)] });
     // Petted lately: the calm of being handled kindly outlasts the visit (gentling lowered stress signs in shelter cats:
     // Gourkow & Fraser 2006; Gourkow, Hamon & Phillips 2014). Fed by the one contact memory, the time of the last pet.
     const calm = c.petted === undefined ? 0 : TU0.petCalm * Math.exp(-(this.t - c.petted) / (TU0.petCalmH * 3600));
@@ -2253,8 +2265,8 @@ class Sim {
     this.startAction(c, ch);
   }
   startAction(c, ch) {
-    if ((ch.type === A.PLAY || ch.type === A.ALLOGROOM) && ch.target >= 0) { const o = this.catById(ch.target); if (o) this.logPaced('bout', [ch.type, Math.min(c.id, o.id), Math.max(c.id, o.id)].join('-'), ch.type === A.PLAY ? `🐾 ${c.name} and ${o.name} play` : `💞 ${c.name} grooms ${o.name}`, 'social'); }
-    if (ch.type === A.HIDE && c.startleT != null && this.t - c.startleT < 30) this.logPaced('hide', c.id, `🫣 ${c.name} hides after the fright`);
+    if ((ch.type === A.PLAY || ch.type === A.ALLOGROOM) && ch.target >= 0) { const o = this.catById(ch.target); if (o) this.logPaced('bout', [ch.type, Math.min(c.id, o.id), Math.max(c.id, o.id)].join('-'), ch.type === A.PLAY ? `🐾 ${c.name} and ${o.name} play` : `💞 ${c.name} grooms ${o.name}`, 'social', { k: ch.type === A.PLAY ? 'play' : 'groom', c: [CS(c), CS(o)] }); }
+    if (ch.type === A.HIDE && c.startleT != null && this.t - c.startleT < 30) this.logPaced('hide', c.id, `🫣 ${c.name} hides after the fright`, undefined, { k: 'hides', c: [CS(c)] });
     const r = this.rng, m = 60 / this.cfg.dt; // ticks per minute
     const durMin = { sleep: [25, 100], rest: [5, 30], groom: [1, 6], explore: [0.5, 3], eat: [1, 4], drink: [0.3, 1], litter: [1, 2], hide: [5, 35], perch: [5, 40], window: [2, 15], scratch: [0.3, 1], toy: [1, 4], seek_human: [2, 8],
       zoom: [0.4, 2], avoid: [0.2, 0.8], sniff: [0.2, 0.5], allogroom: [0.5, 3], play: [0.3, 1.5], stalk: [0.3, 1], chase: [0.15, 0.6], hiss: [0.1, 0.3], fight: [0.1, 0.5], flee: [0.2, 0.6], wait_food: [0.5, 2] }[ch.type];
@@ -2320,7 +2332,7 @@ class Sim {
       // the walk over is not part of the bout: hold the clock until the two of them are together
       if (SOCIAL_FRIENDLY.has(act.type)) act.contactT = this.t; // already together unless the walk below says otherwise
       if (SOCIAL_FRIENDLY.has(act.type) && this.dist(c, o) > this.m2t(this.cfg.contactM) * 1.5) { act.contactT = undefined; act.travel = true; act.until = this.tick + Math.round(this.cfg.tune.approachS / this.cfg.dt); act.span = act.until - act.start; } } }
-    if (act.type === A.FIGHT && (!c.act || c.act.type !== A.FIGHT)) { const o = this.catById(act.target); if (o && !(o.act && o.act.type === A.FIGHT && o.act.target === c.id)) { this.stats.fights++; this.stats.swats = (this.stats.swats || 0) + 1; this.stats.fightStarts = (this.stats.fightStarts || 0) + 1; this.stats.fightLog.push({ t: this.t, a: c.id, b: act.target }); if (this.emitFights !== false) this.emit(`⚔️ ${c.name} swats at ${o.name}`, 'fight'); } }
+    if (act.type === A.FIGHT && (!c.act || c.act.type !== A.FIGHT)) { const o = this.catById(act.target); if (o && !(o.act && o.act.type === A.FIGHT && o.act.target === c.id)) { this.stats.fights++; this.stats.swats = (this.stats.swats || 0) + 1; this.stats.fightStarts = (this.stats.fightStarts || 0) + 1; this.stats.fightLog.push({ t: this.t, a: c.id, b: act.target }); if (this.emitFights !== false) this.emit(`⚔️ ${c.name} swats at ${o.name}`, 'fight', { k: 'swat', c: [CS(c), CS(o)] }); } }
     if (act.type === A.HISS) this.stats.hisses++;
     if (c.act && c.act.target >= 0) { const E = this.stats.episodes; (E[c.act.type] || (E[c.act.type] = [])).push((this.tick - c.act.start) * this.cfg.dt); }
     if (act.target >= 0) { const I = this.stats.initiated; const k = c.id + ':' + act.type; I[k] = (I[k] || 0) + 1; const hk = act.type; if (HOSTILE.has(hk) || hk === A.CHASE) this.stats.hourHostile[Math.floor(this.hour)]++; }
@@ -2675,7 +2687,7 @@ class Sim {
           w.mem[l.id].wins++; l.mem[w.id].losses++; l.mem[w.id].fear = clamp(l.mem[w.id].fear + 0.35); l.s.stress = clamp(l.s.stress + 0.25);
           w.s.irritation = clamp(w.s.irritation * 0.4); l.s.irritation *= 0.5; this.stats.fightDur.push(c.fightTicks * this.cfg.dt); this.stats.resolvedFights = (this.stats.resolvedFights || 0) + 1; c.fightTicks = 0; o.fightTicks = 0;
           this.startAction(l, { type: A.FLEE, target: w.id }); this.startAction(w, { type: A.HISS, target: l.id });
-          if (this.emitFights !== false) this.emit(`🏁 ${w.name} wins vs ${l.name}`, 'fight'); if (this.onFight) this.onFight(w, l, this.stats.fightDur[this.stats.fightDur.length - 1]);
+          if (this.emitFights !== false) this.emit(`🏁 ${w.name} wins vs ${l.name}`, 'fight', { k: 'win', c: [CS(w), CS(l)] }); if (this.onFight) this.onFight(w, l, this.stats.fightDur[this.stats.fightDur.length - 1]);
         }
       } else {
         // one-sided close swipe (a paw, not a resolved fight). ASSUMPTION: much smaller than the resolved
@@ -2758,6 +2770,653 @@ class Sim {
 return { Sim };
 });
 
+/* Whisker Hall's string table: the one source of every translated string, in English, Russian and Hebrew.
+   S: interface strings by key, with {name} placeholders. LOG: the event log, one phraser per line kind (sim.js
+   emit's ev.k), given the structured record { c: [{ name, sex }], n, v, ... }. Cat names are never translated.
+   Russian counts take the three plural forms (plRu); Hebrew verbs and adjectives agree with the cat's sex (g).
+   The English phrasers reproduce sim.js's own English lines exactly (i18n-check.js diffs them on a log dump). */
+(function (root, factory) {
+  const node = typeof module !== 'undefined' && !!module.exports;
+  const api = factory();
+  if (node) module.exports = api; else (root.WH || (root.WH = {}))['i18n'] = api;
+})(typeof self !== 'undefined' ? self : null, function () {
+'use strict';
+
+const LANGS = ['en', 'ru', 'he'];
+const LABEL = { en: 'EN', ru: 'RU', he: 'HE' };                       // the language button shows these
+const NAME = { en: 'English', ru: 'Русский', he: 'עברית' };
+const DIR = { en: 'ltr', ru: 'ltr', he: 'rtl' };
+
+// Russian plural: 1, 21 → one; 2-4, 22-24 → few; 0, 5-20, 25 → many.
+const plRu = (n, one, few, many) => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many; };
+// Gender for a cat: Russian and Hebrew past/present forms agree with the cat's sex ('M' or 'F').
+const g = (c, m, f) => c && c.sex === 'M' ? m : f;
+const nm = c => c ? c.name : '?';
+const list = (xs, and) => xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ', ' + xs[xs.length - 1];
+
+const S = {
+  en: {
+    pause: 'Pause', play: 'Play', restart: 'Restart', showStats: 'Show stats', stats: 'Stats', showRoom: 'Show room', room: 'Room',
+    howToPlay: 'How to play', events: 'Events', topCats: 'Top cats', needs: 'Needs', personality: 'Personality', feelsAbout: 'Feels about',
+    noCat: 'No cat picked', noCatHint: 'Click a cat in the room to see its needs, personality and friendships here.',
+    chipFeeding: 'Feeding', chipLitter: 'Litter', chipVisitors: 'Visitors', chipVacuum: 'Vacuum',
+    goalStress: 'Stress', goalFights: 'Fights', goalContacts: 'Contacts', goalHiding: 'Hiding',
+    window: 'Window', span6h: '6 hours', spanToday: 'Today', span3d: '3 days', spanWeek: '7 days', spanAll: 'All days',
+    perHour: 'per hour', perDay: 'per day', unitHour: '/hour', unitDay: '/day', unitHourShort: '/h', unitDayShort: '/d', of7: 'of 7', notYet: 'not yet',
+    noneYet: 'none yet', language: 'Language', expandTop: 'Expand the top cats, with their names', collapseTop: 'Collapse the top cats',
+    caption: 'Fights and contacts {rate} · stress of 7 · hiding % · each point {point}', pt10m: '10 minutes', pt1h: '1 hour', pt1d: '1 day',
+    now: 'now', enlarge: 'Enlarge chart',
+  },
+  ru: {
+    pause: 'Пауза', play: 'Пуск', restart: 'Заново', showStats: 'Статистика', stats: 'Стат.', showRoom: 'Комната', room: 'Комн.',
+    howToPlay: 'Как играть', events: 'События', topCats: 'Лучшие кошки', needs: 'Потребности', personality: 'Характер', feelsAbout: 'Отношения',
+    noCat: 'Кошка не выбрана', noCatHint: 'Нажмите на кошку в комнате, чтобы увидеть её потребности, характер и дружбу.',
+    chipFeeding: 'Корм', chipLitter: 'Лоток', chipVisitors: 'Гости', chipVacuum: 'Пылесос',
+    goalStress: 'Стресс', goalFights: 'Драки', goalContacts: 'Дружба', goalHiding: 'Прячутся',
+    window: 'Период', span6h: '6 часов', spanToday: 'Сегодня', span3d: '3 дня', spanWeek: '7 дней', spanAll: 'Все дни',
+    perHour: 'в час', perDay: 'в день', unitHour: '/час', unitDay: '/день', unitHourShort: '/ч', unitDayShort: '/д', of7: 'из 7', notYet: 'пока нет',
+    noneYet: 'пока нет', language: 'Язык', expandTop: 'Развернуть список лучших кошек с именами', collapseTop: 'Свернуть список лучших кошек',
+    caption: 'Драки и дружба {rate} · стресс из 7 · прячутся % · точка = {point}', pt10m: '10 минут', pt1h: '1 час', pt1d: '1 день',
+    now: 'сейчас', enlarge: 'Увеличить график',
+  },
+  he: {
+    pause: 'השהיה', play: 'הפעלה', restart: 'מחדש', showStats: 'סטטיסטיקה', stats: 'נתונים', showRoom: 'לחדר', room: 'חדר',
+    howToPlay: 'איך משחקים', events: 'אירועים', topCats: 'מובילים', needs: 'צרכים', personality: 'אופי', feelsAbout: 'יחסים',
+    noCat: 'לא נבחר חתול', noCatHint: 'לחצו על חתול בחדר כדי לראות כאן את הצרכים, האופי והחברויות שלו.',
+    chipFeeding: 'האכלה', chipLitter: 'ארגז חול', chipVisitors: 'מבקרים', chipVacuum: 'שואב',
+    goalStress: 'מתח', goalFights: 'קטטות', goalContacts: 'מגעים', goalHiding: 'מסתתרים',
+    window: 'טווח', span6h: '6 שעות', spanToday: 'היום', span3d: '3 ימים', spanWeek: '7 ימים', spanAll: 'כל הימים',
+    perHour: 'לשעה', perDay: 'ליום', unitHour: '/שעה', unitDay: '/יום', unitHourShort: '/ש׳', unitDayShort: '/י׳', of7: 'מתוך 7', notYet: 'עדיין לא',
+    noneYet: 'עדיין אין', language: 'שפה', expandTop: 'הרחבת רשימת החתולים המובילים עם שמותיהם', collapseTop: 'כיווץ רשימת החתולים המובילים',
+    caption: 'קטטות ומגעים {rate} · מתח מתוך 7 · מסתתרים % · כל נקודה {point}', pt10m: '10 דקות', pt1h: 'שעה', pt1d: 'יום',
+    now: 'עכשיו', enlarge: 'הגדלת הגרף',
+  },
+};
+
+// The event log. Each phraser takes the structured record and returns the line.
+const TOYV = {
+  en: { watch: 'watches', stalk: 'stalks it', chase: 'chases it', pounce: 'pounces on it' },
+  ru: { watch: c => g(c, 'смотрит', 'смотрит'), stalk: () => 'подкрадывается', chase: () => 'гонится за ней', pounce: () => 'прыгает на неё' },
+  he: { watch: c => g(c, 'מסתכל', 'מסתכלת'), stalk: c => g(c, 'מתגנב אליו', 'מתגנבת אליו'), chase: c => g(c, 'רודף אחריו', 'רודפת אחריו'), pounce: c => g(c, 'מזנק עליו', 'מזנקת עליו') },
+};
+const SHOOV = {
+  en: { flee: 'runs off', avoid: 'walks away', hide: 'runs to hide', freeze: 'freezes', hiss: 'hisses' },
+  ru: { flee: () => 'убегает', avoid: () => 'отходит', hide: () => 'бежит прятаться', freeze: () => 'замирает', hiss: () => 'шипит' },
+  he: { flee: c => g(c, 'בורח', 'בורחת'), avoid: c => g(c, 'מתרחק', 'מתרחקת'), hide: c => g(c, 'רץ להסתתר', 'רצה להסתתר'), freeze: c => g(c, 'קופא', 'קופאת'), hiss: c => g(c, 'נושף', 'נושפת') },
+};
+const WHAT = {
+  en: { vacuum: 'Vacuum session', visit: 'Visit', intake: 'Intake' },
+  ru: { vacuum: 'Уборка пылесосом', visit: 'Визит', intake: 'Приём' },
+  he: { vacuum: 'שאיבת אבק', visit: 'ביקור', intake: 'קליטה' },
+};
+const EFFECT = {   // the event names an effect line opens with (terms.js EVDEF names)
+  en: { noise: 'Loud noise', feed: 'Feeding bell', visit: 'Visitor', vacuum: 'Vacuum pass', bird: 'Bird at the window', shoo: 'Shoo', newcomer: 'Newcomer arrives' },
+  ru: { newcomer: 'Новичок', noise: 'Громкий шум', visit: 'Гость', vacuum: 'Пылесос', bird: 'Птица за окном', shoo: 'Прогон', feed: 'Звонок к кормлению' },
+  he: { newcomer: 'חתול חדש', noise: 'רעש חזק', visit: 'מבקר', vacuum: 'שואב', bird: 'ציפור בחלון', shoo: 'גירוש', feed: 'פעמון האכלה' },
+};
+// The effect line's measured detail, from the sim's record (sim.js updateEvents fx). sg: the signed percent the sim writes.
+const sg = v => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v * 100)) + '%';
+const FX = {
+  en: { noise: e => `${e.startled} of ${e.n} cats startled, avg stress ${sg(e.ds)}`, feed: e => `${e.bowls} cats at the bowls (was ${e.was}), ${e.wait} waiting`,
+    visit: e => `${e.near} cats came within 1.5 m · ${e.hide} hiding/fleeing (was ${e.was})`, vacuum: e => `up to ${e.near} cats fled or hid (was ${e.was}), avg stress ${sg(e.ds)}`,
+    bird: e => `${e.win} cats at the window (was ${e.was})`, newcomer: e => `${nm(e.c[0])} hid ${e.hid}% of the first hour · stress ${e.st}% vs residents ${e.res}%` },
+  ru: { noise: e => `${plRu(e.startled, 'вздрогнула', 'вздрогнули', 'вздрогнули')} ${e.startled} из ${e.n} кошек, средний стресс ${sg(e.ds)}`,
+    feed: e => `у мисок ${ruN(e.bowls, 'кошка', 'кошки', 'кошек')} (было ${e.was}), ждут ${e.wait}`,
+    visit: e => `подошли ближе 1,5 м: ${e.near} · прячутся или бегут: ${e.hide} (было ${e.was})`,
+    vacuum: e => `убежали или спрятались до ${e.near} (было ${e.was}), средний стресс ${sg(e.ds)}`,
+    bird: e => `у окна ${ruN(e.win, 'кошка', 'кошки', 'кошек')} (было ${e.was})`,
+    newcomer: e => `${nm(e.c[0])} ${g(e.c[0], 'прятался', 'пряталась')} ${e.hid}% первого часа · стресс ${e.st}%, у остальных ${e.res}%` },
+  he: { noise: e => `${e.startled} מתוך ${e.n} חתולים נבהלו, מתח ממוצע ${sg(e.ds)}`, feed: e => `${e.bowls} חתולים ליד הקערות (היו ${e.was}), ${e.wait} ממתינים`,
+    visit: e => `${e.near} חתולים התקרבו לפחות מ־1.5 מ׳ · ${e.hide} מסתתרים או בורחים (היו ${e.was})`,
+    vacuum: e => `עד ${e.near} חתולים ברחו או הסתתרו (היו ${e.was}), מתח ממוצע ${sg(e.ds)}`,
+    bird: e => `${e.win} חתולים ליד החלון (היו ${e.was})`,
+    newcomer: e => `${nm(e.c[0])} ${g(e.c[0], 'הסתתר', 'הסתתרה')} ${e.hid}% מהשעה הראשונה · מתח ${e.st}% מול ${e.res}% אצל הוותיקים` },
+};
+const fxLine = (l, e, word) => { const f = FX[l][e.type === 'shoo' ? 'noise' : e.type]; return `${e.icon} ${EFFECT[l][e.type] || e.type}${word}${f ? f(e) : ''}`; };
+
+const LOG = {
+  en: {
+    enters: e => `${nm(e.c[0])} enters the colony`,
+    removed: e => `${nm(e.c[0])} removed from the colony`,
+    toyWiggle: e => `You wiggle a toy: ${e.c.map((c, i) => `${nm(c)} ${TOYV.en[e.v[i]]}`).concat(e.ign ? [`${e.ign} cat${e.ign === 1 ? '' : 's'} ignore${e.ign === 1 ? 's' : ''} it`] : []).join(', ')}.`,
+    toyWiggleNone: () => 'You wiggle a toy; no cat is close enough to notice.',
+    toyPounce: e => `${nm(e.c[0])} pounces on the toy.`,
+    toyKnock: e => `${e.c[0] ? e.c[0].name : 'A cat'} knocks the toy; ${nm(e.c[1])} ${e.chase ? 'gives chase' : 'stalks it'}.`,
+    adopted: e => `🏡 ${nm(e.c[0])} is adopted`,
+    newcomer: e => `🌱 ${nm(e.c[0])} arrives as a newcomer`,
+    feed: () => '🍽️ Staff fill the food bowls',
+    clean: () => '🧹 Staff scoop litter boxes',
+    noise: e => `💥 Sudden loud noise: ${e.n} cat${e.n === 1 ? '' : 's'} startle${e.n === 1 ? 's' : ''}`,
+    visit: () => '🧑 A person enters the room',
+    sit: () => '🧘 A person comes in and sits on the floor',
+    bird: () => '🐦 Bird outside the window',
+    toyNew: () => '🧶 New toy dropped in',
+    vacuum: () => '🌀 The vacuum starts up',
+    missed: e => `\u{1F6AA} ${WHAT.en[e.what]} missed: the entrance stayed closed all day`,
+    waiting: e => `\u{1F6AA} ${WHAT.en[e.what]} is waiting: the entrance is closed`,
+    entranceOpen: () => '\u{1F6AA} The entrance door is opened',
+    entranceClosed: () => '\u{1F6AA} The entrance door is closed',
+    quietWillClose: () => '\u{1F6AA} The quiet-room doorway will close once the person is out',
+    quietOpen: () => '\u{1F6AA} The quiet-room doorway is opened',
+    quietClosed: () => '\u{1F6AA} The quiet-room doorway is closed',
+    effect: e => fxLine('en', e, ' effect: '),
+    fightBetween: e => `A fight between ${nm(e.c[0])} and ${nm(e.c[1])}`, fightInvolving: e => `A fight involving ${nm(e.c[0])}`,
+    budgetCut: e => `${e.n} x ${e.d} min is ${e.t} min/week and the budget is ${e.b}: cut back to ${e.n} x ${e.f} min`,
+    arrives: e => `${nm(e.c[0])} arrives in the shelter`, moved: e => `The ${e.obj.toLowerCase()} is moved`,
+    shoo: e => `You shoo the cats: ${e.c.map((c, i) => `${nm(c)} ${SHOOV.en[e.v[i]]}`).concat(e.ign ? [`${e.ign} cat${e.ign === 1 ? '' : 's'} ignore${e.ign === 1 ? 's' : ''} it`] : []).join(', ')}.`,
+    shooNone: () => 'You wave your hand; no cat is close enough to care.',
+    petLean: e => `You pet ${nm(e.c[0])}: ${g(e.c[0], 'he', 'she')} leans in.`,
+    petSlip: e => `${nm(e.c[0])} slips away.`,
+    visitorLeftPet: e => `🧑 The visitor leaves after ${e.n} min of petting`,
+    visitorLeft: () => '🧑 The visitor leaves, having petted no one',
+    settling: e => `🌱 ${nm(e.c[0])} is settling in`,
+    swat: e => `⚔️ ${nm(e.c[0])} swats at ${nm(e.c[1])}`,
+    win: e => `🏁 ${nm(e.c[0])} wins vs ${nm(e.c[1])}`,
+    visitorPets: e => `🤲 The visitor pets ${nm(e.c[0])}`,
+    holding: e => `🚽 ${nm(e.c[0])} is holding on: the boxes are dirty`,
+    play: e => `🐾 ${nm(e.c[0])} and ${nm(e.c[1])} play`,
+    groom: e => `💞 ${nm(e.c[0])} grooms ${nm(e.c[1])}`,
+    hides: e => `🫣 ${nm(e.c[0])} hides after the fright`,
+  },
+  ru: {
+    enters: e => `${nm(e.c[0])} ${g(e.c[0], 'входит', 'входит')} в колонию`,
+    removed: e => `${nm(e.c[0])} ${g(e.c[0], 'убран', 'убрана')} из колонии`,
+    toyWiggle: e => `Вы шевелите игрушкой: ${e.c.map((c, i) => `${nm(c)} ${TOYV.ru[e.v[i]](c)}`).concat(e.ign ? [`${e.ign} ${plRu(e.ign, 'кошка не обращает', 'кошки не обращают', 'кошек не обращают')} внимания`] : []).join(', ')}.`,
+    toyWiggleNone: () => 'Вы шевелите игрушкой; рядом нет ни одной кошки.',
+    toyPounce: e => `${nm(e.c[0])} прыгает на игрушку.`,
+    toyKnock: e => `${e.c[0] ? e.c[0].name : 'Кошка'} ${g(e.c[0], 'толкает', 'толкает')} игрушку; ${nm(e.c[1])} ${e.chase ? 'бросается в погоню' : 'подкрадывается'}.`,
+    adopted: e => `🏡 ${nm(e.c[0])}: ${g(e.c[0], 'нашёл', 'нашла')} дом`,
+    newcomer: e => `🌱 ${nm(e.c[0])}: ${g(e.c[0], 'новенький', 'новенькая')} в приюте`,
+    feed: () => '🍽️ Сотрудники наполняют миски',
+    clean: () => '🧹 Сотрудники чистят лотки',
+    noise: e => `💥 Внезапный громкий шум: ${plRu(e.n, 'вздрагивает', 'вздрагивают', 'вздрагивают')} ${e.n} ${plRu(e.n, 'кошка', 'кошки', 'кошек')}`,
+    visit: () => '🧑 В комнату входит человек',
+    sit: () => '🧘 Человек входит и садится на пол',
+    bird: () => '🐦 Птица за окном',
+    toyNew: () => '🧶 Новая игрушка',
+    vacuum: () => '🌀 Включается пылесос',
+    missed: e => `\u{1F6AA} ${WHAT.ru[e.what]} пропущен: вход весь день был закрыт`,
+    waiting: e => `\u{1F6AA} ${WHAT.ru[e.what]} ждёт: вход закрыт`,
+    entranceOpen: () => '\u{1F6AA} Входная дверь открыта',
+    entranceClosed: () => '\u{1F6AA} Входная дверь закрыта',
+    quietWillClose: () => '\u{1F6AA} Проход в тихую комнату закроется, когда человек выйдет',
+    quietOpen: () => '\u{1F6AA} Проход в тихую комнату открыт',
+    quietClosed: () => '\u{1F6AA} Проход в тихую комнату закрыт',
+    effect: e => fxLine('ru', e, ', эффект: '),
+    fightBetween: e => `Драка: ${nm(e.c[0])} и ${nm(e.c[1])}`, fightInvolving: e => `Драка с участием ${nm(e.c[0])}`,
+    budgetCut: e => `${e.n} x ${e.d} мин = ${e.t} мин в неделю при лимите ${e.b}: сокращено до ${e.n} x ${e.f} мин`,
+    arrives: e => `${nm(e.c[0])} ${g(e.c[0], 'прибыл', 'прибыла')} в приют`, moved: e => `Перемещено: ${tr(e.obj).toLowerCase()}`,
+    shoo: e => `Вы прогоняете кошек: ${e.c.map((c, i) => `${nm(c)} ${SHOOV.ru[e.v[i]](c)}`).concat(e.ign ? [`${e.ign} ${plRu(e.ign, 'кошка не обращает', 'кошки не обращают', 'кошек не обращают')} внимания`] : []).join(', ')}.`,
+    shooNone: () => 'Вы машете рукой; рядом нет ни одной кошки.',
+    petLean: e => `Вы гладите ${nm(e.c[0])}: ${g(e.c[0], 'он', 'она')} ласкается.`,
+    petSlip: e => `${nm(e.c[0])} ${g(e.c[0], 'ускользает', 'ускользает')}.`,
+    visitorLeftPet: e => `🧑 Гость уходит после ${e.n} ${plRu(e.n, 'минуты', 'минут', 'минут')} поглаживаний`,
+    visitorLeft: () => '🧑 Гость уходит, никого не погладив',
+    settling: e => `🌱 ${nm(e.c[0])} ${g(e.c[0], 'осваивается', 'осваивается')}`,
+    swat: e => `⚔️ ${nm(e.c[0])} бьёт лапой ${nm(e.c[1])}`,
+    win: e => `🏁 ${nm(e.c[0])} ${g(e.c[0], 'победил', 'победила')} ${nm(e.c[1])}`,
+    visitorPets: e => `🤲 Гость гладит ${nm(e.c[0])}`,
+    holding: e => `🚽 ${nm(e.c[0])} ${g(e.c[0], 'терпит', 'терпит')}: лотки грязные`,
+    play: e => `🐾 ${nm(e.c[0])} и ${nm(e.c[1])} играют`,
+    groom: e => `💞 ${nm(e.c[0])} вылизывает ${nm(e.c[1])}`,
+    hides: e => `🫣 ${nm(e.c[0])} прячется после испуга`,
+  },
+  he: {
+    enters: e => `${nm(e.c[0])} ${g(e.c[0], 'מצטרף', 'מצטרפת')} למושבה`,
+    removed: e => `${nm(e.c[0])} ${g(e.c[0], 'הוצא', 'הוצאה')} מהמושבה`,
+    toyWiggle: e => `את/ה מנענע/ת צעצוע: ${e.c.map((c, i) => `${nm(c)} ${TOYV.he[e.v[i]](c)}`).concat(e.ign ? [e.ign === 1 ? 'חתול אחד מתעלם' : `${e.ign} חתולים מתעלמים`] : []).join(', ')}.`,
+    toyWiggleNone: () => 'את/ה מנענע/ת צעצוע; אף חתול לא קרוב מספיק כדי לשים לב.',
+    toyPounce: e => `${nm(e.c[0])} ${g(e.c[0], 'מזנק', 'מזנקת')} על הצעצוע.`,
+    toyKnock: e => `${e.c[0] ? e.c[0].name : 'חתול'} ${g(e.c[0], 'דוחף', 'דוחפת')} את הצעצוע; ${nm(e.c[1])} ${e.chase ? g(e.c[1], 'רודף אחריו', 'רודפת אחריו') : g(e.c[1], 'מתגנב אליו', 'מתגנבת אליו')}.`,
+    adopted: e => `🏡 ${nm(e.c[0])} ${g(e.c[0], 'אומץ', 'אומצה')}`,
+    newcomer: e => `🌱 ${nm(e.c[0])} ${g(e.c[0], 'מגיע כחתול חדש', 'מגיעה כחתולה חדשה')}`,
+    feed: () => '🍽️ הצוות ממלא את קערות האוכל',
+    clean: () => '🧹 הצוות מנקה את ארגזי החול',
+    noise: e => `💥 רעש חזק פתאומי: ${e.n === 1 ? 'חתול אחד נבהל' : `${e.n} חתולים נבהלים`}`,
+    visit: () => '🧑 אדם נכנס לחדר',
+    sit: () => '🧘 אדם נכנס ומתיישב על הרצפה',
+    bird: () => '🐦 ציפור מחוץ לחלון',
+    toyNew: () => '🧶 צעצוע חדש',
+    vacuum: () => '🌀 השואב מופעל',
+    missed: e => `\u{1F6AA} ${WHAT.he[e.what]} בוטל/ה: הכניסה נשארה סגורה כל היום`,
+    waiting: e => `\u{1F6AA} ${WHAT.he[e.what]} ממתין/ה: הכניסה סגורה`,
+    entranceOpen: () => '\u{1F6AA} דלת הכניסה נפתחה',
+    entranceClosed: () => '\u{1F6AA} דלת הכניסה נסגרה',
+    quietWillClose: () => '\u{1F6AA} הפתח לחדר השקט ייסגר כשהאדם ייצא',
+    quietOpen: () => '\u{1F6AA} הפתח לחדר השקט נפתח',
+    quietClosed: () => '\u{1F6AA} הפתח לחדר השקט נסגר',
+    effect: e => fxLine('he', e, ', השפעה: '),
+    fightBetween: e => `קטטה בין ${nm(e.c[0])} ל${nm(e.c[1])}`, fightInvolving: e => `קטטה עם ${nm(e.c[0])}`,
+    budgetCut: e => `${e.n} x ${e.d} דק׳ הם ${e.t} דק׳ בשבוע והמכסה ${e.b}: קוצר ל־${e.n} x ${e.f} דק׳`,
+    arrives: e => `${nm(e.c[0])} ${g(e.c[0], 'הגיע', 'הגיעה')} למקלט`, moved: e => `${tr(e.obj)} הוזז`,
+    shoo: e => `את/ה מגרש/ת את החתולים: ${e.c.map((c, i) => `${nm(c)} ${SHOOV.he[e.v[i]](c)}`).concat(e.ign ? [e.ign === 1 ? 'חתול אחד מתעלם' : `${e.ign} חתולים מתעלמים`] : []).join(', ')}.`,
+    shooNone: () => 'את/ה מנופף/ת ביד; אף חתול לא קרוב מספיק.',
+    petLean: e => `את/ה מלטף/ת את ${nm(e.c[0])}: ${g(e.c[0], 'הוא נצמד', 'היא נצמדת')}.`,
+    petSlip: e => `${nm(e.c[0])} ${g(e.c[0], 'חומק', 'חומקת')}.`,
+    visitorLeftPet: e => `🧑 המבקר עוזב אחרי ${e.n === 1 ? 'דקה אחת' : `${e.n} דקות`} של ליטוף`,
+    visitorLeft: () => '🧑 המבקר עוזב בלי ללטף אף אחד',
+    settling: e => `🌱 ${nm(e.c[0])} ${g(e.c[0], 'מתאקלם', 'מתאקלמת')}`,
+    swat: e => `⚔️ ${nm(e.c[0])} ${g(e.c[0], 'מכה', 'מכה')} בכפה את ${nm(e.c[1])}`,
+    win: e => `🏁 ${nm(e.c[0])} ${g(e.c[0], 'מנצח', 'מנצחת')} את ${nm(e.c[1])}`,
+    visitorPets: e => `🤲 המבקר מלטף את ${nm(e.c[0])}`,
+    holding: e => `🚽 ${nm(e.c[0])} ${g(e.c[0], 'מתאפק', 'מתאפקת')}: הארגזים מלוכלכים`,
+    play: e => `🐾 ${nm(e.c[0])} ו${nm(e.c[1])} משחקים`,
+    groom: e => `💞 ${nm(e.c[0])} ${g(e.c[0], 'מלקק', 'מלקקת')} את ${nm(e.c[1])}`,
+    hides: e => `🫣 ${nm(e.c[0])} ${g(e.c[0], 'מסתתר', 'מסתתרת')} אחרי הבהלה`,
+  },
+};
+
+
+// ---------------------------------------------------------------- the interface sentences (stage 2)
+// TR: every other visible string, keyed by its English template ({x} placeholders). A value is a template or a
+// function of the parameters (Russian plurals, Hebrew agreement with the cat's sex). tr(en, p) falls back to English.
+const ruN = (n, one, few, many) => `${n} ${plRu(n, one, few, many)}`;
+const heN = (n, one, many) => n === 1 ? one : `${n} ${many}`;
+const ruTimes = p => p.n === 1 ? p.a : p.n === 2 ? `${p.a} и ${p.b}` : `${p.a}–${p.b}`;
+const heTimes = p => p.n === 1 ? p.a : p.n === 2 ? `${p.a} ו־${p.b}` : `${p.a}–${p.b}`;
+const TR = {
+  ru: {
+    // chrome
+    'Start the clock (Space)': 'Запустить время (пробел)', 'Stop the clock (Space)': 'Остановить время (пробел)',
+    'Speed, 0.25x to 16x': 'Скорость, от 0.25x до 16x', 'How fast time passes in the shelter': 'Как быстро идёт время в приюте',
+    'Charts and numbers for the whole shelter': 'Графики и цифры по всему приюту', 'Back to the room': 'Назад в комнату',
+    'How Whisker Hall works and how to play it': 'Как устроен Whisker Hall и как в него играть',
+    'Controls': 'Планы', 'Feeding, litter, visitors and vacuum': 'Корм, лотки, гости и пылесос',
+    'Restart: start again with a new group of cats. The current shelter is lost.': 'Заново: начать с новыми кошками. Текущий приют будет потерян.',
+    'Restart the shelter?': 'Начать приют заново?', 'Restart with new cats?': 'Начать с новыми кошками?', 'Yes': 'Да', 'No': 'Нет',
+    // plan chips and lines
+    '{n} meals/day': p => `${ruN(p.n, 'раз', 'раза', 'раз')}/день`, '{n} cleans/day': p => `${ruN(p.n, 'раз', 'раза', 'раз')}/день`,
+    'No meals': 'Без корма', 'No cleaning': 'Без уборки', 'No visits': 'Без гостей', 'No vacuuming': 'Без пылесоса',
+    'No meals planned': 'Кормлений нет', 'No cleaning planned': 'Уборок нет', 'No visits planned': 'Визитов нет', 'No vacuuming planned': 'Уборок пылесосом нет',
+    '{n} × {m} min/day': '{n}×{m} мин/день', '{n} × {m} min/week': '{n} × {m} мин/нед', '{n} × {m} min/wk': '{n} × {m} мин/нед',
+    '{n} meals/day · {times}': p => `${ruN(p.n, 'кормление', 'кормления', 'кормлений')} в день · ${ruTimes(p)}`,
+    '{n} cleans/day · {times}': p => `${ruN(p.n, 'уборка', 'уборки', 'уборок')} в день · ${ruTimes(p)}`,
+    '{n} visits of {m} min/day': p => `${ruN(p.n, 'визит', 'визита', 'визитов')} по ${p.m} мин в день`,
+    '{n} sessions of {m} min/week': p => `${ruN(p.n, 'сеанс', 'сеанса', 'сеансов')} по ${p.m} мин в неделю`,
+    '{u} of {b} min used': 'занято {u} из {b} мин',
+    ' Shortened to fit staff time.': ' Сокращено под время персонала.',
+    'Feeding': 'Кормление', 'Litter cleaning': 'Уборка лотков', 'Visitors': 'Гости', 'Vacuum': 'Пылесос',
+    'The cats get the same amount of food every day. You choose how many meals it is split into, and when. A staff member comes in to fill the bowls, and the cats react to them as to any person.':
+      'Кошки получают одно и то же количество корма каждый день. Вы выбираете, на сколько кормлений его делить и когда. Сотрудник приходит наполнить миски, и кошки реагируют на него, как на любого человека.',
+    'A staff member comes in to fill the bowls; the cats react to them as to any person. The day’s food is shared out evenly over the meals. Click to change the meal times.':
+      'Сотрудник приходит наполнить миски; кошки реагируют на него, как на любого человека. Дневной корм делится поровну между кормлениями. Нажмите, чтобы изменить время.',
+    'The litter boxes are scooped at the times you set. You choose how many cleans/day, and when. A staff member comes in to scoop the litter, and the cats react to them as to any person.':
+      'Лотки чистят в заданное вами время. Вы выбираете, сколько уборок в день и когда. Сотрудник приходит почистить лотки, и кошки реагируют на него, как на любого человека.',
+    'A staff member comes in to scoop every litter box; the cats react to them as to any person. Click to change the cleaning times.':
+      'Сотрудник приходит почистить все лотки; кошки реагируют на него, как на любого человека. Нажмите, чтобы изменить время уборки.',
+    'Your staff have {n} minutes a day for visits and litter rounds together. Visitors are the people who sit, pet and play with the cats.':
+      p => `У персонала ${ruN(p.n, 'минута', 'минуты', 'минут')} в день на визиты и уборку лотков вместе. Гости это люди, которые сидят с кошками, гладят их и играют с ними.`,
+    'Visitors are the people who sit, pet and play with the cats. They come in to meet the cats, spaced evenly between {a} and {b}. Friendly cats go to them; shy cats keep away. Click to plan the visits.':
+      'Гости это люди, которые сидят с кошками, гладят их и играют с ними. Они приходят равномерно между {a} и {b}. Общительные кошки идут к ним, робкие держатся в стороне. Нажмите, чтобы спланировать визиты.',
+    'Vacuuming gets {n} minutes/week in total. You choose how to split it. A staff member comes in to vacuum, and the cats react to them as to any person.':
+      p => `На пылесос всего ${ruN(p.n, 'минута', 'минуты', 'минут')} в неделю. Вы выбираете, как их разделить. Сотрудник приходит с пылесосом, и кошки реагируют на него, как на любого человека.`,
+    'A staff member comes in to vacuum; the cats react to them as to any person. The floor has to be vacuumed. It is loud and the cats scatter. Sessions fall on separate days, between {a} and {b}. Click to plan them.':
+      'Сотрудник приходит с пылесосом; кошки реагируют на него, как на любого человека. Пол нужно пылесосить. Это громко, и кошки разбегаются. Сеансы приходятся на разные дни, между {a} и {b}. Нажмите, чтобы спланировать.',
+    'Weekly vacuum allowance': 'Недельный лимит пылесоса',
+    'Blue dots: meals already served': 'Синие точки: уже было', 'Green dot: the next meal': 'Зелёная точка: следующее',
+    'Blue dots: cleans already done': 'Синие точки: уже было', 'Green dot: the next clean': 'Зелёная точка: следующая',
+    'White box: visiting hours': 'Белая полоса: часы визитов', 'Blue marks: the visits': 'Синие метки: визиты',
+    'Blue days: vacuum sessions': 'Синие дни: сеансы', 'Outlined day: the current day': 'В рамке: сегодня',
+    'The outlined day is the current day.': 'День в рамке — сегодня.', 'The small pointer marks the time now.': 'Маленькая стрелка — текущее время.',
+    'Close (Esc)': 'Закрыть (Esc)', 'Close the {x} editor': 'Закрыть: {x}',
+    'Meals/day': 'Кормлений/день', 'Cleans/day': 'Уборок/день', 'Sessions/week': 'Сеансов/нед', 'Visits/day': 'Визитов/день', 'Minutes each': 'Минут каждый',
+    'Window start hour': 'Час начала', 'Window end hour': 'Час конца', 'From': 'С', 'to': 'до',
+    'Meal {i} time': 'Время кормления {i}', 'Clean {i} time': 'Время уборки {i}',
+    'Staff time per day: {n} min': 'Время персонала в день: {n} мин', 'With the cats: {n} min': 'С кошками: {n} мин',
+    'Cleaning litter: {n} min': 'Уборка лотков: {n} мин', 'Unused: {n} min': 'Свободно: {n} мин',
+    'Each litter round takes {n} min away from time with the cats.': 'Каждая уборка лотков отнимает {n} мин у времени с кошками.',
+    'Time for visits: {n} min/day': 'Время на визиты: {n} мин/день', 'Used: {a} × {b} = {c} min · Free: {d} min': 'Занято: {a} × {b} = {c} мин · Свободно: {d} мин',
+    'Shortened to fit staff time.': 'Сокращено под время персонала.', 'You chose {a} min each; the litter rounds leave {b}.': 'Вы выбрали по {a} мин; после уборки лотков остаётся {b}.',
+    'You can split this time into as many or as few visits as you like.': 'Это время можно разделить на любое число визитов.',
+    'Mon': 'Пн', 'Tue': 'Вт', 'Wed': 'Ср', 'Thu': 'Чт', 'Fri': 'Пт', 'Sat': 'Сб', 'Sun': 'Вс',
+    // goals chart
+    'Average stress': 'Средний стресс', 'Conflict': 'Конфликты', 'Friendly contact': 'Дружба', 'Hiding': 'Прячутся',
+    'The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.':
+      'Оценка стресса кошки (CSS), средняя по всем: 1 — спокойна, 7 — в ужасе. Измеряется каждые 5 минут. Чем ниже, тем лучше.',
+    'Every fight and every single swat between two cats, counted as it happens. Lower is better.': 'Каждая драка и каждый удар лапой между кошками. Чем ниже, тем лучше.',
+    'Every time one cat starts grooming, playing with or greeting another, counted as it happens. Higher is better.':
+      'Каждый раз, когда кошка начинает вылизывать другую, играть с ней или здороваться. Чем выше, тем лучше.',
+    'The share of cats in a hiding place, checked every 5 minutes. Lower is better.': 'Доля кошек в укрытии, проверяется каждые 5 минут. Чем ниже, тем лучше.',
+    'fights and swats': 'драки и удары', 'friendly contacts': 'дружеские контакты',
+    'Most stressed': 'Больше всех стресса', 'Most in fights': 'Чаще всех в драках', 'Most friendly': 'Самые дружелюбные', 'Most hidden': 'Чаще всех прячутся',
+    'none yet': 'пока нет', 'Select {name}': 'Выбрать: {name}', 'Open full stats': 'Вся статистика',
+    'The statistics view, on these goals over the same span': 'Статистика по этим целям за тот же период',
+    'Close the enlarged chart (Esc)': 'Закрыть большой график (Esc)', 'Close the enlarged chart': 'Закрыть большой график',
+    'Time window': 'Период', 'Counts written per': 'Единица счёта',
+    'The stretch of time the chart, the goal boxes and the top cats cover': 'Отрезок времени для графика, целей и лучших кошек',
+    'The unit fights and friendly contacts are counted in': 'В чём считаются драки и дружеские контакты',
+    'Click to enlarge the chart': 'Нажмите, чтобы увеличить график',
+    '{name}: {v} ({unit} {rate}, averaged over {win})': '{name}: {v} ({unit} {rate}, в среднем за период «{win}»)', '{name}: {v} (now)': '{name}: {v} (сейчас)',
+    '{head} over {win}: {list}.': '{head} за период «{win}»: {list}.', 'Click to show it on the chart.': 'Нажмите, чтобы показать на графике.', 'Click to hide it on the chart.': 'Нажмите, чтобы скрыть на графике.',
+    'The top cats on each goal, {span} (the span the chart shows). Click a cat to pick it.': 'Лучшие кошки по каждой цели, период «{span}» (как на графике). Нажмите на кошку, чтобы выбрать её.',
+    '{name}: none yet': '{name}: пока нет', '{i}. {name}: {goal} {v}. Click to pick {name}.': '{i}. {name}: {goal} {v}. Нажмите, чтобы выбрать.',
+    '{goal}, number {i}: {name}, {v}': '{goal}, место {i}: {name}, {v}',
+    'No events yet. Meals, litter rounds, visits and fights are listed here as they happen.': 'Событий пока нет. Здесь появятся кормления, уборки, визиты и драки.',
+    // readout
+    'Neurotic': 'Тревога', 'Extraverted': 'Живость', 'Dominant': 'Напор', 'Impulsive': 'Импульс', 'Agreeable': 'Мягкость',
+    'Hunger': 'Голод', 'Thirst': 'Жажда', 'Bladder': 'Туалет', 'Sleepiness': 'Сонливость', 'Stress': 'Стресс', 'Irritation': 'Злость', 'Social': 'Общение', 'Play': 'Игра',
+    'idle': 'ничего', 'walking': 'гуляет', 'tearing about': 'носится', 'sleeping': 'сон', 'resting': 'отдых', 'grooming': 'умывание', 'exploring': 'исследует',
+    'eating': 'еда', 'drinking': 'питьё', 'litter box': 'лоток', 'hiding': 'прячется', 'on cat tree': 'на домике', 'at the window': 'у окна', 'scratching': 'когтеточка',
+    'toy play': 'игра с игрушкой', 'wants a person': 'ищет человека', 'greeting': 'приветствие', 'playing with': 'играет с', 'playing': 'игра', 'stalking': 'подкрадывается',
+    'chasing': 'гонится', 'hissing at': 'шипит на', 'hissing': 'шипит', 'fighting': 'драка', 'fleeing': 'убегает', 'moving away from': 'уходит от', 'moving away': 'уходит',
+    'waiting for food': 'ждёт еду', 'waiting for litter box': 'ждёт лоток', 'waiting for mealtime': 'ждёт кормления', 'queueing for a bowl': 'в очереди к миске',
+    // room
+    'Main room': 'Главная комната', 'Quiet room': 'Тихая комната', 'Click to pet': 'Нажмите, чтобы погладить',
+    'Quiet-room door: open. Click to close': 'Дверь в тихую комнату открыта. Нажмите, чтобы закрыть', 'Quiet-room door: shut. Click to open': 'Дверь в тихую комнату закрыта. Нажмите, чтобы открыть',
+    'Toy: drag it and the cats chase it': 'Игрушка: тащите её, и кошки погонятся', 'Object': 'Предмет',
+    'Food bowl': 'Миска с кормом', 'Water bowl': 'Миска с водой', 'Litter box': 'Лоток', 'Bed': 'Лежанка', 'Cat tree': 'Домик', 'Hide box': 'Укрытие', 'Scratching post': 'Когтеточка', 'Window': 'Окно',
+    'Litter box: {w} ({p}% soiled)': 'Лоток: {w} (загрязнён на {p}%)', 'clean': 'чистый', 'used': 'использован', 'dirty': 'грязный',
+    'Event {n} in the event log': 'Событие {n} в журнале', 'Visitor': 'Гость', 'Staff: filling the bowls': 'Персонал: наполняет миски',
+    'Staff: scooping the litter': 'Персонал: чистит лотки', 'Staff: vacuuming': 'Персонал: пылесосит',
+    // guide
+    'Back': 'Назад', 'Next': 'Далее', 'Show room': 'Комната', 'Page {a} of {b}': 'Стр. {a} из {b}',
+    // stats
+    'Trends': 'Тренды', 'Per cat': 'По кошкам', 'Distribution': 'Разброс', 'Relationships': 'Отношения', 'Colony table': 'Таблица',
+    'Page: {p}': 'Стр.: {p}', 'Metrics {a} of {b}': 'Метрики {a} из {b}', 'Metrics': 'Метрики', 'Metrics: {a} of {b}': 'Метрики: {a} из {b}',
+    'Cats: {a} of {b}': 'Кошки: {a} из {b}', 'Legend': 'Легенда', 'Shelter aggregate': 'Весь приют', '{a} of {b}': '{a} из {b}',
+    'Every 5 min': 'Каждые 5 мин', 'Every 30 min': 'Каждые 30 мин', 'Every hour': 'Каждый час', 'Every 6 hours': 'Каждые 6 ч', 'Every day': 'Каждый день',
+    'Last 6 hours': 'Последние 6 ч', 'Last 24 hours': 'Последние 24 ч', 'Last 3 days': 'Последние 3 дня', 'Last 7 days': 'Последние 7 дней', 'Everything': 'Всё время',
+    'Page {a}': 'Стр. {a}', 'Rows {a}': 'Строки {a}', 'Page': 'Страница', 'Cat': 'Кошка',
+    'Stress spread': 'Разброс стресса', 'Active by hour': 'Активность по часам', 'Shelter totals': 'Итоги приюта',
+    'Shelter totals  ({a} of {b})': 'Итоги приюта  ({a} из {b})', '{name}  cat {a} of {b}': '{name}  кошка {a} из {b}',
+    'Cat-Stress-Score across the colony  cats': 'Стресс (CSS) по колонии  кошек', 'Active by hour  share of cats': 'Активность по часам  доля кошек',
+    '{m} per cat  ({a} of {b})': '{m} по кошкам  ({a} из {b})',
+    'Cat-Stress-Score': 'Стресс (CSS)', 'Social need': 'Общение', 'Play need': 'Игра', 'Cats hiding': 'Прячутся', 'Cats queueing': 'В очереди',
+    'Friendly interaction': 'Дружеское', 'Hostile interaction': 'Враждебное', 'Fights per day': 'Драк в день', 'Hisses per day': 'Шипений в день',
+    'Swats per day': 'Ударов в день', 'Intakes per day': 'Приёмов в день', 'Adoptions per day': 'Пристроено в день', 'Cats in the shelter': 'Кошек в приюте',
+    'Sleep': 'Сон', 'Rest': 'Отдых', 'Groom': 'Уход', 'Hide': 'Укрытие', 'Eat': 'Еда', 'Agonistic': 'Агрессия', 'Meals': 'Еда', 'Litter': 'Лоток',
+    'Eat bouts': 'Подходы к еде', 'Fight starts': 'Начал драк',
+    'Per-day rate, after at least 24 hours of observation.': 'В день, после не менее 24 часов наблюдения.',
+    'Amount so far, over {h} hours of observation. After 24 hours this becomes a per-day rate.': 'Всего за {h} ч наблюдения. Через 24 часа станет значением в день.',
+    'Days run': 'Дней прошло', 'Fights': 'Драки', 'Swats': 'Удары', 'Hisses': 'Шипения', 'Mean fight length s': 'Драка в ср., с', 'Longest fight s': 'Макс. драка, с',
+    'Litter uses': 'Посещений лотка', 'Bowl crowding mean': 'У мисок, ср.', 'Bowl crowding max': 'У мисок, макс.', 'Stuck events': 'Застревания',
+    'Intakes': 'Приём', 'Adoptions': 'Пристроено', 'Litter soil, mean': 'Грязь, ср.', 'Dirtiest box': 'Грязнейший', 'Cleanest box': 'Чистейший',
+    // log lines raised by the interface
+    'The shelter is full: no newcomer admitted': 'Приют полон: новичок не принят',
+    'count': 'число', '% of cats': '% кошек', 'per day': 'в день', 'cats': 'кошек', 'D': 'Д',
+  },
+  he: {
+    'Start the clock (Space)': 'הפעלת הזמן (רווח)', 'Stop the clock (Space)': 'עצירת הזמן (רווח)',
+    'Speed, 0.25x to 16x': 'מהירות, 0.25x עד 16x', 'How fast time passes in the shelter': 'כמה מהר עובר הזמן במקלט',
+    'Charts and numbers for the whole shelter': 'גרפים ונתונים לכל המקלט', 'Back to the room': 'חזרה לחדר',
+    'How Whisker Hall works and how to play it': 'איך Whisker Hall עובד ואיך משחקים בו',
+    'Controls': 'הגדרות', 'Feeding, litter, visitors and vacuum': 'האכלה, ארגזי חול, מבקרים ושואב',
+    'Restart: start again with a new group of cats. The current shelter is lost.': 'מחדש: התחלה עם חתולים חדשים. המקלט הנוכחי יאבד.',
+    'Restart the shelter?': 'להתחיל את המקלט מחדש?', 'Restart with new cats?': 'להתחיל עם חתולים חדשים?', 'Yes': 'כן', 'No': 'לא',
+    '{n} meals/day': p => p.n === 1 ? 'ארוחה ליום' : `${p.n} ארוחות ליום`, '{n} cleans/day': p => p.n === 1 ? 'ניקוי ליום' : `${p.n} ניקויים ליום`,
+    'No meals': 'בלי ארוחות', 'No cleaning': 'בלי ניקוי', 'No visits': 'בלי ביקורים', 'No vacuuming': 'בלי שאיבה',
+    'No meals planned': 'לא מתוכננות ארוחות', 'No cleaning planned': 'לא מתוכנן ניקוי', 'No visits planned': 'לא מתוכננים ביקורים', 'No vacuuming planned': 'לא מתוכננת שאיבה',
+    '{n} × {m} min/day': '{n} × {m} דק׳ ליום', '{n} × {m} min/week': '{n} × {m} דק׳ לשבוע', '{n} × {m} min/wk': '{n} × {m} דק׳/שב׳',
+    '{n} meals/day · {times}': p => `${heN(p.n, 'ארוחה אחת', 'ארוחות')} ביום · ${heTimes(p)}`,
+    '{n} cleans/day · {times}': p => `${heN(p.n, 'ניקוי אחד', 'ניקויים')} ביום · ${heTimes(p)}`,
+    '{n} visits of {m} min/day': p => `${heN(p.n, 'ביקור אחד', 'ביקורים')} של ${p.m} דק׳ ביום`,
+    '{n} sessions of {m} min/week': p => `${heN(p.n, 'סבב אחד', 'סבבים')} של ${p.m} דק׳ בשבוע`,
+    '{u} of {b} min used': 'נוצלו {u} מתוך {b} דק׳',
+    ' Shortened to fit staff time.': ' קוצר לפי זמן הצוות.',
+    'Feeding': 'האכלה', 'Litter cleaning': 'ניקוי ארגזי חול', 'Visitors': 'מבקרים', 'Vacuum': 'שואב',
+    'The cats get the same amount of food every day. You choose how many meals it is split into, and when. A staff member comes in to fill the bowls, and the cats react to them as to any person.':
+      'החתולים מקבלים אותה כמות אוכל בכל יום. אתם בוחרים לכמה ארוחות לחלק אותה ומתי. איש צוות נכנס למלא את הקערות, והחתולים מגיבים אליו כמו לכל אדם.',
+    'A staff member comes in to fill the bowls; the cats react to them as to any person. The day’s food is shared out evenly over the meals. Click to change the meal times.':
+      'איש צוות נכנס למלא את הקערות; החתולים מגיבים אליו כמו לכל אדם. האוכל היומי מתחלק שווה בין הארוחות. לחצו כדי לשנות את השעות.',
+    'The litter boxes are scooped at the times you set. You choose how many cleans/day, and when. A staff member comes in to scoop the litter, and the cats react to them as to any person.':
+      'ארגזי החול מנוקים בשעות שקבעתם. אתם בוחרים כמה ניקויים ביום ומתי. איש צוות נכנס לנקות, והחתולים מגיבים אליו כמו לכל אדם.',
+    'A staff member comes in to scoop every litter box; the cats react to them as to any person. Click to change the cleaning times.':
+      'איש צוות נכנס לנקות את כל ארגזי החול; החתולים מגיבים אליו כמו לכל אדם. לחצו כדי לשנות את שעות הניקוי.',
+    'Your staff have {n} minutes a day for visits and litter rounds together. Visitors are the people who sit, pet and play with the cats.':
+      'לצוות יש {n} דקות ביום לביקורים ולניקוי ארגזי החול יחד. מבקרים הם האנשים שיושבים עם החתולים, מלטפים אותם ומשחקים איתם.',
+    'Visitors are the people who sit, pet and play with the cats. They come in to meet the cats, spaced evenly between {a} and {b}. Friendly cats go to them; shy cats keep away. Click to plan the visits.':
+      'מבקרים הם האנשים שיושבים עם החתולים, מלטפים אותם ומשחקים איתם. הם מגיעים במרווחים שווים בין {a} ל־{b}. חתולים חברותיים ניגשים אליהם; ביישנים מתרחקים. לחצו כדי לתכנן ביקורים.',
+    'Vacuuming gets {n} minutes/week in total. You choose how to split it. A staff member comes in to vacuum, and the cats react to them as to any person.':
+      'לשאיבת אבק יש {n} דקות בשבוע בסך הכול. אתם בוחרים איך לחלק אותן. איש צוות נכנס לשאוב, והחתולים מגיבים אליו כמו לכל אדם.',
+    'A staff member comes in to vacuum; the cats react to them as to any person. The floor has to be vacuumed. It is loud and the cats scatter. Sessions fall on separate days, between {a} and {b}. Click to plan them.':
+      'איש צוות נכנס לשאוב; החתולים מגיבים אליו כמו לכל אדם. צריך לשאוב את הרצפה. זה רועש והחתולים מתפזרים. הסבבים בימים נפרדים, בין {a} ל־{b}. לחצו כדי לתכנן.',
+    'Weekly vacuum allowance': 'מכסת שאיבה שבועית',
+    'Blue dots: meals already served': 'נקודות כחולות: כבר הוגשו', 'Green dot: the next meal': 'נקודה ירוקה: הארוחה הבאה',
+    'Blue dots: cleans already done': 'נקודות כחולות: כבר נוקה', 'Green dot: the next clean': 'נקודה ירוקה: הניקוי הבא',
+    'White box: visiting hours': 'מלבן לבן: שעות ביקור', 'Blue marks: the visits': 'סימנים כחולים: הביקורים',
+    'Blue days: vacuum sessions': 'ימים כחולים: סבבי שאיבה', 'Outlined day: the current day': 'יום ממוסגר: היום',
+    'The outlined day is the current day.': 'היום הממוסגר הוא היום.', 'The small pointer marks the time now.': 'הסמן הקטן מראה את השעה עכשיו.',
+    'Close (Esc)': 'סגירה (Esc)', 'Close the {x} editor': 'סגירת העורך: {x}',
+    'Meals/day': 'ארוחות ביום', 'Cleans/day': 'ניקויים ביום', 'Sessions/week': 'סבבים בשבוע', 'Visits/day': 'ביקורים ביום', 'Minutes each': 'דקות לכל אחד',
+    'Window start hour': 'שעת התחלה', 'Window end hour': 'שעת סיום', 'From': 'מ־', 'to': 'עד',
+    'Meal {i} time': 'שעת ארוחה {i}', 'Clean {i} time': 'שעת ניקוי {i}',
+    'Staff time per day: {n} min': 'זמן צוות ביום: {n} דק׳', 'With the cats: {n} min': 'עם החתולים: {n} דק׳',
+    'Cleaning litter: {n} min': 'ניקוי ארגזים: {n} דק׳', 'Unused: {n} min': 'פנוי: {n} דק׳',
+    'Each litter round takes {n} min away from time with the cats.': 'כל סבב ניקוי לוקח {n} דק׳ מהזמן עם החתולים.',
+    'Time for visits: {n} min/day': 'זמן לביקורים: {n} דק׳ ביום', 'Used: {a} × {b} = {c} min · Free: {d} min': 'בשימוש: {a} × {b} = {c} דק׳ · פנוי: {d} דק׳',
+    'Shortened to fit staff time.': 'קוצר לפי זמן הצוות.', 'You chose {a} min each; the litter rounds leave {b}.': 'בחרתם {a} דק׳ לכל ביקור; אחרי הניקוי נשארות {b}.',
+    'You can split this time into as many or as few visits as you like.': 'אפשר לחלק את הזמן הזה לכמה ביקורים שרוצים.',
+    'Mon': 'ב׳', 'Tue': 'ג׳', 'Wed': 'ד׳', 'Thu': 'ה׳', 'Fri': 'ו׳', 'Sat': 'ש׳', 'Sun': 'א׳',
+    'Average stress': 'מתח ממוצע', 'Conflict': 'עימותים', 'Friendly contact': 'מגע חברותי', 'Hiding': 'הסתתרות',
+    'The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.':
+      'מדד המתח (CSS) של כל חתול, בממוצע: 1 רגוע, 7 מבוהל. נמדד כל 5 דקות. נמוך יותר עדיף.',
+    'Every fight and every single swat between two cats, counted as it happens. Lower is better.': 'כל קטטה וכל מכת כפה בין שני חתולים, נספרות כשהן קורות. נמוך יותר עדיף.',
+    'Every time one cat starts grooming, playing with or greeting another, counted as it happens. Higher is better.':
+      'כל פעם שחתול מתחיל ללקק, לשחק או לברך חתול אחר, נספר כשזה קורה. גבוה יותר עדיף.',
+    'The share of cats in a hiding place, checked every 5 minutes. Lower is better.': 'שיעור החתולים במחבוא, נבדק כל 5 דקות. נמוך יותר עדיף.',
+    'fights and swats': 'קטטות ומכות', 'friendly contacts': 'מגעים חברותיים',
+    'Most stressed': 'הכי לחוצים', 'Most in fights': 'הכי הרבה קטטות', 'Most friendly': 'הכי חברותיים', 'Most hidden': 'הכי מסתתרים',
+    'none yet': 'עדיין אין', 'Select {name}': 'בחירת {name}', 'Open full stats': 'כל הנתונים',
+    'The statistics view, on these goals over the same span': 'תצוגת הנתונים, על היעדים האלה באותו טווח',
+    'Close the enlarged chart (Esc)': 'סגירת הגרף המוגדל (Esc)', 'Close the enlarged chart': 'סגירת הגרף המוגדל',
+    'Time window': 'טווח זמן', 'Counts written per': 'יחידת ספירה',
+    'The stretch of time the chart, the goal boxes and the top cats cover': 'טווח הזמן של הגרף, היעדים והחתולים המובילים',
+    'The unit fights and friendly contacts are counted in': 'היחידה שבה נספרים קטטות ומגעים חברותיים',
+    'Click to enlarge the chart': 'לחצו להגדלת הגרף',
+    '{name}: {v} ({unit} {rate}, averaged over {win})': '{name}: {v} ({unit} {rate}, בממוצע על פני {win})', '{name}: {v} (now)': '{name}: {v} (עכשיו)',
+    '{head} over {win}: {list}.': '{head} ב{win}: {list}.', 'Click to show it on the chart.': 'לחצו כדי להציג בגרף.', 'Click to hide it on the chart.': 'לחצו כדי להסתיר בגרף.',
+    'The top cats on each goal, {span} (the span the chart shows). Click a cat to pick it.': 'החתולים המובילים בכל יעד, {span} (הטווח שבגרף). לחצו על חתול כדי לבחור בו.',
+    '{name}: none yet': '{name}: עדיין אין', '{i}. {name}: {goal} {v}. Click to pick {name}.': '{i}. {name}: {goal} {v}. לחצו לבחירה.',
+    '{goal}, number {i}: {name}, {v}': '{goal}, מקום {i}: {name}, {v}',
+    'No events yet. Meals, litter rounds, visits and fights are listed here as they happen.': 'אין עדיין אירועים. ארוחות, ניקויים, ביקורים וקטטות יופיעו כאן כשיקרו.',
+    'Neurotic': 'חרדתיות', 'Extraverted': 'מוחצנות', 'Dominant': 'דומיננטיות', 'Impulsive': 'דחפים', 'Agreeable': 'נעימות',
+    'Hunger': 'רעב', 'Thirst': 'צמא', 'Bladder': 'שלפוחית', 'Sleepiness': 'עייפות', 'Stress': 'מתח', 'Irritation': 'עצבנות', 'Social': 'חברה', 'Play': 'משחק',
+    'idle': 'בטלה', 'walking': 'הליכה', 'tearing about': 'השתוללות', 'sleeping': 'שינה', 'resting': 'מנוחה', 'grooming': 'ליקוק', 'exploring': 'סיור',
+    'eating': 'אכילה', 'drinking': 'שתייה', 'litter box': 'ארגז חול', 'hiding': 'הסתתרות', 'on cat tree': 'על עץ החתולים', 'at the window': 'ליד החלון', 'scratching': 'גירוד',
+    'toy play': 'משחק בצעצוע', 'wants a person': 'מחפש אדם', 'greeting': 'ברכה', 'playing with': 'משחק עם', 'playing': 'משחק', 'stalking': 'התגנבות',
+    'chasing': 'מרדף', 'hissing at': 'נשיפה על', 'hissing': 'נשיפה', 'fighting': 'קטטה', 'fleeing': 'בריחה', 'moving away from': 'התרחקות מ', 'moving away': 'התרחקות',
+    'waiting for food': 'המתנה לאוכל', 'waiting for litter box': 'המתנה לארגז', 'waiting for mealtime': 'המתנה לארוחה', 'queueing for a bowl': 'תור לקערה',
+    'Main room': 'החדר הראשי', 'Quiet room': 'החדר השקט', 'Click to pet': 'לחצו ללטף',
+    'Quiet-room door: open. Click to close': 'דלת החדר השקט פתוחה. לחצו לסגירה', 'Quiet-room door: shut. Click to open': 'דלת החדר השקט סגורה. לחצו לפתיחה',
+    'Toy: drag it and the cats chase it': 'צעצוע: גררו אותו והחתולים ירדפו', 'Object': 'חפץ',
+    'Food bowl': 'קערת אוכל', 'Water bowl': 'קערת מים', 'Litter box': 'ארגז חול', 'Bed': 'מיטה', 'Cat tree': 'עץ חתולים', 'Hide box': 'מחבוא', 'Scratching post': 'עמוד גירוד', 'Window': 'חלון',
+    'Litter box: {w} ({p}% soiled)': 'ארגז חול: {w} ({p}% מלוכלך)', 'clean': 'נקי', 'used': 'משומש', 'dirty': 'מלוכלך',
+    'Event {n} in the event log': 'אירוע {n} ביומן', 'Visitor': 'מבקר', 'Staff: filling the bowls': 'צוות: ממלא קערות',
+    'Staff: scooping the litter': 'צוות: מנקה ארגזים', 'Staff: vacuuming': 'צוות: שואב אבק',
+    'Back': 'הקודם', 'Next': 'הבא', 'Show room': 'לחדר', 'Page {a} of {b}': 'עמוד {a} מתוך {b}',
+    'Trends': 'מגמות', 'Per cat': 'לפי חתול', 'Distribution': 'התפלגות', 'Relationships': 'יחסים', 'Colony table': 'טבלה',
+    'Page: {p}': 'עמוד: {p}', 'Metrics {a} of {b}': 'מדדים {a} מתוך {b}', 'Metrics': 'מדדים', 'Metrics: {a} of {b}': 'מדדים: {a} מתוך {b}',
+    'Cats: {a} of {b}': 'חתולים: {a} מתוך {b}', 'Legend': 'מקרא', 'Shelter aggregate': 'כל המקלט', '{a} of {b}': '{a} מתוך {b}',
+    'Every 5 min': 'כל 5 דק׳', 'Every 30 min': 'כל 30 דק׳', 'Every hour': 'כל שעה', 'Every 6 hours': 'כל 6 שעות', 'Every day': 'כל יום',
+    'Last 6 hours': '6 שעות אחרונות', 'Last 24 hours': '24 שעות אחרונות', 'Last 3 days': '3 ימים אחרונים', 'Last 7 days': '7 ימים אחרונים', 'Everything': 'הכול',
+    'Page {a}': 'עמוד {a}', 'Rows {a}': 'שורות {a}', 'Page': 'עמוד', 'Cat': 'חתול',
+    'Stress spread': 'פיזור מתח', 'Active by hour': 'פעילות לפי שעה', 'Shelter totals': 'סיכומי המקלט',
+    'Shelter totals  ({a} of {b})': 'סיכומי המקלט  ({a} מתוך {b})', '{name}  cat {a} of {b}': '{name}  חתול {a} מתוך {b}',
+    'Cat-Stress-Score across the colony  cats': 'מדד מתח במושבה  חתולים', 'Active by hour  share of cats': 'פעילות לפי שעה  שיעור החתולים',
+    '{m} per cat  ({a} of {b})': '{m} לפי חתול  ({a} מתוך {b})',
+    'Cat-Stress-Score': 'מדד מתח (CSS)', 'Social need': 'צורך בחברה', 'Play need': 'צורך במשחק', 'Cats hiding': 'מסתתרים', 'Cats queueing': 'בתור',
+    'Friendly interaction': 'מגע חברותי', 'Hostile interaction': 'מגע עוין', 'Fights per day': 'קטטות ביום', 'Hisses per day': 'נשיפות ביום',
+    'Swats per day': 'מכות ביום', 'Intakes per day': 'קליטות ביום', 'Adoptions per day': 'אימוצים ביום', 'Cats in the shelter': 'חתולים במקלט',
+    'Sleep': 'שינה', 'Rest': 'מנוחה', 'Groom': 'ליקוק', 'Hide': 'מחבוא', 'Eat': 'אכילה', 'Agonistic': 'תוקפנות', 'Meals': 'ארוחות', 'Litter': 'ארגז',
+    'Eat bouts': 'אכילות', 'Fight starts': 'פתיחת קטטות',
+    'Per-day rate, after at least 24 hours of observation.': 'קצב יומי, אחרי 24 שעות תצפית לפחות.',
+    'Amount so far, over {h} hours of observation. After 24 hours this becomes a per-day rate.': 'הכמות עד כה, ב־{h} שעות תצפית. אחרי 24 שעות זה יהפוך לקצב יומי.',
+    'Days run': 'ימים', 'Fights': 'קטטות', 'Swats': 'מכות', 'Hisses': 'נשיפות', 'Mean fight length s': 'אורך קטטה ממוצע, ש׳', 'Longest fight s': 'הקטטה הארוכה, ש׳',
+    'Litter uses': 'שימושים בארגז', 'Bowl crowding mean': 'צפיפות בקערות, ממוצע', 'Bowl crowding max': 'צפיפות בקערות, מרבי', 'Stuck events': 'היתקעויות',
+    'Intakes': 'קליטות', 'Adoptions': 'אימוצים', 'Litter soil, mean': 'לכלוך ארגזים, ממוצע', 'Dirtiest box': 'הארגז המלוכלך', 'Cleanest box': 'הארגז הנקי',
+    'The shelter is full: no newcomer admitted': 'המקלט מלא: לא נקלט חתול חדש',
+    'count': 'מספר', '% of cats': '% מהחתולים', 'per day': 'ביום', 'cats': 'חתולים', 'D': 'י',
+  },
+};
+
+// The one-count forms play.js asks for (English needs them singular); Russian and Hebrew phrase them by n.
+for (const l of ['ru', 'he']) { const T = TR[l];
+  T['1 meal/day'] = p => T['{n} meals/day']({ ...p, n: 1 }); T['1 clean/day'] = p => T['{n} cleans/day']({ ...p, n: 1 });
+  T['1 meal/day · {times}'] = p => T['{n} meals/day · {times}']({ ...p, n: 1 }); T['1 clean/day · {times}'] = p => T['{n} cleans/day · {times}']({ ...p, n: 1 });
+  T['1 visit of {m} min/day'] = p => T['{n} visits of {m} min/day']({ ...p, n: 1 }); T['1 session of {m} min/week'] = p => T['{n} sessions of {m} min/week']({ ...p, n: 1 }); }
+const fill = (s, p) => p ? s.replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m) : s;
+const tr = (en, p) => { const v = lang !== 'en' && TR[lang] ? TR[lang][en] : undefined; return v == null ? fill(en, p) : typeof v === 'function' ? v(p || {}) : fill(v, p); };
+// The sim's clock "Day 3 07:40" in the current language.
+const clock = s => lang === 'en' ? s : s.replace(/^Day (\d+)/, lang === 'ru' ? 'День $1' : 'יום $1');
+// A number with a unit as stats.js writes it ("10.4 min", "1.2 h/day (1.7 h)").
+const units = s => lang === 'en' ? String(s) : String(s).replace(/ min\b/g, lang === 'ru' ? ' мин' : ' דק׳').replace(/ h\b/g, lang === 'ru' ? ' ч' : ' ש׳').replace(/\/day\b/g, lang === 'ru' ? '/день' : ' ליום');
+// The readout's description of a cat, agreeing with its sex: "male, 6 y, white, stray".
+const COAT = {
+  ru: { 'orange tabby': ['рыжий полосатый', 'рыжая полосатая'], black: ['чёрный', 'чёрная'], 'grey tabby': ['серый полосатый', 'серая полосатая'], tuxedo: ['чёрно-белый «фрак»', 'чёрно-белая «фрак»'],
+    calico: ['трёхцветный', 'трёхцветная'], 'brown tabby': ['бурый полосатый', 'бурая полосатая'], grey: ['серый', 'серая'], 'white orange': ['бело-рыжий', 'бело-рыжая'],
+    tortie: ['черепаховый', 'черепаховая'], cream: ['кремовый', 'кремовая'], 'black white': ['чёрно-белый', 'чёрно-белая'], 'seal point': ['колор-пойнт', 'колор-пойнт'],
+    chocolate: ['шоколадный', 'шоколадная'], white: ['белый', 'белая'] },
+  he: { 'orange tabby': ['ג׳ינג׳י מפוספס', 'ג׳ינג׳ית מפוספסת'], black: ['שחור', 'שחורה'], 'grey tabby': ['אפור מפוספס', 'אפורה מפוספסת'], tuxedo: ['שחור־לבן טוקסידו', 'שחורה־לבנה טוקסידו'],
+    calico: ['קליקו', 'קליקו'], 'brown tabby': ['חום מפוספס', 'חומה מפוספסת'], grey: ['אפור', 'אפורה'], 'white orange': ['לבן־ג׳ינג׳י', 'לבנה־ג׳ינג׳ית'],
+    tortie: ['צב', 'צבית'], cream: ['קרם', 'קרם'], 'black white': ['שחור־לבן', 'שחורה־לבנה'], 'seal point': ['סיל פוינט', 'סיל פוינט'],
+    chocolate: ['שוקולד', 'שוקולד'], white: ['לבן', 'לבנה'] },
+};
+const ORIGIN = { ru: { stray: ['бездомный', 'бездомная'], surrendered: ['отказник', 'отказница'], transfer: ['переведён', 'переведена'] },
+  he: { stray: ['משוטט', 'משוטטת'], surrendered: ['נמסר', 'נמסרה'], transfer: ['הועבר', 'הועברה'] } };
+const catDesc = (c, newcomer) => {
+  const coat = c.coat.replace(/-/g, ' '), i = c.sex === 'M' ? 0 : 1;
+  if (lang === 'en') return (newcomer ? 'Newcomer, ' : '') + `${c.sex === 'M' ? 'male' : 'female'}, ${c.age} y, ${coat}, ${c.origin}`;
+  const col = (COAT[lang][coat] || [coat, coat])[i], or = (ORIGIN[lang][c.origin] || [c.origin, c.origin])[i];
+  if (lang === 'ru') { const a = c.age, age = Number.isInteger(a) ? ruN(a, 'год', 'года', 'лет') : `${String(a).replace('.', ',')} года`;
+    return (newcomer ? (i ? 'Новенькая, ' : 'Новенький, ') : '') + `${i ? 'кошка' : 'кот'}, ${age}, ${col}, ${or}`; }
+  return (newcomer ? (i ? 'חדשה, ' : 'חדש, ') : '') + `${i ? 'נקבה' : 'זכר'}, ${c.age === 1 ? 'שנה' : c.age + ' שנים'}, ${col}, ${or}`;
+};
+
+// How to play, as [heading, html] sections per language. play.js paginates them.
+const GUIDE = {
+  en: [
+  ['The goal', `<p>You run a two room cat shelter with about twelve cats. Your aim is calm, friendly cats that seldom fight
+   and seldom hide. Each cat has its own personality, needs and feelings about the others, and everything it does
+   follows from them. The model is calibrated against published shelter and colony studies, listed in REALISM.md.</p>`],
+  ['The four goals and the chart', `<p><b>Stress</b> is the average Cat Stress Score, from 1 for relaxed to 7 for
+   terrified. Lower is better.</p>
+   <p><b>Conflict</b> counts fights and swats between cats. Lower is better.</p>
+   <p><b>Friendly</b> counts the times a cat starts grooming, playing with or greeting another cat. Higher is better.</p>
+   <p><b>Hiding</b> is the share of cats in a hiding place. Lower is better.</p>
+   <p>The chart under the room draws all four over time. <b>Show</b> picks how far back it reaches, and <b>Per</b> picks how
+   much time each point covers. Click a goal to hide or show its line, and hover it to see the three cats at its top.
+   The plus button enlarges the chart, with the top three cats for each goal beside it. Click a name to select that cat.</p>`],
+  ['Your plans and their costs', `<p><b>Feeding</b> splits the fixed daily ration into meals at the times you choose.
+   More meals mean less crowding at the bowls.</p>
+   <p><b>Litter</b> sets how often staff scoop the boxes. Clean boxes keep cats calm, and every round takes staff time
+   away from visits.</p>
+   <p><b>Visitors</b> spend the staff time the litter rounds leave with the cats. You decide how many visits and how
+   long each lasts. People friendly cats come over and shy cats keep away.</p>
+   <p><b>Vacuum</b> needs a fixed number of minutes each week. You choose the sessions and their hours. Cats scatter
+   from the noise.</p>
+   <p>Your staff have a fixed amount of time each day, shared between litter rounds and visits. The Litter and
+   Visitors editors show how it is split.</p>`],
+  ['Your hands in the room', `<p>Click a cat to see its needs, personality and friendships in the panel on the left.
+   Click the selected cat again to pet it. It may accept and calm down, or it may slip away.</p>
+   <p>Click empty floor to shoo the cats near that spot.</p>
+   <p>Drag a toy to play with the cats, or click it for a short jiggle.</p>
+   <p>Click the doorway between the rooms to open or close the quiet room door. With the door closed, cats stay in
+   the room they are in.</p>
+   <p>Drag a bowl, litter box, bed, cat tree, hide box or scratching post to move it.</p>`],
+  ['Time and the other buttons', `<p><b>Play</b> and <b>Pause</b> start and stop time, and the slider sets its speed.
+   <b>Restart</b> begins again with new cats. <b>Show stats</b> opens the full statistics on trends, each cat, stress
+   across the colony and the relationships between cats. A numbered marker in the room points to the matching line in
+   the event log.</p>
+   <p>The space bar pauses, the minus and plus keys change speed, and Esc goes back to the room.</p>`],
+  ['How to play it', `<p>Change one thing, run a few days and watch what moves. Try three meals against two, visits in
+   one block against several, or the quiet room open against closed at night. The goals show how the cats are doing.</p>`],
+  ],
+  ru: [
+  ['Цель', `<p>Вы управляете приютом из двух комнат, где живёт около двенадцати кошек. Ваша цель в том, чтобы кошки были спокойными и дружелюбными,
+   редко дрались и редко прятались. У каждой кошки свой характер, потребности и отношение к остальным, и всё,
+   что она делает, следует из них. Модель откалибрована по опубликованным исследованиям приютов и колоний (REALISM.md).</p>`],
+  ['Четыре цели и график', `<p><b>Стресс</b> показывает среднюю оценку стресса кошки (CSS), от 1 (спокойна) до 7 (в ужасе).
+   Чем ниже, тем лучше.</p>
+   <p><b>Драки</b> считают число драк и ударов лапой между кошками. Чем ниже, тем лучше.</p>
+   <p><b>Дружба</b> считает, сколько раз кошка начинает вылизывать другую, играть с ней или здороваться. Чем выше, тем лучше.</p>
+   <p><b>Прячутся</b> показывает долю кошек в укрытии. Чем ниже, тем лучше.</p>
+   <p>График под комнатой показывает все четыре во времени. <b>Период</b> задаёт, как далеко назад он смотрит, а единица задаёт,
+   в чём считаются драки и дружба. Нажмите на цель, чтобы скрыть или показать её линию; наведите, чтобы увидеть трёх лучших
+   кошек. Кнопка «плюс» увеличивает график, рядом по три лучшие кошки на каждую цель. Нажмите на имя, чтобы выбрать кошку.</p>`],
+  ['Ваши планы и их цена', `<p><b>Кормление</b> делит постоянный дневной рацион на кормления в выбранное время.
+   Чем больше кормлений, тем меньше толкотни у мисок.</p>
+   <p><b>Лоток</b> задаёт, как часто персонал чистит лотки. Чистые лотки успокаивают кошек, а каждая уборка отнимает время
+   персонала у визитов.</p>
+   <p><b>Гости</b> проводят с кошками время персонала, оставшееся после уборки лотков. Вы решаете, сколько визитов и какой
+   длины. Общительные кошки подходят, робкие держатся в стороне.</p>
+   <p><b>Пылесос</b> требует постоянного числа минут в неделю. Вы выбираете сеансы и часы. Кошки разбегаются от шума.</p>
+   <p>У персонала постоянное время в день, общее для уборки лотков и визитов. Окна «Лоток» и «Гости» показывают, как
+   оно делится.</p>`],
+  ['Ваши руки в комнате', `<p>Нажмите на кошку, чтобы увидеть её потребности, характер и дружбу на панели слева.
+   Нажмите на выбранную кошку ещё раз, чтобы погладить. Она может принять ласку и успокоиться или ускользнуть.</p>
+   <p>Нажмите на пустой пол, чтобы прогнать кошек рядом с этим местом.</p>
+   <p>Тащите игрушку, чтобы поиграть с кошками, или нажмите на неё, чтобы коротко пошевелить.</p>
+   <p>Нажмите на проход между комнатами, чтобы открыть или закрыть дверь в тихую комнату. Когда дверь закрыта, кошки
+   остаются в своей комнате.</p>
+   <p>Тащите миску, лоток, лежанку, домик, укрытие или когтеточку, чтобы переставить.</p>`],
+  ['Время и другие кнопки', `<p><b>Пуск</b> и <b>Пауза</b> запускают и останавливают время, ползунок задаёт скорость.
+   <b>Заново</b> начинает с новыми кошками. <b>Статистика</b> открывает тренды, данные по каждой кошке, стресс по колонии
+   и отношения между кошками. Номер на метке в комнате указывает на строку в журнале событий.</p>
+   <p>Пробел ставит паузу, клавиши минус и плюс меняют скорость, Esc возвращает в комнату.</p>`],
+  ['Как играть', `<p>Измените одну вещь, прогоните несколько дней и посмотрите, что изменится. Сравните три кормления
+   с двумя, визиты одним блоком и несколькими, тихую комнату открытой и закрытой на ночь. Цели покажут, как живётся кошкам.</p>`],
+  ],
+  he: [
+  ['המטרה', `<p>אתם מנהלים מקלט חתולים של שני חדרים ובו כשנים־עשר חתולים. המטרה היא חתולים רגועים וחברותיים שכמעט
+   לא רבים וכמעט לא מסתתרים. לכל חתול אופי, צרכים ויחס משלו לאחרים, וכל מה שהוא עושה נובע מהם. המודל מכויל
+   מול מחקרים שפורסמו על מקלטים ומושבות (REALISM.md).</p>`],
+  ['ארבעת היעדים והגרף', `<p><b>מתח</b> הוא מדד המתח (CSS) הממוצע של החתולים, מ־1 רגוע עד 7 מבוהל. נמוך יותר עדיף.</p>
+   <p><b>קטטות</b> סופר קטטות ומכות כפה בין חתולים. נמוך יותר עדיף.</p>
+   <p><b>מגעים</b> סופר כמה פעמים חתול מתחיל ללקק, לשחק או לברך חתול אחר. גבוה יותר עדיף.</p>
+   <p><b>מסתתרים</b> הוא שיעור החתולים במחבוא. נמוך יותר עדיף.</p>
+   <p>הגרף שמתחת לחדר מציג את ארבעתם לאורך זמן. <b>טווח</b> קובע כמה אחורה הוא מגיע, והיחידה קובעת במה נספרים
+   קטטות ומגעים. לחצו על יעד כדי להסתיר או להציג את הקו שלו, ורחפו מעליו כדי לראות את שלושת החתולים המובילים.
+   כפתור הפלוס מגדיל את הגרף, ולידו שלושת המובילים בכל יעד. לחצו על שם כדי לבחור בחתול.</p>`],
+  ['התוכניות שלכם ומחירן', `<p><b>האכלה</b> מחלקת את המנה היומית הקבועה לארוחות בשעות שתבחרו. יותר ארוחות, פחות
+   צפיפות ליד הקערות.</p>
+   <p><b>ארגז חול</b> קובע כמה פעמים הצוות מנקה את הארגזים. ארגזים נקיים מרגיעים, וכל סבב לוקח זמן צוות מהביקורים.</p>
+   <p><b>מבקרים</b> מבלים עם החתולים את זמן הצוות שנשאר אחרי הניקוי. אתם קובעים כמה ביקורים וכמה זמן כל אחד.
+   חתולים חברותיים ניגשים, ביישנים מתרחקים.</p>
+   <p><b>שואב</b> דורש מספר קבוע של דקות בשבוע. אתם בוחרים את הסבבים ואת השעות. החתולים מתפזרים מהרעש.</p>
+   <p>לצוות יש זמן קבוע בכל יום, משותף לניקוי ולביקורים. העורכים של ארגז החול והמבקרים מראים איך הוא מתחלק.</p>`],
+  ['הידיים שלכם בחדר', `<p>לחצו על חתול כדי לראות את הצרכים, האופי והחברויות שלו בלוח הצדדי.
+   לחצו שוב על החתול הנבחר כדי ללטף אותו. הוא עשוי להירגע, או לחמוק.</p>
+   <p>לחצו על רצפה ריקה כדי לגרש את החתולים שליד המקום.</p>
+   <p>גררו צעצוע כדי לשחק עם החתולים, או לחצו עליו לנענוע קצר.</p>
+   <p>לחצו על הפתח בין החדרים כדי לפתוח או לסגור את דלת החדר השקט. כשהדלת סגורה, החתולים נשארים בחדר שבו הם נמצאים.</p>
+   <p>גררו קערה, ארגז חול, מיטה, עץ חתולים, מחבוא או עמוד גירוד כדי להזיז אותם.</p>`],
+  ['הזמן ושאר הכפתורים', `<p><b>הפעלה</b> ו<b>השהיה</b> מפעילות ועוצרות את הזמן, והמחוון קובע את המהירות.
+   <b>מחדש</b> מתחיל עם חתולים חדשים. <b>סטטיסטיקה</b> פותחת מגמות, נתונים לכל חתול, מתח במושבה ויחסים בין החתולים.
+   סמן ממוספר בחדר מצביע על השורה המתאימה ביומן האירועים.</p>
+   <p>מקש הרווח משהה, מקשי המינוס והפלוס משנים מהירות, ו־Esc מחזיר לחדר.</p>`],
+  ['איך משחקים', `<p>שנו דבר אחד, הריצו כמה ימים וראו מה זז. נסו שלוש ארוחות מול שתיים, ביקורים ברצף אחד מול כמה,
+   או חדר שקט פתוח מול סגור בלילה. היעדים מראים מה שלום החתולים.</p>`],
+  ],
+};
+// The statistics legend, line for line with stats-layout.js LEGEND (the same row count, which the sub-layout reserves).
+const LEGEND = {
+  ru: ['Стресс (CSS): от 1 до 7, по стрессу', 'Голод, жажда, туалет: % у кошки', 'Сонливость, раздражение: % у кошки', 'Общение, игра: % у кошки',
+    'Прячутся, в очереди: % колонии', 'Дружеское, враждебное: % колонии', 'Драк в день: завершённые драки', 'Ударов в день: начала драк',
+    'Шипений в день: угрозы без контакта', 'Приём и пристройство: прибыли, дома', 'Кошек в приюте: численность', '',
+    'Шкала CSS: Kessler и Turner 1997.', 'Шкала от 1 до 7 опубликована;', 'показатель 0.622, переводящий наш', 'стресс в неё, — наше допущение,',
+    'а не опубликованная величина.', '', 'Тренды: сплошная линия — весь приют,', 'тонкие — выбранные кошки. Одна панель,',
+    'одна единица, одна шкала.', '', 'Цвет матрицы: симпатия, от -1 до +1,', 'кошки строки к кошке столбца.', 'Уголок клетки: страх, от 0 до 1.',
+    'Симпатия угасает вдвое за 5 дней,', 'страх — примерно за день.', '', 'Таблица считает весь прогон,', 'а не выбранный выше период.'],
+  he: ['מדד מתח: 1 עד 7, לפי המתח', 'רעב, צמא, שלפוחית: % לחתול', 'עייפות, עצבנות: % לחתול', 'צורך בחברה, במשחק: % לחתול',
+    'מסתתרים, בתור: % מהמושבה', 'חברותי, עוין: % מהמושבה עכשיו', 'קטטות ביום: קטטות שהוכרעו', 'מכות ביום: פתיחת קטטות',
+    'נשיפות ביום: איום בלי מגע', 'קליטות ואימוצים: הגעות, בתים', 'חתולים במקלט: מספר החתולים', '',
+    'סולם CSS: Kessler ו־Turner 1997.', 'הסולם 1 עד 7 פורסם; המעריך', '0.622 שממפה אליו את המתח שלנו', 'הוא הנחה שלנו,',
+    'ולא נתון שפורסם.', '', 'מגמות: הקו המלא הוא המקלט כולו,', 'וכל חתול נבחר קו דק. לוח אחד,',
+    'יחידה אחת, סולם אחד.', '', 'צבע המטריצה: חיבה, מ־1- עד 1+,', 'של חתול השורה לחתול העמודה.', 'פינת התא: פחד, 0 עד 1.',
+    'החיבה דועכת בחצי תוך 5 ימים,', 'והפחד תוך יום בערך.', '', 'הטבלה סופרת את כל הריצה,', 'ולא את הטווח שנבחר למעלה.'],
+};
+const guide = () => GUIDE[lang] || GUIDE.en;
+const legend = en => LEGEND[lang] && LEGEND[lang].length === en.length ? LEGEND[lang] : en;
+
+let lang = 'en';
+const setLang = l => { lang = LANGS.includes(l) ? l : 'en'; return lang; };
+const t = (key, p) => { const v = (S[lang] && S[lang][key]) ?? S.en[key] ?? key; return p ? v.replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m) : v; };
+// A log entry in the current language: its structured record phrased, or the sim's English line where it has none.
+const logLine = e => { if (lang === 'en') return e.msg; if (!e.ev) return tr(e.msg); const f = LOG[lang][e.ev.k]; const s = f ? f(e.ev) : null; return s == null ? e.msg : s; };
+
+return { LANGS, LABEL, NAME, DIR, S, LOG, TR, plRu, tr, clock, units, catDesc, guide, legend, setLang, get lang() { return lang; }, t, logLine, dir: () => DIR[lang] };
+});
+
 /* Measured text advance widths and the type scale the layout solver reserves width from.
    Generated by `node layout-metrics.js`. Do not edit by hand: every number here was
    measured in Chromium in the game's own font stack, and the solver and the running UI both read
@@ -2770,7 +3429,7 @@ return { Sim };
 'use strict';
 
 return {
- "generated": "2026-11-17T18:25:13.252Z",
+ "generated": "2026-11-17T19:26:07.759Z",
  "engine": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
  "fontStack": "\"Segoe UI\", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif",
  "size": {
@@ -2862,10 +3521,10 @@ return {
    "w": 100
   },
   "pause": {
-   "text": "Pause",
+   "text": "הפעלה",
    "px": 14,
    "chars": 5,
-   "w": 38
+   "w": 46
   },
   "speedStep": {
    "text": "0.5×",
@@ -2874,10 +3533,10 @@ return {
    "w": 30
   },
   "toggleStats": {
-   "text": "Show stats",
+   "text": "סטטיסטיקה",
    "px": 14,
-   "chars": 10,
-   "w": 71
+   "chars": 9,
+   "w": 79
   },
   "toggleRoom": {
    "text": "Show room",
@@ -2886,10 +3545,10 @@ return {
    "w": 76
   },
   "guide": {
-   "text": "How to play",
+   "text": "איך משחקים",
    "px": 14,
-   "chars": 11,
-   "w": 80
+   "chars": 10,
+   "w": 81
   },
   "btnControls": {
    "text": "Controls",
@@ -3042,10 +3701,10 @@ return {
    "w": 118
   },
   "chipTitle": {
-   "text": "Visitors",
+   "text": "Пылесос",
    "px": 14,
-   "chars": 8,
-   "w": 50
+   "chars": 7,
+   "w": 61
   },
   "chipLine": {
    "text": "7 × 30 min/week",
@@ -3078,10 +3737,10 @@ return {
    "w": 106
   },
   "legName": {
-   "text": "Contacts",
+   "text": "Прячутся",
    "px": 14,
    "chars": 8,
-   "w": 58
+   "w": 65
   },
   "legValue": {
    "text": "999/hour",
@@ -3090,10 +3749,10 @@ return {
    "w": 62
   },
   "spanLabel": {
-   "text": "All days",
+   "text": "כל הימים",
    "px": 14,
    "chars": 8,
-   "w": 52
+   "w": 59
   },
   "grainLabel": {
    "text": "per hour",
@@ -3150,10 +3809,10 @@ return {
    "w": 70
   },
   "restartWord": {
-   "text": "Restart",
+   "text": "Заново",
    "px": 14,
-   "chars": 7,
-   "w": 47
+   "chars": 6,
+   "w": 50
   },
   "allowance": {
    "text": "Weekly vacuum allowance: 50 of 50 min used",
@@ -3216,16 +3875,16 @@ return {
    "w": 410
   },
   "toggleStatsShort": {
-   "text": "Stats",
+   "text": "נתונים",
    "px": 14,
-   "chars": 5,
-   "w": 33
+   "chars": 6,
+   "w": 41
   },
   "toggleRoomShort": {
-   "text": "Room",
+   "text": "Комн.",
    "px": 14,
-   "chars": 4,
-   "w": 39
+   "chars": 5,
+   "w": 41
   },
   "editorBetween": {
    "text": "From",
@@ -3402,6 +4061,7 @@ const FS = METRICS.size;                 // { ui: 14, lead: 16, prose: 15 }, doc
 const LINE = px(FS.ui * 1.5);            // 21. WCAG 2.1 SC 1.4.12 Text Spacing: readable at 1.5 line height
 const TARGET = 44;                       // WCAG 2.1 SC 2.5.5 Target Size (Enhanced), AAA; Apple HIG 44pt
 const GAP = 8;                           // separation between targets and groups (Gestalt proximity)
+const LANG_W = 44;                       // the language button: a 44px target showing EN, RU or HE
 const PAD = 12;                          // padding inside a card or panel
 const BAR_H = TARGET + 2 * 6;            // 56: one target row with breathing room
 // A filled control carries an icon (tokens size.icon) beside its label, and is drawn inset GAP / 2 on
@@ -3814,7 +4474,7 @@ function desktop(W, H, st) {
   // ---- the top bar. Fixed cells at their minimums; spare width goes first to Play/Pause's word, then
   // to the chips' unabbreviated line, then to the speed track up to its cap, and the rest to the
   // chips.
-  const fixed = { clock: CLOCK_W, 'btn-guide': GUIDE_W };
+  const fixed = { clock: CLOCK_W, 'btn-guide': GUIDE_W, lang: LANG_W };
   const fixedW = Object.values(fixed).reduce((a, x) => a + x, 0);
   const minW = fixedW + TOGGLE_SHORT_W + RESTART_W + PAUSE_ICON_W + SPEED_W + PLAN_CARDS.length * CARD_CHIP_W;
   if (minW > W) throw new Shortfall('desktop top bar', minW, W);
@@ -3833,7 +4493,7 @@ function desktop(W, H, st) {
   for (const id of PLAN_CARDS) widths[id] = chipW + share;
   widths[PLAN_CARDS[PLAN_CARDS.length - 1]] += spare - share * PLAN_CARDS.length;
   const out = cols({ x: 0, y: 0, w: W, h: BAR_H },
-    ['clock', 'pause', 'speed', ...PLAN_CARDS, 'restart', 'toggle-view', 'btn-guide'].map(id => ({ id, w: widths[id] })));
+    ['clock', 'pause', 'speed', ...PLAN_CARDS, 'restart', 'toggle-view', 'btn-guide', 'lang'].map(id => ({ id, w: widths[id] })));
 
   // ---- the room band: the framed room over the goals strip.
   // The top cats take a fixed column at the right; the room band shifts left of it.
@@ -3955,9 +4615,10 @@ function phonePortrait(W, H, st) {
   if (by.readout) out.push(by.readout);
   if (by.cards) out.push(...cardStack(by.cards, cardCols, []).rects);
   // Restart and the navigation.
-  const wordsFit = W - RESTART_WORD_W - GUIDE_W >= TOGGLE_MIN_W;
+  // The language button sits in the bottom bar: the top bar's speed track has no 44px to spare at 390px.
+  const wordsFit = W - RESTART_WORD_W - GUIDE_W - LANG_W >= TOGGLE_MIN_W;
   out.push(...cols(by['bar-bottom'], [{ id: 'restart', w: wordsFit ? RESTART_WORD_W : RESTART_W }, { id: 'toggle-view' },
-    { id: 'btn-guide', w: GUIDE_W }]));
+    { id: 'btn-guide', w: GUIDE_W }, { id: 'lang', w: LANG_W }]));
   return { rects: out, form: 'phone-portrait', feedMode, chart: tickets ? { mode: 'tickets', legendCols: 4, legendRows: 1, plot: { w: 0, h: 0 }, fits: true } : chartLayout(W, feedHeight(W)), frame: FRAME.phone, logFloor: logMsgs, feedPad: 0, cardChips: true,
     chipLong: Math.floor(W / cardCols) >= CARD_CHIP_LONG_W, pauseLabel: false, restartLabel: wordsFit,
     readoutShows: fitP ? fitP.shown : null, leaders: by.leaders ? (leadOpen ? { mode: 'open', cols: 2, k: openK, h: openH } : leadP) : null,
@@ -3979,7 +4640,7 @@ function phoneLandscape(W, H, st) {
   const [bar, body] = rows({ x: 0, y: 0, w: W, h: H }, [{ id: 'bar', h: BAR_H }, { id: 'body', h: null }]);
   out.push(...cols(bar, [{ id: 'clock', w: CLOCK_W }, { id: 'pause', w: PAUSE_W },
     { id: 'speed', w: SPEED_W }, { id: 'btn-controls' }, { id: 'restart', w: RESTART_WORD_W }, { id: 'toggle-view' },
-    { id: 'btn-guide', w: GUIDE_W }]));
+    { id: 'btn-guide', w: GUIDE_W }, { id: 'lang', w: LANG_W }]));
   const base = { form: 'phone-landscape', frame: F, feedPad: 0, cardChips: true, chipLong: Math.floor(W / CONTENT.cardCols(W)) >= CARD_CHIP_LONG_W,
     pauseLabel: true, restartLabel: true, readoutPlacement: 'the side column beside the room, over the log, while a cat is picked' };
 
@@ -4079,6 +4740,9 @@ function solve(W, H, state) {
   if (st.labels === 'longest') st.labelScale = 1;
   const form = st.form || formFor(W, H);
   const sol = FORMS[form](W, H, st);
+  // Right to left (Hebrew): every rectangle mirrored across the viewport, so the bar, the columns and the panels read
+  // from the right. The room's own canvas is a floor plan and is not mirrored; only where its view sits.
+  if (st.dir === 'rtl') { for (const r of sol.rects) r.x = W - r.x - r.w; if (sol.chartBig) sol.chartBig.x = W - sol.chartBig.x - sol.chartBig.w; sol.dir = 'rtl'; }
   sol.byId = Object.fromEntries(sol.rects.map(r => [r.id, r]));
   return sol;
 }
@@ -4088,7 +4752,7 @@ return { TX, px, FS, LINE, TARGET, GAP, PAD, BAR_H, CARD_H, ASPECT, FILL_MIN, BA
   GUIDE_W, MARKER_W, MARKERS, CARDS, PLAN_CARDS, CONTROL_CARDS, EDITABLE, CARD_CHIP_W, CARD_CHIP_LONG_W, TRI_W, TIMELINE_BIG_H, EDITOR_GAP, STAFF_BAR_H,
   PAUSE_W, PAUSE_ICON_W, RESTART_W, LOG_HEADER, LOG_PAD, LOG_MSGS,
   LOG_MIN_MSGS, CANVAS_MIN_W, FRAME, LEFT_W, canvasIn, framedRoom, NEED_LABELS,
-  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, CHART_LEG_W, CHART_SEL_W, CHART_SPAN_W, CHART_RATE_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
+  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, LANG_W, CHART_LEG_W, CHART_SEL_W, CHART_SPAN_W, CHART_RATE_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
   desktop, phonePortrait, phoneLandscape, contentBox, fillOf, FORMS, VIEWS, VIEWPORTS, formFor, solve, METRICS };
 });
 
@@ -5724,7 +6388,7 @@ const CATNAME = { rest: 'Resting', need: 'Eating & needs', solo: 'Busy alone', f
 const CATTIP = { rest: 'Sleeping, resting, hiding, or lounging on the cat tree', need: 'Eating, drinking, litter box, or waiting for a free bowl', solo: 'Exploring, grooming itself, scratching, watching the window, toy play, tearing about', friend: 'Greeting, grooming or playing with another cat, or asking a person for attention', host: 'Stalking, chasing, hissing or fighting', flee: 'Running away from another cat' };
 const VERB = { zoom: 'tearing about', sleep: 'sleeping', rest: 'resting', groom: 'grooming', explore: 'exploring', eat: 'eating', drink: 'drinking', litter: 'litter box', hide: 'hiding', perch: 'on cat tree', window: 'at the window', scratch: 'scratching', toy: 'toy play', seek_human: 'wants a person', sniff: 'greeting', allogroom: 'grooming', play: 'playing with', stalk: 'stalking', chase: 'chasing', hiss: 'hissing at', fight: 'fighting', flee: 'fleeing', avoid: 'moving away from', wait_food: 'waiting for food' };
 function actInfo(sim, c) {
-  const a = c.act; if (!a) return { cat: 'rest', text: 'idle', short: 'idle', onWay: false, partner: null };
+  const a = c.act; if (!a) return { cat: 'rest', text: 'idle', short: 'idle', onWay: false, partner: null, verb: 'idle', pname: null };
   let type = a.type, verb = VERB[type] || type;
   if (a.manual) verb = type === A.EXPLORE ? 'walking' : 'idle';
   const o = a.target >= 0 ? sim.catById(a.target) : null;
@@ -5733,7 +6397,7 @@ function actInfo(sim, c) {
   if (!(o && social)) verb = verb.replace(/ (with|at)$/, '');
   if (type === A.WAIT) { const st = a.waitBowl >= 0 ? sim.map.stations.find(s => s.id === a.waitBowl) : null; verb = st && st.type === T.LITTER ? 'waiting for litter box' : a.antic ? 'waiting for mealtime' : 'queueing for a bowl'; }
   const short = (onWay ? '→ ' : '') + (o && social ? verb + ' ' + o.name : verb);
-  return { cat: CAT[type] || 'solo', text: short, short, onWay, partner: o };
+  return { cat: CAT[type] || 'solo', text: short, short, onWay, partner: o, verb, pname: o && social ? o.name : null };
 }
 
 if (typeof module !== 'undefined' && module.exports) { module.exports = { PlaySim, actInfo }; return; }
@@ -5751,6 +6415,16 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { PlaySi
 
 const WHm = root.WH;
 const LAY = WHm['layout'], SL = WHm['stats-layout'], TK = WHm['tokens'], SPR = WHm['sprites'];
+// The language (src/i18n.js, the one string table). The choice persists per browser; storage may be unavailable.
+const I18N = WHm['i18n'], t = (k, p) => I18N.t(k, p), tr = (s, p) => I18N.tr(s, p);
+// A cat as a log record needs it (name and sex), as sim.js CS.
+const cs = c => c ? { name: c.name, sex: c.sex } : null;
+// stats.js rateTitle, in the current language.
+const rateTitle = h => h >= ST_MIN_H() ? tr('Per-day rate, after at least 24 hours of observation.') : tr('Amount so far, over {h} hours of observation. After 24 hours this becomes a per-day rate.', { h: (Math.round(h * 10) / 10).toString() });
+const ST_MIN_H = () => WHm['stats'].PROJECT_MIN_H;
+{ let saved = null; try { saved = localStorage.getItem('wh-lang'); } catch (e) { /* no storage: English */ }
+  const q = /[?&]lang=(\w+)/.exec(location.search); if (q) saved = q[1];   // ?lang= for a check run, not stored
+  I18N.setLang(saved || 'en'); document.documentElement.lang = I18N.lang; document.documentElement.dir = I18N.dir(); }
 const U = WHm['util'];
 const ST = WHm['stats'];
 const observedH = () => (sim.stats.ticks * sim.cfg.dt) / 3600;
@@ -5892,7 +6566,7 @@ function regionEl(id) {
 // The layout state the engine is asked to solve. On a phone the readout and the editors are views
 // rather than regions, which is the engine's own rule; this function only reports the state.
 function layoutState() {
-  return { editor: UI.editor.slice(), selected: !!UI.selected && FORM === 'desktop', leadersOpen: !!UI.leadersOpen,
+  return { dir: I18N.dir(), editor: UI.editor.slice(), selected: !!UI.selected && FORM === 'desktop', leadersOpen: !!UI.leadersOpen,
     view: UI.view, pointer: UI.pointer, burst: 1, labels: 'normal',
     marker: UI.marker && UI.view === 'room' && !(FORM === 'phone-landscape' && UI.selected) ? UI.marker.kind : 'none' };
 }
@@ -5928,28 +6602,28 @@ function applyLayout() {
 // ---------------------------------------------------------------- chrome
 BUILD['clock'] = node => {
   const d = el('div', 'clock'); node.appendChild(d);
-  return { tick: () => { d.textContent = sim.clock(); } };
+  return { tick: () => { d.textContent = I18N.clock(sim.clock()); } };
 };
 
 BUILD['pause'] = node => {
   // The strongest control on screen in both states: its glyph and word swap, its fill never does, so
   // pausing does not read as pressing it.
-  const b = control(node, 'primary', 'pause', 'Pause'); b.classList.add('main'); b.onclick = togglePause;
+  const b = control(node, 'primary', 'pause', t('pause')); b.classList.add('main'); b.onclick = togglePause;
   return { tick: () => {
-    const word = paused ? 'Play' : 'Pause';
+    const word = paused ? t('play') : t('pause');
     b.ico.show(paused ? 'play' : 'pause'); b.lb.textContent = word;
     // Where the engine reserved only a target for it (pauseLabel false), the pause is its icon alone,
     // and the word is still its accessible name.
     b.classList.toggle('iconOnly', !SOL.pauseLabel);
     b.setAttribute('aria-label', word);
-    b.title = (paused ? 'Start the clock' : 'Stop the clock') + ' (Space)';
+    b.title = tr(paused ? 'Start the clock (Space)' : 'Stop the clock (Space)');
   } };
 };
 
 BUILD['speed'] = node => {
   const w = el('div', 'speed'), s = el('input'), read = el('span', 'read');
-  s.type = 'range'; s.min = '0'; s.max = '1000'; s.step = '1'; s.setAttribute('aria-label', 'Speed, 0.25x to 16x');
-  s.title = 'How fast time passes in the shelter';
+  s.type = 'range'; s.min = '0'; s.max = '1000'; s.step = '1'; s.setAttribute('aria-label', tr('Speed, 0.25x to 16x'));
+  s.title = tr('How fast time passes in the shelter');
   s.oninput = e => setSpeed(SP_MIN * Math.pow(SP_MAX / SP_MIN, e.target.value / 1000));
   w.append(s, read); node.appendChild(w);
   return { tick: () => { read.textContent = fmtX(speed); s.value = String(Math.round(1000 * Math.log(speed / SP_MIN) / Math.log(SP_MAX / SP_MIN))); } };
@@ -5959,37 +6633,50 @@ BUILD['speed'] = node => {
 // reflow when the label flips. How to play is never a third state of it.
 // It is marked pressed while statistics are up, the same way How to play is while its page is up.
 BUILD['toggle-view'] = node => {
-  const b = control(node, 'nav', null, 'Show stats');
+  const b = control(node, 'nav', null, t('showStats'));
   b.onclick = () => setView(UI.view === 'room' ? 'stats' : 'room');
   return { tick: () => {
     // "Show stats" where the engine gave the bar the width; "Stats" where the bar has not the width.
     const long = SOL.toggleLong !== false;
-    b.lb.textContent = UI.view === 'room' ? (long ? 'Show stats' : 'Stats') : (long ? 'Show room' : 'Room');
+    b.lb.textContent = UI.view === 'room' ? (long ? t('showStats') : t('stats')) : (long ? t('showRoom') : t('room'));
     b.classList.toggle('word', !long);   // the short label is padded 6px either side, as TOGGLE_SHORT_W reserves
-    b.title = UI.view === 'room' ? 'Charts and numbers for the whole shelter' : 'Back to the room';
+    b.title = tr(UI.view === 'room' ? 'Charts and numbers for the whole shelter' : 'Back to the room');
     b.setAttribute('aria-pressed', String(UI.view === 'stats'));
   } };
 };
 BUILD['btn-guide'] = node => {
-  const b = control(node, 'nav', null, 'How to play'); b.title = 'How Whisker Hall works and how to play it';
+  const b = control(node, 'nav', null, t('howToPlay')); b.title = tr('How Whisker Hall works and how to play it');
   b.onclick = () => setView(UI.view === 'guide' ? 'room' : 'guide');
   return { tick: () => b.setAttribute('aria-pressed', String(UI.view === 'guide')) };
 };
 BUILD['btn-controls'] = node => {
-  const b = control(node, 'primary', 'controls', 'Controls'); b.title = 'Feeding, litter, visitors and vacuum';
+  const b = control(node, 'primary', 'controls', tr('Controls')); b.title = tr('Feeding, litter, visitors and vacuum');
   b.onclick = () => setView(UI.view === 'controls' ? 'room' : 'controls');
   return { tick: () => b.setAttribute('aria-pressed', String(UI.view === 'controls')) };
 };
 // Restart loses the shelter, so it asks first: a small confirmation anchored under the link, answered
 // Yes or No, and dismissed by No, Escape, a click elsewhere or eight seconds of no answer.
+// The language button: a 44px control showing the current language (EN, RU, HE); each press moves to the next. The
+// interface is rebuilt in place (every region's element is made again from the string table); the sim runs on.
+BUILD['lang'] = node => {
+  const b = control(node, 'nav', null, I18N.LABEL[I18N.lang]); b.classList.add('lang');
+  b.onclick = () => {
+    const L = I18N.LANGS, next = L[(L.indexOf(I18N.lang) + 1) % L.length];
+    I18N.setLang(next); try { localStorage.setItem('wh-lang', next); } catch (e) { /* no storage: this session only */ }
+    document.documentElement.lang = next; document.documentElement.dir = I18N.dir();
+    for (const [, r] of regions) { if (r.api.drop) r.api.drop(); r.node.remove(); } regions.clear();
+    applyLayout();
+  };
+  return { tick: () => { b.lb.textContent = I18N.LABEL[I18N.lang]; const w = t('language') + ': ' + I18N.NAME[I18N.lang]; b.title = w; b.setAttribute('aria-label', w); } };
+};
 BUILD['restart'] = node => {
   // An icon link in the bar's corner; its word is its accessible name, its tooltip and its confirmation.
   // A link in the bar's corner: its word where the engine gave it the width, ↻ alone otherwise.
-  const b = control(node, 'nav', null, 'Restart');
-  b.setAttribute('aria-label', 'Restart'); b.title = 'Restart: start again with a new group of cats. The current shelter is lost.';
+  const b = control(node, 'nav', null, t('restart'));
+  b.setAttribute('aria-label', t('restart')); b.title = tr('Restart: start again with a new group of cats. The current shelter is lost.');
   b.setAttribute('aria-haspopup', 'dialog');
   b.onclick = e => { e.stopPropagation(); CONFIRM.open(node); };
-  return { tick: () => { const word = SOL.restartLabel !== false; b.lb.textContent = word ? 'Restart' : '↻'; b.classList.toggle('icon', !word); b.classList.toggle('word', word); },
+  return { tick: () => { const word = SOL.restartLabel !== false; b.lb.textContent = word ? t('restart') : '↻'; b.classList.toggle('icon', !word); b.classList.toggle('word', word); },
     drop: () => CONFIRM.close() };
 };
 const CONFIRM = (() => {
@@ -6003,11 +6690,11 @@ const CONFIRM = (() => {
   }
   function open(anchor) {
     close();
-    box = el('div', 'confirm'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Restart the shelter?');
-    const yes = el('button', 'btn yes', 'Yes'), no = el('button', 'btn', 'No');
+    box = el('div', 'confirm'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', tr('Restart the shelter?'));
+    const yes = el('button', 'btn yes', tr('Yes')), no = el('button', 'btn', tr('No'));
     yes.onclick = () => { close(); newColony(); };
     no.onclick = close;
-    box.append(el('span', 'q', 'Restart with new cats?'), yes, no);
+    box.append(el('span', 'q', tr('Restart with new cats?')), yes, no);
     app.appendChild(box);
     // Under the link, kept inside the viewport; it never moves a region, it floats over them briefly.
     const r = anchor.getBoundingClientRect(), w = box.offsetWidth;
@@ -6037,38 +6724,37 @@ const hm = h => Math.floor(h) % 24 + ':' + String(Math.round((h % 1) * 60)).padS
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 // Feeding and Litter cleaning are lists of times of day; one shape serves both.
 const timesOf = (c, field) => (c[field] || []).slice().sort((a, b) => a - b);
-const timesLine = (field, one, many, none) => c => { const t = timesOf(c, field), n = t.length;
-  if (!n) return none;
-  return plural(n, one, many) + '/day · ' + (n === 1 ? hm(t[0]) : n === 2 ? hm(t[0]) + ' and ' + hm(t[1]) : hm(t[0]) + ' to ' + hm(t[n - 1])); };
+const timesLine = (field, what, none) => c => { const t = timesOf(c, field), n = t.length;
+  if (!n) return tr(none);
+  return tr(n === 1 ? `1 ${what.slice(0, -1)}/day · {times}` : `{n} ${what}/day · {times}`, { n, a: hm(t[0]), b: hm(t[n - 1]), times: n === 1 ? hm(t[0]) : n === 2 ? hm(t[0]) + ' and ' + hm(t[1]) : hm(t[0]) + ' to ' + hm(t[n - 1]) }); };
 const PLAN = {
-  feeding: { title: 'Feeding', chipTitle: 'Feeding', budgeted: false, times: 'feedTimes', max: BUDGETS.feed.maxPerDay, countLabel: 'Meals/day',
-    chip: c => { const n = timesOf(c, 'feedTimes').length; return n ? plural(n, 'meal', 'meals') + '/day' : 'No meals'; },
-    line: timesLine('feedTimes', 'meal', 'meals', 'No meals planned'),
-    sentence: () => 'The cats get the same amount of food every day. You choose how many meals it is split into, and when. A staff member comes in to fill the bowls, and the cats react to them as to any person.',
-    tip: () => 'A staff member comes in to fill the bowls; the cats react to them as to any person.'
-      + ' The day’s food is shared out evenly over the meals. Click to change the meal times.' },
+  feeding: { get title() { return tr('Feeding'); }, chipTitle: 'Feeding', budgeted: false, times: 'feedTimes', max: BUDGETS.feed.maxPerDay, get countLabel() { return tr('Meals/day'); },
+    chip: c => { const n = timesOf(c, 'feedTimes').length; return n ? tr(n === 1 ? '1 meal/day' : '{n} meals/day', { n }) : tr('No meals'); },
+    line: timesLine('feedTimes', 'meals', 'No meals planned'),
+    sentence: () => tr('The cats get the same amount of food every day. You choose how many meals it is split into, and when. A staff member comes in to fill the bowls, and the cats react to them as to any person.'),
+    tip: () => tr('A staff member comes in to fill the bowls; the cats react to them as to any person. The day’s food is shared out evenly over the meals. Click to change the meal times.') },
   // The litter round. A budget may come with the sim's cleanTimes (BUDGETS.clean); the card shows its
   // bar only if one exists.
-  cleaning: { title: 'Litter cleaning', chipTitle: 'Litter', budgeted: false, staff: true,
-    chip: c => { const n = timesOf(c, 'cleanTimes').length; return n ? plural(n, 'clean', 'cleans') + '/day' : 'No cleaning'; }, times: 'cleanTimes', max: (BUDGETS.clean && BUDGETS.clean.maxPerDay) || 6, countLabel: 'Cleans/day',
-    line: timesLine('cleanTimes', 'clean', 'cleans', 'No cleaning planned'),
-    sentence: () => 'The litter boxes are scooped at the times you set. You choose how many cleans/day, and when. A staff member comes in to scoop the litter, and the cats react to them as to any person.',
-    tip: () => 'A staff member comes in to scoop every litter box; the cats react to them as to any person. Click to change the cleaning times.' },
+  cleaning: { get title() { return tr('Litter cleaning'); }, chipTitle: 'Litter', budgeted: false, staff: true,
+    chip: c => { const n = timesOf(c, 'cleanTimes').length; return n ? tr(n === 1 ? '1 clean/day' : '{n} cleans/day', { n }) : tr('No cleaning'); }, times: 'cleanTimes', max: (BUDGETS.clean && BUDGETS.clean.maxPerDay) || 6, get countLabel() { return tr('Cleans/day'); },
+    line: timesLine('cleanTimes', 'cleans', 'No cleaning planned'),
+    sentence: () => tr('The litter boxes are scooped at the times you set. You choose how many cleans/day, and when. A staff member comes in to scoop the litter, and the cats react to them as to any person.'),
+    tip: () => tr('A staff member comes in to scoop every litter box; the cats react to them as to any person. Click to change the cleaning times.') },
   // Visits draw on the staff-time pool: their length is what the pool leaves after the litter rounds.
-  visitors: { title: 'Visitors', chipTitle: 'Visitors', budgeted: false, staff: true,
+  visitors: { get title() { return tr('Visitors'); }, chipTitle: 'Visitors', budgeted: false, staff: true,
     // The length the visits actually get; where litter rounds shortened them, the tooltip says so.
-    chip: c => c.visits.perDay ? `${c.visits.perDay} × ${Math.round(visitMinTrimmed(c))} min/day` : 'No visits',
-    line: c => c.visits.perDay ? plural(c.visits.perDay, 'visit', 'visits') + ` of ${fmtMin(visitMinTrimmed(c))} min/day` : 'No visits planned',
-    sentence: () => `Your staff have ${STAFF_MIN} minutes a day for visits and litter rounds together. Visitors are the people who sit, pet and play with the cats.`,
-    shortNote: c => staffSplit(c).shortened ? ' Shortened to fit staff time.' : '',
-    tip: c => `Visitors are the people who sit, pet and play with the cats. They come in to meet the cats, spaced evenly between ${hm(c.visits.fromHour)} and ${hm(c.visits.toHour)}. Friendly cats go to them; shy cats keep away. Click to plan the visits.` },
-  vacuum: { title: 'Vacuum', chipTitle: 'Vacuum', budgeted: true,
+    chip: c => c.visits.perDay ? tr('{n} × {m} min/day', { n: c.visits.perDay, m: Math.round(visitMinTrimmed(c)) }) : tr('No visits'),
+    line: c => c.visits.perDay ? tr(c.visits.perDay === 1 ? '1 visit of {m} min/day' : '{n} visits of {m} min/day', { n: c.visits.perDay, m: fmtMin(visitMinTrimmed(c)) }) : tr('No visits planned'),
+    sentence: () => tr('Your staff have {n} minutes a day for visits and litter rounds together. Visitors are the people who sit, pet and play with the cats.', { n: STAFF_MIN }),
+    shortNote: c => staffSplit(c).shortened ? tr(' Shortened to fit staff time.') : '',
+    tip: c => tr('Visitors are the people who sit, pet and play with the cats. They come in to meet the cats, spaced evenly between {a} and {b}. Friendly cats go to them; shy cats keep away. Click to plan the visits.', { a: hm(c.visits.fromHour), b: hm(c.visits.toHour) }) },
+  vacuum: { get title() { return tr('Vacuum'); }, chipTitle: 'Vacuum', budgeted: true,
     // "min/week" where the engine gave the chip the width, "min/wk" where it did not.
-    chip: (c, long) => c.vacuum.sessions ? `${c.vacuum.sessions} × ${c.vacuum.durationMin} min${long ? '/week' : '/wk'}` : 'No vacuuming', budget: BUDGETS.vacuum.minPerWeek, per: 'week',
+    chip: (c, long) => c.vacuum.sessions ? tr(long ? '{n} × {m} min/week' : '{n} × {m} min/wk', { n: c.vacuum.sessions, m: c.vacuum.durationMin }) : tr('No vacuuming'), budget: BUDGETS.vacuum.minPerWeek, per: 'week',
     used: c => c.vacuum.sessions * c.vacuum.durationMin,
-    line: c => c.vacuum.sessions ? plural(c.vacuum.sessions, 'session', 'sessions') + ` of ${c.vacuum.durationMin} min/week` : 'No vacuuming planned',
-    sentence: () => `Vacuuming gets ${BUDGETS.vacuum.minPerWeek} minutes/week in total. You choose how to split it. A staff member comes in to vacuum, and the cats react to them as to any person.`,
-    tip: c => `A staff member comes in to vacuum; the cats react to them as to any person. The floor has to be vacuumed. It is loud and the cats scatter. Sessions fall on separate days, between ${hm(c.vacuum.fromHour)} and ${hm(c.vacuum.toHour)}. Click to plan them.` },
+    line: c => c.vacuum.sessions ? tr(c.vacuum.sessions === 1 ? '1 session of {m} min/week' : '{n} sessions of {m} min/week', { n: c.vacuum.sessions, m: c.vacuum.durationMin }) : tr('No vacuuming planned'),
+    sentence: () => tr('Vacuuming gets {n} minutes/week in total. You choose how to split it. A staff member comes in to vacuum, and the cats react to them as to any person.', { n: BUDGETS.vacuum.minPerWeek }),
+    tip: c => tr('A staff member comes in to vacuum; the cats react to them as to any person. The floor has to be vacuumed. It is loud and the cats scatter. Sessions fall on separate days, between {a} and {b}. Click to plan them.', { a: hm(c.vacuum.fromHour), b: hm(c.vacuum.toHour) }) },
 };
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 // A timeline on a canvas, in token colours: a day strip (meals, visits) or a Monday-to-Sunday strip
@@ -6092,8 +6778,8 @@ function drawTimeline(cv, key, cfg, big) {
       if (w0 + i === day) { g.strokeStyle = C.ink; g.lineWidth = 2; SPR.rr(g, i * cw + 1, sy, cw - 2, sh, 3); g.stroke(); }
       // One label form for the whole week: the day and its session time, the day, or its first letter.
       g.fillStyle = C.muted;
-      const form = [d => big && d.t ? d.day + ' ' + d.t : d.day, d => d.day, d => d.day[0]].find(fm => DAYS.every(d => g.measureText(fm({ day: d, t: '10:00' })).width < cw - 2)) || (d => d.day[0]);
-      g.fillText(form({ day: DAYS[i], t: runs.length ? hm(((runs[0].t % 86400) / 3600)) : '' }), i * cw + 2, sy + sh + 2);
+      const form = [d => big && d.t ? d.day + ' ' + d.t : d.day, d => d.day, d => d.day[0]].find(fm => DAYS.every(d => g.measureText(fm({ day: tr(d), t: '10:00' })).width < cw - 2)) || (d => d.day[0]);
+      g.fillText(form({ day: tr(DAYS[i]), t: runs.length ? hm(((runs[0].t % 86400) / 3600)) : '' }), i * cw + 2, sy + sh + 2);
     }
     return;
   }
@@ -6136,7 +6822,7 @@ function drawTimeline(cv, key, cfg, big) {
   for (const q of marks) g.fillText(q.t, q.x, sy + sh + 2);
 }
 // The budget bar and its words: "50 of 50 min used".
-function budgetText(key, cfg) { const P = PLAN[key]; return `${P.used(cfg)} of ${P.budget} min used`; }
+function budgetText(key, cfg) { const P = PLAN[key]; return tr('{u} of {b} min used', { u: P.used(cfg), b: P.budget }); }
 // The allowance line at the top of an editor, so the cap reads as a fixed allowance.
 const ALLOWANCE = { vacuum: 'Weekly vacuum allowance' };
 // What the marks on each editor's timeline mean, one line under it.
@@ -6154,7 +6840,7 @@ for (const key of ['feeding', 'cleaning', 'visitors', 'vacuum']) {
     const b = el('button', 'card plan chip'), head = el('span', 'head'), tri = el('span', 'tri'), line = el('span', 'line');
     tri.setAttribute('aria-hidden', 'true');
     b.dataset.card = key;
-    head.append(el('span', 'title', P.chipTitle), tri);
+    head.append(el('span', 'title', t({ feeding: 'chipFeeding', cleaning: 'chipLitter', visitors: 'chipVisitors', vacuum: 'chipVacuum' }[key] || '') || P.chipTitle), tri);
     b.append(head, line);
     node.classList.add('plangroup'); node.appendChild(b);
     b.onclick = () => toggleEditor(key);
@@ -6184,7 +6870,7 @@ function buildEditor(key, node) {
   // The header row: the control's icon and name, and a close button (the chip and Escape close it too).
   const head = el('div', 'ehead'), close = el('button', 'close', '✕');
   head.append(icon(key), el('span', 'ename', PLAN[key].title), close);
-  close.title = 'Close (Esc)'; close.setAttribute('aria-label', 'Close the ' + PLAN[key].title + ' editor');
+  close.title = tr('Close (Esc)'); close.setAttribute('aria-label', tr('Close the {x} editor', { x: PLAN[key].title }));
   close.onclick = () => { if (FORM === 'desktop') { UI.editor = []; applyLayout(); } else setView('room'); };
   const plan = el('p', 'sentence'), bud = el('div', 'budget'), bar = el('span', 'bar'), fill = el('i'), bt = el('span', 'bt');
   bar.appendChild(fill); bud.append(bar, bt);
@@ -6197,15 +6883,15 @@ function buildEditor(key, node) {
   // The Visitors editor: the time for visits as an allowance, used against free.
   const vis = el('div', 'visallow'), vHead = el('div', 'shead'), vBar = el('div', 'sbar'), vUsed = el('i', 'cats'), vLine = el('div', 'vline'), vNote = el('p', 'snote'), vShort = el('div', 'vshort');
   vBar.appendChild(vUsed); vis.append(vHead, vBar, vLine, vShort, vNote);
-  vNote.textContent = 'You can split this time into as many or as few visits as you like.';
+  vNote.textContent = tr('You can split this time into as many or as few visits as you like.');
   // The Visitors editor names the litter part of the staff bar and, beside it on the same row, any staff
   // minutes no plan uses (Erwin, Nov 16: at 0 rounds visits cap at 50 of 53); the time for visits under it
   // says the rest. Its plan is the "Used" line, so it carries no separate plan line.
   if (key === 'visitors') { const row = el('div', 'slabs'); row.append(lLit, sLeft); staff.append(sHead, sBar, row, vis); } else staff.append(sHead, sBar, sLabs, sNote);
   const legend = el('div', 'legend');
-  for (const t of LEGEND[key]) legend.appendChild(el('div', null, t));
+  for (const t of LEGEND[key]) legend.appendChild(el('div', null, tr(t)));
   // The small pointer over the strip marks the time now; it carries no label, so it is the tooltip.
-  tl.title = key === 'vacuum' ? 'The outlined day is the current day.' : 'The small pointer marks the time now.';
+  tl.title = tr(key === 'vacuum' ? 'The outlined day is the current day.' : 'The small pointer marks the time now.');
   // Two parts: the header, the plan and what limits it | the timeline, its legend and the fields. They
   // stack, or sit side by side where the engine says the editor is wide (CONTENT.editorTwoCol).
   const partA = el('div', 'epart'), partB = el('div', 'epart');
@@ -6241,21 +6927,21 @@ function buildEditor(key, node) {
     };
   } else {
     const lim = key === 'vacuum'
-      ? { maxCount: BUDGETS.vacuum.maxSessions, maxDur: BUDGETS.vacuum.maxDurationMin, budget: BUDGETS.vacuum.minPerWeek, minDur: 2, countKey: 'sessions', countLabel: 'Sessions/week', per: 'min/week' }
-      : { maxCount: BUDGETS.visits.maxPerDay, maxDur: BUDGETS.visits.maxDurationMin, budget: null, minDur: 5, countKey: 'perDay', countLabel: 'Visits/day', per: 'min/day' };
+      ? { maxCount: BUDGETS.vacuum.maxSessions, maxDur: BUDGETS.vacuum.maxDurationMin, budget: BUDGETS.vacuum.minPerWeek, minDur: 2, countKey: 'sessions', countLabel: tr('Sessions/week'), per: 'min/week' }
+      : { maxCount: BUDGETS.visits.maxPerDay, maxDur: BUDGETS.visits.maxDurationMin, budget: null, minDur: 5, countKey: 'perDay', countLabel: tr('Visits/day'), per: 'min/day' };
     parts.lim = lim;
     parts.count = num(0, lim.maxCount, lim.countLabel, key + '.count');
-    parts.dur = num(lim.minDur, lim.maxDur, 'Minutes each', key + '.dur');
-    parts.from = num(0, 23, 'Window start hour', key + '.from');
-    parts.to = num(1, 24, 'Window end hour', key + '.to');
+    parts.dur = num(lim.minDur, lim.maxDur, tr('Minutes each'), key + '.dur');
+    parts.from = num(0, 23, tr('Window start hour'), key + '.from');
+    parts.to = num(1, 24, tr('Window end hour'), key + '.to');
     // Three settings, which is what the layout engine sized the editor for: how many, how long, and
     // the hours they fall in. The hours are one setting with two fields, not two settings.
     // "From [10]:00 to [19]:00": two halves that stack where the editor is narrow (223px is: 276 px
     // is the one-row width).
     const half = (label, input, after) => { const h = el('span', 'half'); h.append(el('span', null, label), input, el('span', null, after)); return h; };
     const window_ = el('div', 'field window');
-    window_.append(half('From', parts.from, ':00'), half('to', parts.to, ':00'));
-    fields.append(field(lim.countLabel, parts.count), field('Minutes each', parts.dur), window_);
+    window_.append(half(tr('From'), parts.from, ':00'), half(tr('to'), parts.to, ':00'));
+    fields.append(field(lim.countLabel, parts.count), field(tr('Minutes each'), parts.dur), window_);
     const k = key === 'vacuum' ? 'vacuum' : 'visits';
     const read = () => {
       const count = clampN(parts.count.value, 0, lim.maxCount, schedule[k][lim.countKey]);
@@ -6269,7 +6955,7 @@ function buildEditor(key, node) {
       const { count, dur, fromHour, toHour } = read();
       // Vacuum has a weekly allowance and is cut back to it; visits are trimmed by the staff-time pool.
       const total = count * dur, fits = count ? Math.max(lim.minDur, Math.floor(lim.budget / count)) : dur, over = lim.budget != null && total > lim.budget;
-      if (over) sim.emit(`${count} x ${dur} min is ${total} ${lim.per} and the budget is ${lim.budget}: cut back to ${count} x ${fits} min`, 'event');
+      if (over) sim.emit(`${count} x ${dur} min is ${total} ${lim.per} and the budget is ${lim.budget}: cut back to ${count} x ${fits} min`, 'event', { k: 'budgetCut', n: count, d: dur, t: total, b: lim.budget, f: fits });
       // Visits: minutes each are capped at the time for visits shared by the visits (the allowance is
       // the staff pool less the litter rounds).
       let durOut = over ? fits : dur;
@@ -6287,23 +6973,23 @@ function buildEditor(key, node) {
     plan.textContent = PLAN[key].line(c);
     if (PLAN[key].staff) {
       const x = staffSplit(c);
-      sHead.textContent = `Staff time per day: ${STAFF_MIN} min`;
+      sHead.textContent = tr('Staff time per day: {n} min', { n: STAFF_MIN });
       // Three parts where time is unused: with the cats, cleaning litter, and the unused rest (the track).
       sCats.style.width = (100 * x.cats / STAFF_MIN) + '%'; sLit.style.width = (100 * x.litter / STAFF_MIN) + '%';
-      lCats.textContent = `With the cats: ${fmtMin(x.cats)} min`; lLit.textContent = `Cleaning litter: ${fmtMin(x.litter)} min`;
-      sLeft.textContent = x.left >= 0.05 ? `Unused: ${fmtMin(x.left)} min` : ''; sLeft.classList.toggle('hidden', x.left < 0.05);
-      sNote.textContent = `Each litter round takes ${fmtMin(litterRoundMin())} min away from time with the cats.`;
-      vHead.textContent = `Time for visits: ${fmtMin(x.allowance)} min/day`;
+      lCats.textContent = tr('With the cats: {n} min', { n: fmtMin(x.cats) }); lLit.textContent = tr('Cleaning litter: {n} min', { n: fmtMin(x.litter) });
+      sLeft.textContent = x.left >= 0.05 ? tr('Unused: {n} min', { n: fmtMin(x.left) }) : ''; sLeft.classList.toggle('hidden', x.left < 0.05);
+      sNote.textContent = tr('Each litter round takes {n} min away from time with the cats.', { n: fmtMin(litterRoundMin()) });
+      vHead.textContent = tr('Time for visits: {n} min/day', { n: fmtMin(x.allowance) });
       vUsed.style.width = (x.allowance ? 100 * x.cats / x.allowance : 0) + '%';
-      vLine.textContent = `Used: ${x.perDay} × ${fmtMin(x.each)} = ${fmtMin(x.cats)} min · Free: ${fmtMin(x.free)} min`;
+      vLine.textContent = tr('Used: {a} × {b} = {c} min · Free: {d} min', { a: x.perDay, b: fmtMin(x.each), c: fmtMin(x.cats), d: fmtMin(x.free) });
       // While the visits are shortened, the note takes the free-split sentence's place.
-      vShort.textContent = x.shortened ? 'Shortened to fit staff time.' : ''; vShort.classList.toggle('hidden', !x.shortened); vNote.classList.toggle('hidden', x.shortened);
-      vShort.title = x.shortened ? `You chose ${fmtMin(x.chosen)} min each; the litter rounds leave ${fmtMin(x.each)}.` : '';
+      vShort.textContent = x.shortened ? tr('Shortened to fit staff time.') : ''; vShort.classList.toggle('hidden', !x.shortened); vNote.classList.toggle('hidden', x.shortened);
+      vShort.title = x.shortened ? tr('You chose {a} min each; the litter rounds leave {b}.', { a: fmtMin(x.chosen), b: fmtMin(x.each) }) : '';
       Object.assign(staff.dataset, { cats: x.cats.toFixed(2), litter: x.litter.toFixed(2), left: x.left.toFixed(2), allowance: x.allowance.toFixed(2), free: x.free.toFixed(2), shortened: String(x.shortened) });
       // The fields cannot ask for more than the allowance: minutes each up to the allowance shared by the visits.
       if (E.parts.dur) { E.parts.dur.max = String(Math.max(E.parts.lim.minDur, Math.floor(x.allowance / Math.max(1, x.perDay)))); }
     }
-    if (PLAN[key].budgeted) { bt.textContent = ALLOWANCE[key] + ': ' + budgetText(key, c); fill.style.width = Math.min(100, 100 * PLAN[key].used(c) / PLAN[key].budget) + '%'; }
+    if (PLAN[key].budgeted) { bt.textContent = tr(ALLOWANCE[key]) + ': ' + budgetText(key, c); fill.style.width = Math.min(100, 100 * PLAN[key].used(c) / PLAN[key].budget) + '%'; }
     drawTimeline(tl, key, c, true);
   };
   E.place = r => { box.classList.toggle('two', LAY.CONTENT.editorTwoCol(r.w)); };
@@ -6315,12 +7001,12 @@ function renderEditor(key, E) {
   const tf = PLAN[key].times;
   if (tf) {
     if (!schedule[tf]) schedule[tf] = timesOf(schedule, tf);
-    const list = schedule[tf], what = key === 'feeding' ? 'Meal ' : 'Clean ';
+    const list = schedule[tf], what = key === 'feeding' ? 'Meal {i} time' : 'Clean {i} time';
     E.parts.n.value = list.length;
     if (E.parts.times.children.length !== list.length) {
       E.parts.times.textContent = '';
       list.forEach((h, i) => {
-        const t = document.createElement('input'); t.type = 'time'; t.style.width = LAY.TIME_FIELD_W + 'px'; t.setAttribute('aria-label', what + (i + 1) + ' time');
+        const t = document.createElement('input'); t.type = 'time'; t.style.width = LAY.TIME_FIELD_W + 'px'; t.setAttribute('aria-label', tr(what, { i: i + 1 }));
         t.onchange = () => { const v = parseHM(t.value); if (v == null) return E.render(); schedule[tf][i] = v; schedule[tf].sort((a, b) => a - b); applySchedule(); E.render(); };
         E.parts.times.appendChild(t);
       });
@@ -6359,22 +7045,24 @@ const SPANS = [['6h', '6 hours', 6 * 3600], ['today', 'Today', 0], ['3d', '3 day
 // only is shown as text, not as a dropdown.
 const RATES = [['1h', 'per hour', 3600, '/hour'], ['1d', 'per day', 86400, '/day']];
 const rateOf = k => RATES.find(r => r[0] === k) || RATES[0];
+// The rate's words in the current language: "per hour" and "/hour" (and the phone band's "/h").
+const rateWord = k => t(rateOf(k)[0] === '1d' ? 'perDay' : 'perHour'), unitOf = k => t(rateOf(k)[0] === '1d' ? 'unitDay' : 'unitHour'), unitShort = k => t(rateOf(k)[0] === '1d' ? 'unitDayShort' : 'unitHourShort');
 // The chart's point size: the largest that still gives at least 6 points over the window.
 const POINTS = [[600, '10 minutes'], [3600, '1 hour'], [86400, '1 day']];
 // The statistics view's range for each span, used when the chart is opened there.
 const SPAN_RANGE = { '6h': 21600, today: 86400, '3d': 259200, week: 604800, all: 0 };
 const GOALS = [
-  { id: 'stress', name: 'Average stress', short: 'Stress', metrics: [0], color: TK.goalSeries.stress, dash: [], mark: 'circle',
-    tip: 'The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.',
-    level: s => U.toCSS(s.stress), range: [1, 7], fmt: v => v.toFixed(1) + ' of 7' },
-  { id: 'conflict', name: 'Conflict', short: 'Conflict', metrics: [12, 14], color: TK.goalSeries.conflict, dash: [6, 3], mark: 'square',
-    tip: 'Every fight and every single swat between two cats, counted as it happens. Lower is better.',
-    count: s => (s.fights || 0) + (s.swats || 0), box: 'Fights', unitWord: 'fights and swats' },
-  { id: 'friendly', name: 'Friendly contact', short: 'Friendly', metrics: [10], color: TK.goalSeries.friendly, dash: [2, 3], mark: 'triangle',
-    tip: 'Every time one cat starts grooming, playing with or greeting another, counted as it happens. Higher is better.',
-    count: s => s.friendlies || 0, box: 'Contacts', unitWord: 'friendly contacts' },
-  { id: 'hiding', name: 'Hiding', short: 'Hiding', metrics: [8], color: TK.goalSeries.hiding, dash: [8, 3, 2, 3], mark: 'diamond',
-    tip: 'The share of cats in a hiding place, checked every 5 minutes. Lower is better.',
+  { id: 'stress', get name() { return tr('Average stress'); }, short: 'Stress', metrics: [0], color: TK.goalSeries.stress, dash: [], mark: 'circle',
+    get tip() { return tr('The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.'); },
+    level: s => U.toCSS(s.stress), range: [1, 7], fmt: v => v.toFixed(1) + ' ' + t('of7') },
+  { id: 'conflict', get name() { return tr('Conflict'); }, short: 'Conflict', metrics: [12, 14], color: TK.goalSeries.conflict, dash: [6, 3], mark: 'square',
+    get tip() { return tr('Every fight and every single swat between two cats, counted as it happens. Lower is better.'); },
+    count: s => (s.fights || 0) + (s.swats || 0), box: 'Fights', get unitWord() { return tr('fights and swats'); } },
+  { id: 'friendly', get name() { return tr('Friendly contact'); }, short: 'Friendly', metrics: [10], color: TK.goalSeries.friendly, dash: [2, 3], mark: 'triangle',
+    get tip() { return tr('Every time one cat starts grooming, playing with or greeting another, counted as it happens. Higher is better.'); },
+    count: s => s.friendlies || 0, box: 'Contacts', get unitWord() { return tr('friendly contacts'); } },
+  { id: 'hiding', get name() { return tr('Hiding'); }, short: 'Hiding', metrics: [8], color: TK.goalSeries.hiding, dash: [8, 3, 2, 3], mark: 'diamond',
+    get tip() { return tr('The share of cats in a hiding place, checked every 5 minutes. Lower is better.'); },
     level: s => s.hiding * 100, range: [0, 100], fmt: v => Math.round(v) + '%' },
 ];
 // The newest sample at or before t (or the first one): cumulative counters are read as differences.
@@ -6417,7 +7105,7 @@ function chartData(spanKey, rateKey) {
 // The three cats at the top of each goal over the chart's span, from the per-cat records: mean stress and
 // the share of samples hidden (sample.cats), fights each cat was in on either side (stats.fightLog), and
 // friendly approaches started (the rise of sample.cats[id].fr across the span).
-const TOP_HEAD = { stress: 'Most stressed', conflict: 'Most in fights', friendly: 'Most friendly', hiding: 'Most hidden' };
+const TOP_HEAD = { get stress() { return tr('Most stressed'); }, get conflict() { return tr('Most in fights'); }, get friendly() { return tr('Most friendly'); }, get hiding() { return tr('Most hidden'); } };
 const rateNum = v => v >= 10 ? Math.round(v).toString() : (Math.round(v * 10) / 10).toString();
 function topCats(spanKey, n = 3) {
   const d = spanBounds(spanKey), xs = sim.samples.filter(s => s.t > d.t0 && s.t <= d.t1), out = {};
@@ -6425,27 +7113,27 @@ function topCats(spanKey, n = 3) {
   for (const s of xs) for (const [id, p] of Object.entries(s.cats)) {
     const a = acc[id] || (acc[id] = { st: 0, hid: 0, n: 0, fr0: p.fr, fr1: p.fr }); a.st += p.stress; a.hid += p.hid; a.n++; a.fr1 = p.fr; name[id] = p.name; }
   const fights = {}; for (const f of sim.stats.fightLog) if (f.t > d.t0 && f.t <= d.t1) for (const id of [f.a, f.b]) fights[id] = (fights[id] || 0) + 1;
-  const rank = (val, fmt) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, n).map(x => { const t = fmt(x.v); return { ...x, text: t, full: t, short: t.replace(' of 7', '/7').replace('/hour', '/h').replace('/day', '/d') }; });   // short: the phone band's ~48px
+  const rank = (val, fmt, fmtShort) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, n).map(x => { const tx = fmt(x.v); return { ...x, text: tx, full: tx, short: fmtShort ? fmtShort(x.v) : tx }; });   // short: the phone band's ~48px
   // In the goal boxes' wording, over the chart's window: stress "of 7", fights and contacts as a rate in the chosen
   // unit ("0.4/hour"), hiding "%".
   const R = rateOf(UI.chart && UI.chart.grain), len = Math.max(600, d.t1 - Math.max(d.t0, d.first)), rate = c => c * R[2] / len;
-  out.stress = rank(id => acc[id].st / acc[id].n, v => U.toCSS(v).toFixed(1) + ' of 7');
-  out.conflict = rank(id => rate(fights[id] || 0), v => rateNum(v) + R[3]);
-  out.friendly = rank(id => rate(acc[id].fr1 - acc[id].fr0), v => rateNum(v) + R[3]);
+  out.stress = rank(id => acc[id].st / acc[id].n, v => U.toCSS(v).toFixed(1) + ' ' + t('of7'), v => U.toCSS(v).toFixed(1) + '/7');
+  out.conflict = rank(id => rate(fights[id] || 0), v => rateNum(v) + unitOf(R[0]), v => rateNum(v) + unitShort(R[0]));
+  out.friendly = rank(id => rate(acc[id].fr1 - acc[id].fr0), v => rateNum(v) + unitOf(R[0]), v => rateNum(v) + unitShort(R[0]));
   out.hiding = rank(id => acc[id].hid / acc[id].n, v => Math.round(v * 100) + '%');
   return out;
 }
-const topLine = list => list.length ? list.map(x => x.name + ' ' + x.text).join(', ') : 'none yet';
+const topLine = list => list.length ? list.map(x => x.name + ' ' + x.text).join(', ') : tr('none yet');
 // The goal box's value: a level is its reading now ("2.5 of 7", "12%"); a count is its rate over the whole window in
 // the chosen unit ("0.4/hour"), the same figure the top cats are ranked in.
 function legendValue(G, d, i) {
   if (G.level) return G.fmt(G.level(sampleAt(sim.t)));
   const v = d.totals[i];
-  return v == null ? 'not yet' : rateNum(v) + rateOf(d.unit)[3];
+  return v == null ? t('notYet') : rateNum(v) + unitOf(d.unit);
 }
 // Times before the shelter opened (a span reaching back past day 0) wrap like any clock.
 const dayOf = t => ((Math.floor(t / 86400) % 7) + 7) % 7, hourOf = t => (((t % 86400) + 86400) % 86400) / 3600;
-const fmtTick = (t, g) => g >= 86400 ? DAYS[dayOf(t)] : hm(hourOf(t));
+const fmtTick = (t, g) => g >= 86400 ? tr(DAYS[dayOf(t)]) : hm(hourOf(t));
 // Clicking the chart opens the statistics view on the four goals' metrics over the same span.
 function openGoals() {
   UI.stats.metrics = new Set(GOALS.flatMap(G => G.metrics)); UI.stats.page = 'trends'; UI.stats.open = 'none';
@@ -6469,44 +7157,45 @@ function buildChart(host, big) {
     box.appendChild(tops); }
   const fillTops = list => { for (const G of GOALS) { const row = topRows[G.id], L = list[G.id], sig = JSON.stringify(L.map(x => [x.id, x.text]));
     if (row.dataset.sig === sig) continue; row.dataset.sig = sig; row.textContent = '';
-    if (!L.length) { row.append(el('span', 'none', 'none yet')); continue; }
-    L.forEach((x, i) => { const b = el('button', 'tcat', x.name + ' ' + x.text); b.dataset.cat = x.id; b.title = 'Select ' + x.name;
+    if (!L.length) { row.append(el('span', 'none', tr('none yet'))); continue; }
+    L.forEach((x, i) => { const b = el('button', 'tcat', x.name + ' ' + x.text); b.dataset.cat = x.id; b.title = tr('Select {name}', { name: x.name });
       b.onclick = () => { const c = sim.cats.find(k => k.id === x.id); if (c) { closeBigChart(); selectCat(c); } };
       row.append(b); if (i < L.length - 1) row.append(document.createTextNode(', ')); }); } };
   let grow = null;
   if (!big) {
-    grow = el('button', 'grow', '+'); grow.title = 'Enlarge chart'; grow.setAttribute('aria-label', 'Enlarge chart');
+    grow = el('button', 'grow', '+'); grow.title = t('enlarge'); grow.setAttribute('aria-label', t('enlarge'));
     grow.onclick = openBigChart; box.appendChild(grow);
   } else {
-    const full = el('button', 'btn nav fullstats', 'Open full stats'); full.onclick = openGoals; full.title = 'The statistics view, on these goals over the same span';
-    const close = el('button', 'close', '✕'); close.title = 'Close the enlarged chart (Esc)'; close.setAttribute('aria-label', 'Close the enlarged chart');
+    const full = el('button', 'btn nav fullstats', tr('Open full stats')); full.onclick = openGoals; full.title = tr('The statistics view, on these goals over the same span');
+    const close = el('button', 'close', '✕'); close.title = tr('Close the enlarged chart (Esc)'); close.setAttribute('aria-label', tr('Close the enlarged chart'));
     close.onclick = closeBigChart; ctl.append(full, close);
   }
   const sel = (label, opts) => { const s = document.createElement('select'); s.setAttribute('aria-label', label);
-    for (const [k, t] of opts) { const o = document.createElement('option'); o.value = k; o.textContent = t; s.appendChild(o); } return s; };
-  const spanSel = sel('Time window', SPANS), grainSel = sel('Counts written per', RATES);
-  spanSel.title = 'The stretch of time the chart, the goal boxes and the top cats cover';
-  grainSel.title = 'The unit fights and friendly contacts are counted in';
+    for (const [k] of opts) { const o = document.createElement('option'); o.value = k; o.textContent = optText(k); s.appendChild(o); } return s; };
+  const optText = k => ({ '6h': t('span6h'), today: t('spanToday'), '3d': t('span3d'), week: t('spanWeek'), all: t('spanAll'), '1h': t('perHour'), '1d': t('perDay') })[k];
+  const spanSel = sel(tr('Time window'), SPANS), grainSel = sel(tr('Counts written per'), RATES);
+  spanSel.title = tr('The stretch of time the chart, the goal boxes and the top cats cover');
+  grainSel.title = tr('The unit fights and friendly contacts are counted in');
   // "Window [Today]" and "[per hour]": the rate's option says what it is. Where only one rate suits the window it
   // is plain text ("per hour") in the select's place.
   const rateText = el('span', 'only');
   const labelled = (word, w, ...xs) => { const l = el('label', 'csel'); if (word) l.append(el('span', 'w', word)); l.append(...xs); l.style.width = w + 'px'; return l; };
-  ctl.prepend(labelled('Window', LAY.CHART_SPAN_W, spanSel), labelled(null, LAY.CHART_RATE_W, grainSel, rateText));
+  ctl.prepend(labelled(t('window'), LAY.CHART_SPAN_W, spanSel), labelled(null, LAY.CHART_RATE_W, grainSel, rateText));
   const fixGrain = () => {
     // The list is rebuilt only when the set changes: touching an open select's options every frame shuts its menu.
     const ok = ratesFor(UI.chart.span), sig = ok.map(g => g[0]).join();
     if (grainSel.dataset.sig !== sig) {
       grainSel.dataset.sig = sig; grainSel.textContent = '';
-      for (const [k, t] of ok) { const o = document.createElement('option'); o.value = k; o.textContent = t; grainSel.appendChild(o); }
+      for (const [k] of ok) { const o = document.createElement('option'); o.value = k; o.textContent = optText(k); grainSel.appendChild(o); }
     }
     if (!ok.some(g => g[0] === UI.chart.grain)) UI.chart.grain = ok[0][0];
     const one = ok.length === 1; grainSel.style.display = one ? 'none' : ''; rateText.style.display = one ? '' : 'none';
-    rateText.textContent = ok[0][1];
+    rateText.textContent = optText(ok[0][0]);
     if (grainSel.value !== UI.chart.grain) grainSel.value = UI.chart.grain; };
   spanSel.onchange = () => { UI.chart.span = spanSel.value; fixGrain(); renderAll(); };
   grainSel.onchange = () => { UI.chart.grain = grainSel.value; renderAll(); };
   const entries = GOALS.map(G => {
-    const b = el('button', 'leg'), sw = el('span', 'sw'), tx = el('span', 'tx'), nm = el('span', 'nm', G.box || G.short), v = el('span', 'v');
+    const b = el('button', 'leg'), sw = el('span', 'sw'), tx = el('span', 'tx'), nm = el('span', 'nm', LEADER_LAB[G.id]), v = el('span', 'v');
     b.dataset.goal = G.id; sw.style.background = G.color; tx.append(nm, v); b.append(sw, tx); legend.appendChild(b);
     b.onclick = () => { UI.chart.hidden.has(G.id) ? UI.chart.hidden.delete(G.id) : UI.chart.hidden.add(G.id); renderAll(); };
     return { G, b, v };
@@ -6514,7 +7203,7 @@ function buildChart(host, big) {
   let hover = null, data = null;
   cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); hover = (e.clientX - r.left) / r.width; draw(); });
   cv.addEventListener('mouseleave', () => { hover = null; draw(); });
-  if (!big) { cv.addEventListener('click', openBigChart); cv.title = 'Click to enlarge the chart'; }
+  if (!big) { cv.addEventListener('click', openBigChart); cv.title = tr('Click to enlarge the chart'); }
   function draw() {
     if (!data) return;
     const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
@@ -6532,10 +7221,10 @@ function buildChart(host, big) {
     let capH = 0;
     // What the plot shows, in words, top left: the rate unit and the point size (each point covers that much time).
     { const R = rateOf(data.unit), pt = (POINTS.find(p => p[0] === data.g) || POINTS[0])[1];
-      const cap = `Fights and contacts ${R[1]} · stress of 7 · hiding % · each point ${pt}`;
+      const cap = t('caption', { rate: rateWord(data.unit), point: t({ 600: 'pt10m', 3600: 'pt1h', 86400: 'pt1d' }[data.g]) });
       g.font = `${TK.font.size.ui}px ${TK.font.stack}`; g.textBaseline = 'top';
       capH = ph >= 90 && g.measureText(cap).width <= w - 16 ? 22 : 0;   // only where the plot keeps 68px of data under it
-      if (capH) { g.fillStyle = C.muted; g.fillText(cap, 6, 4); } }
+      if (capH) { const rtl = I18N.dir() === 'rtl'; g.fillStyle = C.muted; g.direction = rtl ? 'rtl' : 'ltr'; g.textAlign = rtl ? 'right' : 'left'; g.fillText(cap, rtl ? w - 6 : 6, 4); g.direction = 'ltr'; g.textAlign = 'left'; } }
     GOALS.forEach((G, si) => {
       if (UI.chart.hidden.has(G.id)) return;
       const vs = data.series[si], max = G.range ? G.range[1] : Math.max(1, ...vs.filter(v => v != null)), min = G.range ? G.range[0] : 0;
@@ -6559,8 +7248,8 @@ function buildChart(host, big) {
     g.font = `${TK.font.size.ui}px ${TK.font.stack}`; g.textBaseline = 'top'; g.fillStyle = C.muted;
     const span = data.t1 - data.t0, TX_ = t => ((t - data.t0) / span) * (w - 14) + 3, lw0 = g.measureText('Mon 23:00').width + 12;
     const step = [3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400].find(s => (s / span) * w >= lw0) || 7 * 86400;
-    const nowW = g.measureText('now').width;
-    g.fillText('now', w - nowW, ph + 2);
+    const nowW = g.measureText(t('now')).width;
+    g.fillText(t('now'), w - nowW, ph + 2);
     for (let t = Math.ceil(data.t0 / step) * step; t < data.t1; t += step) {
       const lab = fmtTick(t, step), lw = g.measureText(lab).width, x = Math.max(0, TX_(t) - lw / 2);
       if (x + lw < w - nowW - 8) { g.fillText(lab, x, ph + 2); g.fillStyle = C.line; g.fillRect(Math.round(TX_(t)), ph - 3, 1, 3); g.fillStyle = C.muted; }
@@ -6570,7 +7259,7 @@ function buildChart(host, big) {
       const i = Math.max(0, Math.min(n - 1, Math.round(hover * (n - 1)))), x = X(i);
       g.fillStyle = C.ink; g.fillRect(Math.round(x), 0, 1, ph);
       const lines = [DAYS[dayOf(data.edges[i][0])] + ' ' + fmtTick(data.edges[i][0], 1)]
-        .concat(GOALS.map((G, si) => { const v = data.series[si][i]; return `${G.box || G.short} ${v == null ? '–' : G.level ? G.fmt(v) : rateNum(v) + rateOf(data.unit)[3]}`; }));
+        .concat(GOALS.map((G, si) => { const v = data.series[si][i]; return `${LEADER_LAB[G.id]} ${v == null ? '–' : G.level ? G.fmt(v) : rateNum(v) + unitOf(data.unit)}`; }));
       SPR.drawTooltip(g, lines.join(' · '), x, 2, w, h);
     }
   }
@@ -6592,7 +7281,7 @@ function buildChart(host, big) {
       if (spanSel.value !== UI.chart.span) spanSel.value = UI.chart.span;
       fixGrain();
       if (grainSel.value !== UI.chart.grain) grainSel.value = UI.chart.grain;
-      const R = rateOf(UI.chart.grain), win = (SPANS.find(x => x[0] === UI.chart.span) || SPANS[1])[1].toLowerCase();
+      const R = rateOf(UI.chart.grain), win = (optText(UI.chart.span) || t('spanToday')).toLowerCase();
       data = chartData(UI.chart.span, UI.chart.grain);
       const top = topCats(UI.chart.span);
       if (tops) { tops.classList.toggle('hidden', !(FORM === 'desktop' && SOL.chartTops)); fillTops(top); }
@@ -6600,7 +7289,7 @@ function buildChart(host, big) {
         v.textContent = legendValue(G, data, i);
         const off = UI.chart.hidden.has(G.id);
         b.classList.toggle('off', off); b.setAttribute('aria-pressed', String(!off));
-        b.title = `${G.name}: ${v.textContent}${G.count ? ' (' + G.unitWord + ' ' + R[1] + ', averaged over ' + win + ')' : ' (now)'}. ${TOP_HEAD[G.id]} over ${win}: ${topLine(top[G.id])}. ${G.tip} Click to ${off ? 'show' : 'hide'} it on the chart.`;
+        b.title = (G.count ? tr('{name}: {v} ({unit} {rate}, averaged over {win})', { name: G.name, v: v.textContent, unit: G.unitWord, rate: rateWord(R[0]), win }) : tr('{name}: {v} (now)', { name: G.name, v: v.textContent })) + '. ' + tr('{head} over {win}: {list}.', { head: TOP_HEAD[G.id], win, list: topLine(top[G.id]) }) + ' ' + G.tip + ' ' + tr(off ? 'Click to show it on the chart.' : 'Click to hide it on the chart.');
       });
       draw();
     },
@@ -6613,7 +7302,7 @@ BUILD['feed'] = node => buildChart(node, false);
 // own decision: the solver shows a reserved region does not fit at either phone size. The eight needs
 // are the required part; personality and affinity are the blocks that give way, and the engine names
 // which one it dropped.
-const LEADER_LAB = { stress: 'Stress', conflict: 'Fights', friendly: 'Contacts', hiding: 'Hiding' };   // the goal tickets' own words
+const LEADER_LAB = { get stress() { return t('goalStress'); }, get conflict() { return t('goalFights'); }, get friendly() { return t('goalContacts'); }, get hiding() { return t('goalHiding'); } };   // the goal tickets' own words
 function buildReadout(node) {
   const box = el('div', 'readout'); node.appendChild(box);
   const ident = el('div', 'ident'), nm = el('span', 'nm'), meta = el('span', 'meta');
@@ -6632,13 +7321,12 @@ function buildReadout(node) {
     if (c && !sim.cats.includes(c)) { selectCat(null); return; }
     // The panel keeps its size with no cat picked: it says how to pick one.
     box.classList.toggle('empty', !c);
-    if (!c) { nm.textContent = 'No cat picked'; meta.textContent = 'Click a cat in the room to see its needs, personality and friendships here.'; return; }
+    if (!c) { nm.textContent = t('noCat'); meta.textContent = t('noCatHint'); return; }
     nm.textContent = c.name;
-    meta.textContent = (c.arrivedT !== undefined ? 'Newcomer, ' : '') +
-      `${c.sex === 'M' ? 'male' : 'female'}, ${c.age} y, ${c.coat.replace(/-/g, ' ')}, ${c.origin}`;
+    meta.textContent = I18N.catDesc(c, c.arrivedT !== undefined);
     const inf = actInfo(sim, c);
     dot.style.background = TK.activity[inf.cat];
-    act.textContent = inf.text.replace(/[a-z]/, ch => ch.toUpperCase());
+    act.textContent = ((inf.onWay ? '→ ' : '') + tr(inf.verb) + (inf.pname ? ' ' + inf.pname : '')).replace(/[a-zа-я]/, ch => ch.toUpperCase());
     // The blocks are drawn at exactly the heights the layout engine reserved for them, read off the
     // engine's own model rather than left to the CSS to arrive at: that is what makes "the readout
     // fits its rectangle" a fact of the geometry instead of something to check by eye.
@@ -6652,7 +7340,7 @@ function buildReadout(node) {
         const b = el('div', 'block');
         b.style.flex = spec.span >= perRow ? '1 1 100%' : `0 0 ${model.colW}px`;
         b.style.height = spec.h + 'px';
-        const h = el('h3', null, id === 'needs' ? 'Needs' : id === 'personality' ? 'Personality' : 'Feels about');
+        const h = el('h3', null, id === 'needs' ? t('needs') : id === 'personality' ? t('personality') : t('feelsAbout'));
         h.style.height = LAY.LINE + 'px';
         const rows = el('div', 'rows');
         rows.style.gridTemplateColumns = `repeat(${id === 'needs' ? perRow : 1},minmax(0,1fr))`;
@@ -6664,10 +7352,10 @@ function buildReadout(node) {
     }
     if (blocks.blocks.needs) fillRows(blocks.blocks.needs, NEEDS.map(n => {
       const v = c.s[NEED_KEY[n]];
-      return { lab: n, frac: v, num: n === 'Stress' ? css(v) : pct(v),
+      return { lab: tr(n), frac: v, num: n === 'Stress' ? css(v) : pct(v),
         col: n === 'Stress' ? (U.toCSS(v) > 4 ? TK.color.alert : TK.color.need) : v > 0.75 ? TK.color.warn : TK.color.need };
     }));
-    if (blocks.blocks.personality) fillRows(blocks.blocks.personality, TRN.map(([k, n]) => ({ lab: n, frac: c.tr[k], num: pct(c.tr[k]), col: TK.color.trait })));
+    if (blocks.blocks.personality) fillRows(blocks.blocks.personality, TRN.map(([k, n]) => ({ lab: tr(n), frac: c.tr[k], num: pct(c.tr[k]), col: TK.color.trait })));
     if (blocks.blocks.affinity) {
       const os = sim.cats.filter(o => o !== c).map(o => ({ o, m: c.mem[o.id] || { aff: 0, fear: 0 } })).sort((a, b) => b.m.aff - a.m.aff).slice(0, 4);
       fillRows(blocks.blocks.affinity, os.map(({ o, m }) => ({ lab: o.name, frac: (m.aff + 1) / 2, num: (m.aff >= 0 ? '+' : '−') + Math.abs(m.aff).toFixed(2),
@@ -6699,7 +7387,7 @@ BUILD['readout'] = node => buildReadout(node);
 // show): its face, name and value, in the region the engine gives it (sol.leaders: a column of its own on desktop,
 // a band under the goals on phone portrait). Every entry is a 44px target; clicking one picks that cat.
 function buildLeaders(node) {
-  const box = el('div', 'leaders'), top = el('div', 'lhead'), ttl = el('div', 'ttl'), head = el('h3', null, 'Top cats'), lrows = {};
+  const box = el('div', 'leaders'), top = el('div', 'lhead'), ttl = el('div', 'ttl'), head = el('h3', null, t('topCats')), lrows = {};
   // The plain "+" that expands the band (phone portrait); the chart's Enlarge "+" is the same control.
   const grow = el('button', 'grow', '+'); grow.type = 'button';
   grow.onclick = () => { UI.leadersOpen = !UI.leadersOpen; applyLayout(); };
@@ -6709,9 +7397,9 @@ function buildLeaders(node) {
   node.appendChild(box);
   const entry = (G, x, i) => {
     const b = el('button', 'leader'); b.type = 'button';
-    if (!x) { b.disabled = true; b.title = G.name + ': none yet'; b.appendChild(el('span', 'none', 'none yet')); return b; }
-    b.dataset.cat = x.id; b.title = `${i + 1}. ${x.name}: ${G.name} ${x.full}. Click to pick ${x.name}.`;
-    b.setAttribute('aria-label', `${G.name}, number ${i + 1}: ${x.name}, ${x.full}`);
+    if (!x) { b.disabled = true; b.title = tr('{name}: none yet', { name: G.name }); b.appendChild(el('span', 'none', tr('none yet'))); return b; }
+    b.dataset.cat = x.id; b.title = tr('{i}. {name}: {goal} {v}. Click to pick {name}.', { i: i + 1, name: x.name, goal: G.name, v: x.full });
+    b.setAttribute('aria-label', tr('{goal}, number {i}: {name}, {v}', { goal: G.name, i: i + 1, name: x.name, v: x.full }));
     b.onclick = () => { const c = sim.cats.find(o => o.id === x.id); if (c) { UI.leadersOpen = false; selectCat(c); } };
     const cat = sim.cats.find(c => c.id === x.id);
     // FACE: ASSUMPTION, 22 px inside the 44 px entry; radius 0.36 x FACE.
@@ -6726,10 +7414,10 @@ function buildLeaders(node) {
     const cls = 'leaders ' + mode + (L && L.cols === 2 ? ' two' : '') + (L && L.tight ? ' tight' : ''); if (box.className !== cls) box.className = cls;
     const open = mode === 'open';
     grow.textContent = open ? '−' : '+'; grow.style.display = mode === 'column' ? 'none' : '';
-    const word = open ? 'Collapse the top cats' : 'Expand the top cats, with their names';
+    const word = open ? t('collapseTop') : t('expandTop');
     grow.title = word; grow.setAttribute('aria-label', word); grow.setAttribute('aria-expanded', String(open));
-    const tops = topCats(UI.chart.span, k), span = (SPANS.find(x => x[0] === UI.chart.span) || [0, UI.chart.span])[1];
-    box.title = 'The top cats on each goal, ' + span.toLowerCase() + ' (the span the chart shows). Click a cat to pick it.';
+    const tops = topCats(UI.chart.span, k), span = t({ '6h': 'span6h', today: 'spanToday', '3d': 'span3d', week: 'spanWeek', all: 'spanAll' }[UI.chart.span] || 'spanToday');
+    box.title = tr('The top cats on each goal, {span} (the span the chart shows). Click a cat to pick it.', { span: span.toLowerCase() });
     for (const G of GOALS) {
       const R = lrows[G.id], L2 = tops[G.id], sig = k + '|' + L2.map(x => x.id + ':' + x.full).join(',');
       if (R.sig === sig) continue; R.sig = sig;
@@ -6751,7 +7439,7 @@ BUILD['log'] = node => {
   // which is what a marker on the room points at. The list shows whole rows only: its height is cut to
   // the rows that fit from the first one in view, at rest and after every scroll, so no row is ever
   // half drawn at its foot.
-  const box = el('div', 'log'), h = el('h2', null, 'Events'), ol = document.createElement('ol');
+  const box = el('div', 'log'), h = el('h2', null, t('events')), ol = document.createElement('ol');
   box.append(h, ol); node.appendChild(box);
   let n = null;   // the newest log entry drawn
   const fit = () => {
@@ -6771,12 +7459,12 @@ BUILD['log'] = node => {
     const first = Math.max(0, rows.length - 60), atTop = ol.scrollTop < 4;
     ol.textContent = '';
     // Before the first event the list says so, rather than standing empty.
-    if (!rows.length) ol.appendChild(el('li', 'none', 'No events yet. Meals, litter rounds, visits and fights are listed here as they happen.'));
+    if (!rows.length) ol.appendChild(el('li', 'none', tr('No events yet. Meals, litter rounds, visits and fights are listed here as they happen.')));
     for (let i = rows.length - 1; i >= first; i--) {
       const e = rows[i], li = el('li', e.kind === 'event' ? 'event' : e.kind === 'host' ? 'host' : '');
       // Every line keeps the run-long number the sim gave it (e.n), past the log's 400-row cap.
       li.dataset.ix = String(e.n);
-      li.append(el('span', 'ix', String(e.n)), el('span', 'at', e.clock), el('span', 'msg', e.msg));
+      li.append(el('span', 'ix', String(e.n)), el('span', 'at', I18N.clock(e.clock)), el('span', 'msg', I18N.logLine(e)));
       if (UI.marker && UI.marker.index === e.n) li.classList.add('marked', UI.marker.kind === 'fight' ? 'fight' : 'arrival');
       ol.appendChild(li);
     }
@@ -7060,7 +7748,7 @@ const ROOM = (() => {
     // The room names sit over the cats on a light backing, so a cat walking past never hides one.
     ctx.font = `${TK.font.weight.bold} ${TK.font.size.ui}px ${TK.font.stack}`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    const names = [['Main room', 4 * S]].concat(M.partitionX < M.W ? [['Quiet room', (M.partitionX + 6) * S]] : []);
+    const names = [[tr('Main room'), 4 * S]].concat(M.partitionX < M.W ? [[tr('Quiet room'), (M.partitionX + 6) * S]] : []);
     for (const [name, nx] of names) {
       const tw = ctx.measureText(name).width + 2 * TK.space.sm, th = TK.font.line.ui + 2, ny = (M.H - 4) * S - th;
       SPR.rr(ctx, nx, ny, tw, th, TK.radius.sm); ctx.fillStyle = TK.color.surface; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
@@ -7086,25 +7774,25 @@ const ROOM = (() => {
       ctx.strokeRect(drag.x * S, drag.y * S, st.w * S, st.h * S); ctx.setLineDash([]);
     } else if (hoverCat && hoverCat === UI.selected && !UI.pet && typeof sim.pet === 'function') {
       const [x, y] = P[hoverCat.id];
-      SPR.drawTooltip(ctx, 'Click to pet', x, y - ringR - 4, W, H);
+      SPR.drawTooltip(ctx, tr('Click to pet'), x, y - ringR - 4, W, H);
     } else if (hoverDoor) {
       const d = doorBox();
-      SPR.drawTooltip(ctx, sim.doors.partition ? 'Quiet-room door: open. Click to close' : 'Quiet-room door: shut. Click to open', d.x + d.w / 2, d.y, W, H);
+      SPR.drawTooltip(ctx, tr(sim.doors.partition ? 'Quiet-room door: open. Click to close' : 'Quiet-room door: shut. Click to open'), d.x + d.w / 2, d.y, W, H);
     } else if (drag) {
       // a toy in the hand: it moves with the sim, so it is already drawn where it is
     } else if (hoverObject && hoverObject.mv) {
-      SPR.drawTooltip(ctx, 'Toy: drag it and the cats chase it', hoverObject.x * S, hoverObject.y * S, W, H);
+      SPR.drawTooltip(ctx, tr('Toy: drag it and the cats chase it'), hoverObject.x * S, hoverObject.y * S, W, H);
     } else if (hoverObject) {
       // A litter box names how dirty it is, read off the sim's own soil on that station.
-      const name = SPR.OBJECT_NAME[hoverObject.type] || 'Object';
-      SPR.drawTooltip(ctx, hoverObject.type === T.LITTER ? `Litter box: ${soilWord(hoverObject.soil)} (${soilPct(hoverObject.soil)})` : name, (hoverObject.cx) * S, hoverObject.y * S, W, H);
+      const name = tr(SPR.OBJECT_NAME[hoverObject.type] || 'Object');
+      SPR.drawTooltip(ctx, hoverObject.type === T.LITTER ? tr('Litter box: {w} ({p}% soiled)', { w: tr(soilWord(hoverObject.soil)), p: Math.round(hoverObject.soil * 100) }) : name, (hoverObject.cx) * S, hoverObject.y * S, W, H);
     } else if (!hoverCat && mouse && UI.markerBox && UI.marker && mouse[0] >= UI.markerBox.x && mouse[0] <= UI.markerBox.x + UI.markerBox.w && mouse[1] >= UI.markerBox.y && mouse[1] <= UI.markerBox.y + UI.markerBox.h) {
       // The marker's number is its line in the event log.
-      SPR.drawTooltip(ctx, `Event ${UI.marker.index} in the event log`, UI.markerBox.x + UI.markerBox.w / 2, UI.markerBox.y, W, H);
+      SPR.drawTooltip(ctx, tr('Event {n} in the event log', { n: UI.marker.index }), UI.markerBox.x + UI.markerBox.w / 2, UI.markerBox.y, W, H);
     } else if (!hoverCat && mouse) {
       // A person under the pointer is named by role, the way a cat is named.
       const h = sim.humans.find(q => q.mode !== 'shoo' && q.mode !== 'pet' && Math.hypot(q.x * S - mouse[0], q.y * S - mouse[1]) < personPx(S) / 2);
-      if (h) SPR.drawTooltip(ctx, personOf(h).tag, h.x * S, h.y * S - Math.max(13, 8 * S), W, H);
+      if (h) SPR.drawTooltip(ctx, tr(personOf(h).tag), h.x * S, h.y * S - Math.max(13, 8 * S), W, H);
     }
     if (UI.pet) {
       const p = UI.pet, c = p.cat, r = sim.petting;
@@ -7184,7 +7872,7 @@ const ROOM = (() => {
       justDragged = true;
       const { obj: st, x, y } = drag; drag = null; setPointer('idle');
       if (st.mv) { sim.dropToy(st.id); renderAll(); }
-      else if (sim.moveStation(st.id, x, y)) { bg = null; sim.emit('The ' + (SPR.OBJECT_NAME[st.type] || 'object').toLowerCase() + ' is moved', 'event'); renderAll(); }
+      else if (sim.moveStation(st.id, x, y)) { bg = null; sim.emit('The ' + (SPR.OBJECT_NAME[st.type] || 'object').toLowerCase() + ' is moved', 'event', { k: 'moved', obj: SPR.OBJECT_NAME[st.type] || 'Object' }); renderAll(); }
     }
     downAt = null;
   }
@@ -7425,8 +8113,8 @@ function lookOf(h) {
 
 // A fight or an arrival, marked where it happened and tied to a numbered line in the log. The line is
 // emitted first, so the marker always has a row to point at, which is what the engine asserts.
-function markEvent(kind, x, y, msg) {
-  sim.emit(msg, kind === 'fight' ? 'host' : 'event');
+function markEvent(kind, x, y, msg, ev) {
+  sim.emit(msg, kind === 'fight' ? 'host' : 'event', ev);
   UI.marker = { kind, x, y, index: sim.logN, until: performance.now() + 9000 };   // the line's run-long number
 }
 let seenFights = 0, seenCats = new Set(), pendingFight = null;
@@ -7460,12 +8148,12 @@ function watchForMarkers() {
   if (f > seenFights) {
     seenFights = f;
     const ev = takeFightPair();
-    if (ev) markEvent('fight', ev.x, ev.y, `A fight between ${ev.a.name} and ${ev.b.name}`);
+    if (ev) markEvent('fight', ev.x, ev.y, `A fight between ${ev.a.name} and ${ev.b.name}`, { k: 'fightBetween', c: [cs(ev.a), cs(ev.b)] });
   }
   for (const c of sim.cats) {
     if (seenCats.has(c.id)) continue;
     seenCats.add(c.id);
-    if (c.arrivedT !== undefined && sim.t - c.arrivedT < 60) markEvent('arrival', c.x, c.y, `${c.name} arrives in the shelter`);
+    if (c.arrivedT !== undefined && sim.t - c.arrivedT < 60) markEvent('arrival', c.x, c.y, `${c.name} arrives in the shelter`, { k: 'arrives', c: [cs(c)] });
   }
   for (const id of [...seenCats]) if (!sim.catById(id)) seenCats.delete(id);
 }
@@ -7474,50 +8162,14 @@ function watchForMarkers() {
 // ---------------------------------------------------------------- the guide
 // Reference, on demand, reached from its own button. It replaces the room while it is open, and it
 // pages rather than scrolls: the event log is the only scrolling region in the interface.
-const GUIDE_SECTIONS = [
-  ['The goal', `<p>You run a two room cat shelter with about twelve cats. Your aim is calm, friendly cats that seldom fight
-   and seldom hide. Each cat has its own personality, needs and feelings about the others, and everything it does
-   follows from them. The model is calibrated against published shelter and colony studies, listed in REALISM.md.</p>`],
-  ['The four goals and the chart', `<p><b>Stress</b> is the average Cat Stress Score, from 1 for relaxed to 7 for
-   terrified. Lower is better.</p>
-   <p><b>Conflict</b> counts fights and swats between cats. Lower is better.</p>
-   <p><b>Friendly</b> counts the times a cat starts grooming, playing with or greeting another cat. Higher is better.</p>
-   <p><b>Hiding</b> is the share of cats in a hiding place. Lower is better.</p>
-   <p>The chart under the room draws all four over time. <b>Show</b> picks how far back it reaches, and <b>Per</b> picks how
-   much time each point covers. Click a goal to hide or show its line, and hover it to see the three cats at its top.
-   The plus button enlarges the chart, with the top three cats for each goal beside it. Click a name to select that cat.</p>`],
-  ['Your plans and their costs', `<p><b>Feeding</b> splits the fixed daily ration into meals at the times you choose.
-   More meals mean less crowding at the bowls.</p>
-   <p><b>Litter</b> sets how often staff scoop the boxes. Clean boxes keep cats calm, and every round takes staff time
-   away from visits.</p>
-   <p><b>Visitors</b> spend the staff time the litter rounds leave with the cats. You decide how many visits and how
-   long each lasts. People friendly cats come over and shy cats keep away.</p>
-   <p><b>Vacuum</b> needs a fixed number of minutes each week. You choose the sessions and their hours. Cats scatter
-   from the noise.</p>
-   <p>Your staff have a fixed amount of time each day, shared between litter rounds and visits. The Litter and
-   Visitors editors show how it is split.</p>`],
-  ['Your hands in the room', `<p>Click a cat to see its needs, personality and friendships in the panel on the left.
-   Click the selected cat again to pet it. It may accept and calm down, or it may slip away.</p>
-   <p>Click empty floor to shoo the cats near that spot.</p>
-   <p>Drag a toy to play with the cats, or click it for a short jiggle.</p>
-   <p>Click the doorway between the rooms to open or close the quiet room door. With the door closed, cats stay in
-   the room they are in.</p>
-   <p>Drag a bowl, litter box, bed, cat tree, hide box or scratching post to move it.</p>`],
-  ['Time and the other buttons', `<p><b>Play</b> and <b>Pause</b> start and stop time, and the slider sets its speed.
-   <b>Restart</b> begins again with new cats. <b>Show stats</b> opens the full statistics on trends, each cat, stress
-   across the colony and the relationships between cats. A numbered marker in the room points to the matching line in
-   the event log.</p>
-   <p>The space bar pauses, the minus and plus keys change speed, and Esc goes back to the room.</p>`],
-  ['How to play it', `<p>Change one thing, run a few days and watch what moves. Try three meals against two, visits in
-   one block against several, or the quiet room open against closed at night. The goals show how the cats are doing.</p>`],
-];
+// The sections themselves are in src/i18n.js (GUIDE), one set per language.
 const GUIDE = (() => {
   let host = null, pages = null, foot = null, at = null, prev = null, next = null, nPages = 1, rect = null;
   function attach(h) {
     host = h;
     pages = el('div', 'pages'); foot = el('div', 'foot');
-    prev = el('button', 'btn', 'Back'); next = el('button', 'btn', 'Next'); at = el('span', 'at');
-    const close = el('button', 'btn', 'Show room'); close.onclick = () => setView('room');
+    prev = el('button', 'btn', tr('Back')); next = el('button', 'btn', tr('Next')); at = el('span', 'at');
+    const close = el('button', 'btn', tr('Show room')); close.onclick = () => setView('room');
     prev.onclick = () => { UI.guidePage = Math.max(0, UI.guidePage - 1); paginate(); };
     next.onclick = () => { UI.guidePage = Math.min(nPages - 1, UI.guidePage + 1); paginate(); };
     foot.append(close, at, prev, next);
@@ -7538,7 +8190,7 @@ const GUIDE = (() => {
     // One block per paragraph, not one per section: a section longer than the rectangle has to be
     // able to break across pages, because nothing here may scroll.
     const blocks = [];
-    for (const [title, html] of GUIDE_SECTIONS) {
+    for (const [title, html] of I18N.guide()) {
       const src = document.createElement('div');
       src.innerHTML = `<h3>${title}</h3>${html}`;
       for (const node of [...src.children]) { probe.appendChild(node); blocks.push(node); }
@@ -7564,7 +8216,7 @@ const GUIDE = (() => {
     const shown = el('div', 'page');
     for (const d of out[UI.guidePage]) shown.appendChild(d);
     pages.appendChild(shown);
-    at.textContent = `Page ${UI.guidePage + 1} of ${nPages}`;
+    at.textContent = tr('Page {a} of {b}', { a: UI.guidePage + 1, b: nPages });
     prev.disabled = UI.guidePage === 0; next.disabled = UI.guidePage >= nPages - 1;
   }
   return { attach, place(r) { rect = r; requestAnimationFrame(paginate); }, tick() { } };
@@ -7614,7 +8266,7 @@ const TOTALS = () => {
   ['Stuck events', rate(S.stuckEvents || 0)], ['Intakes', s.intakes], ['Adoptions', s.adoptions],
   ...(() => { const v = litterBoxes().map(b => b.soil); if (!v.length) return [];
     const mean = v.reduce((a, x) => a + x, 0) / v.length, hi = Math.max(...v), lo = Math.min(...v);
-    return [['Litter soil, mean', `${Math.round(mean * 100)}% ${soilWord(mean)}`], ['Dirtiest box', `${Math.round(hi * 100)}% ${soilWord(hi)}`], ['Cleanest box', `${Math.round(lo * 100)}% ${soilWord(lo)}`]]; })()]; };
+    return [['Litter soil, mean', `${Math.round(mean * 100)}% ${tr(soilWord(mean))}`], ['Dirtiest box', `${Math.round(hi * 100)}% ${tr(soilWord(hi))}`], ['Cleanest box', `${Math.round(lo * 100)}% ${tr(soilWord(lo))}`]]; })()]; };
 // The legend is reference material the sub-layout has to size, so it lives in src/stats-layout.js
 // beside the row count that reserves space for it. This view only prints it.
 const LEGEND_ROWS = SL.LEGEND;
@@ -7660,7 +8312,7 @@ const STATS = (() => {
     const q = m.rect;
     if (sol.tabsMode === 'dropdown') {
       if (!m.sel) { m.node.textContent = ''; m.sel = document.createElement('select'); m.sel.style.cssText = 'width:100%;height:100%';
-        for (const p of SL.PAGES) { const o = document.createElement('option'); o.value = p; o.textContent = 'Page: ' + pageName(p); m.sel.appendChild(o); }
+        for (const p of SL.PAGES) { const o = document.createElement('option'); o.value = p; o.textContent = tr('Page: {p}', { p: pageName(p) }); m.sel.appendChild(o); }
         m.sel.onchange = () => { UI.stats.page = m.sel.value; UI.stats.open = 'none'; place(rect, parentSol); };
         m.node.appendChild(m.sel); }
       m.sel.value = UI.stats.page;
@@ -7671,22 +8323,22 @@ const STATS = (() => {
       m.node.appendChild(m.tabs); }
     m.btns.forEach((b, i) => b.setAttribute('aria-pressed', String(SL.PAGES[i] === UI.stats.page)));
   }
-  const pageName = p => ({ trends: 'Trends', percat: 'Per cat', distribution: 'Distribution', relationships: 'Relationships', table: 'Colony table' })[p];
+  const pageName = p => tr(({ trends: 'Trends', percat: 'Per cat', distribution: 'Distribution', relationships: 'Relationships', table: 'Colony table' })[p]);
   function selectorLabel(id) {
     if (id === 'metrics') {
       if (UI.stats.page === 'table') {
         const rec = sol && sol.rects && sol.rects.find(r => r.id === 'record');
         const tab = sol && sol.rects && sol.rects.find(r => r.id === 'table');
         const visible = rec ? TABLE_COLS.length : Math.min(TABLE_COLS.length, Math.max(1, (tab && tab.cols) || TABLE_COLS.length));
-        return `Metrics ${visible} of ${TABLE_COLS.length}`;
+        return tr('Metrics {a} of {b}', { a: visible, b: TABLE_COLS.length });
       }
-      if (UI.stats.page === 'relationships') return 'Metrics';
-      return `Metrics: ${selectedMetrics().length} of ${MET.length}`;
+      if (UI.stats.page === 'relationships') return tr('Metrics');
+      return tr('Metrics: {a} of {b}', { a: selectedMetrics().length, b: MET.length });
     }
-    if (id === 'cats') return `Cats: ${UI.stats.cats.size} of ${sim.cats.length}`;
-    if (id === 'gran') return (GRAN.find(g => g[0] === UI.stats.gran) || GRAN[1])[1];
-    if (id === 'range') return (RANGE.find(g => g[0] === UI.stats.range) || RANGE[1])[1];
-    return 'Legend';
+    if (id === 'cats') return tr('Cats: {a} of {b}', { a: UI.stats.cats.size, b: sim.cats.length });
+    if (id === 'gran') return tr((GRAN.find(g => g[0] === UI.stats.gran) || GRAN[1])[1]);
+    if (id === 'range') return tr((RANGE.find(g => g[0] === UI.stats.range) || RANGE[1])[1]);
+    return tr('Legend');
   }
   function renderSelector(m, id) {
     if (!m.btn) { m.node.textContent = ''; m.btn = el('button', 'btn'); m.btn.style.cssText = 'width:100%;height:100%';
@@ -7724,13 +8376,13 @@ const STATS = (() => {
     const rowsFit = Math.max(1, Math.floor((q.h - 2 * PAD_) / q.rowH));
     const cols = q.cols || 1;
     const entries = [];
-    if (id === 'metrics') MET.forEach(([name], i) => entries.push(() => opt(name, UI.stats.metrics.has(i), () => { UI.stats.metrics.has(i) ? UI.stats.metrics.delete(i) : UI.stats.metrics.add(i); if (!UI.stats.metrics.size) UI.stats.metrics.add(i); place(rect, parentSol); })));
+    if (id === 'metrics') MET.forEach(([name], i) => entries.push(() => opt(tr(name), UI.stats.metrics.has(i), () => { UI.stats.metrics.has(i) ? UI.stats.metrics.delete(i) : UI.stats.metrics.add(i); if (!UI.stats.metrics.size) UI.stats.metrics.add(i); place(rect, parentSol); })));
     else if (id === 'cats') {
-      entries.push(() => opt('Shelter aggregate', true, () => { }, TK.color.ink));
+      entries.push(() => opt(tr('Shelter aggregate'), true, () => { }, TK.color.ink));
       sim.cats.forEach(c => entries.push(() => opt(c.name, UI.stats.cats.has(c.id), () => { UI.stats.cats.has(c.id) ? UI.stats.cats.delete(c.id) : UI.stats.cats.add(c.id); UI.stats.page_.record = selectedCats().indexOf(c); render(); }, catLine(c).color)));
-    } else if (id === 'gran') GRAN.forEach(([v, n]) => entries.push(() => opt(n, UI.stats.gran === v, () => { UI.stats.gran = v; UI.stats.open = 'none'; place(rect, parentSol); })));
-    else if (id === 'range') RANGE.forEach(([v, n]) => entries.push(() => opt(n, UI.stats.range === v, () => { UI.stats.range = v; UI.stats.open = 'none'; place(rect, parentSol); })));
-    else for (const row of LEGEND_ROWS) entries.push(() => { const r = el('div', 'legendrow', row); r.style.height = q.rowH + 'px'; r.style.lineHeight = q.rowH + 'px'; p.appendChild(r); });
+    } else if (id === 'gran') GRAN.forEach(([v, n]) => entries.push(() => opt(tr(n), UI.stats.gran === v, () => { UI.stats.gran = v; UI.stats.open = 'none'; place(rect, parentSol); })));
+    else if (id === 'range') RANGE.forEach(([v, n]) => entries.push(() => opt(tr(n), UI.stats.range === v, () => { UI.stats.range = v; UI.stats.open = 'none'; place(rect, parentSol); })));
+    else for (const row of I18N.legend(LEGEND_ROWS)) entries.push(() => { const r = el('div', 'legendrow', row); r.style.height = q.rowH + 'px'; r.style.lineHeight = q.rowH + 'px'; p.appendChild(r); });
 
     const paged = entries.length > cols * rowsFit;
     const per = paged ? cols * (rowsFit - 1) : entries.length;
@@ -7744,7 +8396,7 @@ const STATS = (() => {
         b.style.cssText = `width:${q.rowH * 1.6}px;height:${q.rowH}px;min-height:0;flex:none`;
         b.onclick = () => { UI.stats.page_['panel-' + id] = (at + d + pages) % pages; render(); };
       }
-      foot.append(el('span', 'at', `${at + 1} of ${pages}`), back, fwd);
+      foot.append(el('span', 'at', tr('{a} of {b}', { a: at + 1, b: pages })), back, fwd);
       p.appendChild(foot);
     }
   }
@@ -7783,7 +8435,7 @@ const STATS = (() => {
       return { t: b.t, v: b.vs.length ? b.vs.reduce((a, x) => a + x, 0) / b.vs.length : null };
     }).filter(p => p.v != null);
   }
-  const clockOf = t => { t = Math.max(0, t); const d = Math.floor(t / 86400) + 1, h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60); return `D${d} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
+  const clockOf = t => { t = Math.max(0, t); const d = Math.floor(t / 86400) + 1, h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60); return `${tr('D')}${d} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
 
   // ---- canvas helpers. Every chart is drawn into a canvas sized to the rectangle the engine solved.
   function canvasFor(m) {
@@ -7864,7 +8516,7 @@ const STATS = (() => {
     const seen = Math.max(UI.stats.gran * 4, sim.t - (sim.samples.length ? sim.samples[0].t : 0));
     const span = UI.stats.range ? Math.min(UI.stats.range, seen) : seen;
     const tHi = sim.t, tLo = Math.max(0, tHi - span);
-    const plot = axes(g, { w, h }, lo, hi, tLo, tHi, `${name}  ${unit === 'rate' && observedH() < ST.PROJECT_MIN_H ? 'count' : UNIT_LABEL[unit]}`);
+    const plot = axes(g, { w, h }, lo, hi, tLo, tHi, `${tr(name)}  ${tr(unit === 'rate' && observedH() < ST.PROJECT_MIN_H ? 'count' : UNIT_LABEL[unit])}`);
     for (const x of cats) catStroke(g, plot, x.pts, tLo, tHi, lo, hi, x.c, 1.5);
     line(g, plot, agg, tLo, tHi, lo, hi, TK.color.ink, 2.2);
   }
@@ -7888,7 +8540,7 @@ const STATS = (() => {
     const vals = sim.cats.map(c => U.toCSS(c.s.stress));
     const bins = new Array(SL.BINS).fill(0);
     for (const v of vals) bins[Math.max(0, Math.min(SL.BINS - 1, Math.floor((v - 1) / 6 * SL.BINS)))]++;
-    const plot = axes(g, { w, h }, 0, Math.max(1, Math.max(...bins)), 0, 0, 'Cat-Stress-Score across the colony  cats');
+    const plot = axes(g, { w, h }, 0, Math.max(1, Math.max(...bins)), 0, 0, tr('Cat-Stress-Score across the colony  cats'));
     g.textAlign = 'center'; g.textBaseline = 'alphabetic';
     const bw = plot.w / SL.BINS, hi = Math.max(1, Math.max(...bins));
     bins.forEach((n, i) => {
@@ -7903,7 +8555,7 @@ const STATS = (() => {
   function renderHour(m) {
     const { g, w, h } = canvasFor(m);
     const s = sim.summary().activityByHour || [];
-    const plot = axes(g, { w, h }, 0, 1, 0, 0, 'Active by hour  share of cats');
+    const plot = axes(g, { w, h }, 0, 1, 0, 0, tr('Active by hour  share of cats'));
     const bw = plot.w / 24;
     g.fillStyle = TK.color.accent;
     s.forEach((v, i) => { const bh = Math.max(0, Math.min(1, v)) * plot.h; g.fillRect(plot.x + i * bw + 1, plot.y + plot.h - bh, Math.max(1, bw - 2), bh); });
@@ -7919,7 +8571,7 @@ const STATS = (() => {
     const p = pageAt('dots') % pages, slice = vals.slice(p * rows, p * rows + rows);
     g.fillStyle = TK.color.ink; g.font = `${TK.font.weight.bold} ${TK.font.size.ui}px ${TK.font.stack}`;
     g.textAlign = 'left'; g.textBaseline = 'middle';
-    g.fillText(`${MET[mi][0]} per cat  (${p + 1} of ${pages})`, TK.space.sm, L / 2);
+    g.fillText(tr('{m} per cat  ({a} of {b})', { m: tr(MET[mi][0]), a: p + 1, b: pages }), TK.space.sm, L / 2);
     g.font = `${TK.font.weight.normal} ${TK.font.size.ui}px ${TK.font.stack}`;
     const lo = unit === 'css' ? 1 : 0, hi = unit === 'css' ? 7 : Math.max(10, Math.max(...vals.map(v => v.v)));
     const x0 = TK.space.sm + SL.ROWLAB, x1 = w - TK.space.md;
@@ -7939,14 +8591,14 @@ const STATS = (() => {
     const rows = TOTALS(), cols = q.cols || 1, per = (q.rows || rows.length) * cols;
     const pages = Math.max(1, Math.ceil(rows.length / per)), p = pageAt('totals') % pages;
     m.box.textContent = '';
-    m.box.appendChild(el('div', 'ttl', `Shelter totals  (${p + 1} of ${pages})`));
+    m.box.appendChild(el('div', 'ttl', tr('Shelter totals  ({a} of {b})', { a: p + 1, b: pages })));
     // A wide column gap, so a value never reads as the label of the cell beside it.
     const grid = el('div'); grid.style.cssText = `display:grid;grid-template-columns:repeat(${cols},minmax(0,1fr));gap:0 ${TK.space.xl}px`;
     for (const [k, v] of rows.slice(p * per, p * per + per)) {
       const r = el('div'); r.style.cssText = `display:flex;gap:${TK.space.sm}px;line-height:${TK.font.line.ui}px;white-space:nowrap;overflow:hidden`;
-      const a = el('span', null, k); a.style.cssText = 'color:var(--muted);overflow:hidden;text-overflow:ellipsis';
-      const b = el('span', null, String(v)); b.style.cssText = 'margin-left:auto;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums';
-      if (typeof v === 'string' && (v.includes('/day') || / \(\d/.test(v))) b.title = ST.rateTitle(observedH());
+      const a = el('span', null, tr(k)); a.style.cssText = 'color:var(--muted);overflow:hidden;text-overflow:ellipsis';
+      const b = el('span', null, I18N.units(v)); b.style.cssText = 'margin-left:auto;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums';
+      if (typeof v === 'string' && (v.includes('/day') || / \(\d/.test(v))) b.title = rateTitle(observedH());
       r.append(a, b); grid.appendChild(r);
     }
     m.box.appendChild(grid);
@@ -8016,7 +8668,7 @@ const STATS = (() => {
     const tmpl = `${q.nameW}px repeat(${shown.length},${q.colW}px)`;
     m.box.textContent = '';
     const head = el('div', 'tr head'); head.style.gridTemplateColumns = tmpl; head.style.height = q.headH + 'px';
-    head.appendChild(el('span', null, 'Cat'));
+    head.appendChild(el('span', null, tr('Cat')));
     const visibleRows = selectedCats().slice(rp * rows, rp * rows + rows).map(cat => catRow(cat, sum));
     for (const c of shown) head.appendChild(el('span', 'n', tableHeader(c, visibleRows)));
     m.box.appendChild(head);
@@ -8026,9 +8678,9 @@ const STATS = (() => {
       tr.style.height = q.rowH + 'px'; tr.style.lineHeight = q.rowH + 'px';
       tr.appendChild(el('span', null, cat.name));
       for (const col of shown) {
-        const cell = el('span', 'n', String(tableValue(c, col)));
+        const cell = el('span', 'n', I18N.units(tableValue(c, col)));
         const f = COL_FIELD[col];
-        if (f && ST.PER_DAY_UNIT[f] !== undefined) cell.title = ST.rateTitle(c.observedH);
+        if (f && ST.PER_DAY_UNIT[f] !== undefined) cell.title = rateTitle(c.observedH);
         tr.appendChild(cell);
       }
       m.box.appendChild(tr);
@@ -8049,9 +8701,9 @@ const STATS = (() => {
   };
   const tableHeader = (col, rows) => {
     const f = COL_FIELD[col];
-    if (!f || ST.PER_DAY_UNIT[f] === undefined) return col;
-    const projectable = rows.length > 0 && rows.every(r => r && r.projectable);
-    return ST.headerFor(f, projectable) || col;
+    if (!f || ST.PER_DAY_UNIT[f] === undefined) return tr(col);
+    const projectable = rows.length > 0 && rows.every(r => r && r.projectable), h = ST.headerFor(f, projectable) || col;
+    return I18N.units(h.replace(/^\w+/, w => tr(w)));
   };
 
   // The colony page where it cannot be a table: one cat whole, all eleven numbers, and the cats
@@ -8064,13 +8716,13 @@ const STATS = (() => {
     const cat = list[i], row = cat ? catRow(cat) : null;
     m.box.textContent = '';
     const head = el('div'); head.style.cssText = `font-size:var(--fs-lead);line-height:${q.headH}px;font-weight:var(--fw-bold);white-space:nowrap`;
-    head.textContent = `${cat ? cat.name : '-'}  cat ${i + 1} of ${list.length}`;
+    head.textContent = tr('{name}  cat {a} of {b}', { name: cat ? cat.name : '-', a: i + 1, b: list.length });
     m.box.appendChild(head);
     const grid = el('div'); grid.style.cssText = `display:grid;grid-template-columns:repeat(${q.cols},minmax(0,1fr));grid-auto-rows:${q.rowH}px;gap:0 ${TK.space.sm}px`;
     for (const col of TABLE_COLS) {
       const r = el('div'); r.style.cssText = `display:flex;gap:${TK.space.sm}px;line-height:${q.rowH}px;white-space:nowrap;overflow:hidden`;
       const a = el('span', null, tableHeader(col, row ? [row] : [])); a.style.cssText = 'color:var(--muted);overflow:hidden;text-overflow:ellipsis';
-      const b = el('span', null, String(row ? tableValue(row, col) : '-')); b.style.cssText = 'margin-left:auto;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums';
+      const b = el('span', null, I18N.units(row ? tableValue(row, col) : '-')); b.style.cssText = 'margin-left:auto;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums';
       r.append(a, b); grid.appendChild(r);
     }
     m.box.appendChild(grid);
@@ -8080,7 +8732,7 @@ const STATS = (() => {
     if (!m.box) { m.node.textContent = ''; m.box = el('div', 'keyband'); m.node.appendChild(m.box); }
     m.box.style.gridTemplateColumns = `repeat(${q.cols || 1},minmax(0,1fr))`;
     m.box.textContent = '';
-    const rows = [{ name: 'Shelter aggregate', st: { color: TK.color.ink, dash: [] }, w: 3, id: null }]
+    const rows = [{ name: tr('Shelter aggregate'), st: { color: TK.color.ink, dash: [] }, w: 3, id: null }]
       .concat(selectedCats().map(c => ({ name: c.name, st: catLine(c), w: 2, id: c.id })));
     const cap = (q.rows || 1) * (q.cols || 1), page = pageAt('key') % Math.max(1, Math.ceil(rows.length / cap));
     for (const r of rows.slice(page * cap, page * cap + cap)) {
@@ -8111,16 +8763,16 @@ const STATS = (() => {
       if (id === 'stats-tabs') renderTabs(m);
       else if (id === 'sel-panel') renderPanel(m);
       else if (id.startsWith('sel-')) renderSelector(m, id.slice(4));
-      else if (id === 'trends-pager') renderPager(m, 'trends', Math.max(1, Math.ceil(metrics.length / Math.max(1, trendSlots))), `Page ${pageAt('trends') + 1}`);
-      else if (id === 'percat-pager') renderPager(m, 'percat', Math.max(1, Math.ceil(selectedCats().length / Math.max(1, smSlots))), `Page ${pageAt('percat') + 1}`);
-      else if (id === 'dist-pager') renderPager(m, 'dist', DIST.length, DIST[pageAt('dist') % DIST.length].name);
-      else if (id === 'matrix-pager') renderPager(m, 'matrixRow', Math.max(1, Math.ceil(selectedCats().length / (q.block || selectedCats().length))), `Rows ${pageAt('matrixRow') + 1}`);
-      else if (id === 'aff-pager') renderPager(m, 'aff', 2, 'Page');
+      else if (id === 'trends-pager') renderPager(m, 'trends', Math.max(1, Math.ceil(metrics.length / Math.max(1, trendSlots))), tr('Page {a}', { a: pageAt('trends') + 1 }));
+      else if (id === 'percat-pager') renderPager(m, 'percat', Math.max(1, Math.ceil(selectedCats().length / Math.max(1, smSlots))), tr('Page {a}', { a: pageAt('percat') + 1 }));
+      else if (id === 'dist-pager') renderPager(m, 'dist', DIST.length, tr(DIST[pageAt('dist') % DIST.length].name));
+      else if (id === 'matrix-pager') renderPager(m, 'matrixRow', Math.max(1, Math.ceil(selectedCats().length / (q.block || selectedCats().length))), tr('Rows {a}', { a: pageAt('matrixRow') + 1 }));
+      else if (id === 'aff-pager') renderPager(m, 'aff', 2, tr('Page'));
       else if (id === 'table-pager') {
         const t = made.get('table'), rws = (t && t.rect.rows) || 1, cls = (t && t.rect.cols) || 1;
         const rowPages = Math.max(1, Math.ceil(selectedCats().length / rws)), colPages = Math.max(1, Math.ceil(TABLE_COLS.length / cls));
         const at = pageAt('table') % (colPages * rowPages);
-        renderPager(m, 'table', colPages * rowPages, `Page ${at + 1} of ${colPages * rowPages}`);
+        renderPager(m, 'table', colPages * rowPages, tr('Page {a} of {b}', { a: at + 1, b: colPages * rowPages }));
       }
       else if (/^trend-(\d+)$/.test(id)) { m.perPage = trendSlots; renderTrend(m, +id.split('-')[1]); }
       else if (/^sm-(\d+)$/.test(id)) { m.perPage = smSlots; renderSmallMultiple(m, +id.split('-')[1]); }
@@ -8221,6 +8873,7 @@ function boot() {
 // screen, so a headless check can drive the game exactly as a person does and never has to reach into
 // the DOM to do it.
 root.Play = {
+  tr: (s, p) => tr(s, p),   // the string table, for the checks
   // read what is on screen
   get sim() { return sim; },
   get selected() { return UI.selected; }, set selected(c) { selectCat(c); },
@@ -8255,9 +8908,9 @@ root.Play = {
   },
   // and so a check can put a marker on the room without waiting for one to happen
   mark(kind) { const a = sim.cats[0], b = sim.cats[1]; if (!a) return;
-    if (kind === 'fight' && b) markEvent('fight', (a.x + b.x) / 2, (a.y + b.y) / 2, `A fight between ${a.name} and ${b.name}`);
-    else if (kind === 'fight') markEvent('fight', a.x, a.y, `A fight involving ${a.name}`);
-    else markEvent('arrival', a.x, a.y, `${a.name} arrives in the shelter`);
+    if (kind === 'fight' && b) markEvent('fight', (a.x + b.x) / 2, (a.y + b.y) / 2, `A fight between ${a.name} and ${b.name}`, { k: 'fightBetween', c: [cs(a), cs(b)] });
+    else if (kind === 'fight') markEvent('fight', a.x, a.y, `A fight involving ${a.name}`, { k: 'fightInvolving', c: [cs(a)] });
+    else markEvent('arrival', a.x, a.y, `${a.name} arrives in the shelter`, { k: 'arrives', c: [cs(a)] });
     renderAll(); },
 };
 boot();
