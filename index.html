@@ -1469,6 +1469,14 @@ const STAFF_PAUSE_S = { feed: 10, clean: 150 };
 // OFF_ROUTINE_W, and counts OFF_ROUTINE_W times as a threat in threat() while they stay. Both numbers ASSUMPTIONS
 // (approved, Erwin's Review 6; reach widened in Review 7, item 3); the direction is Carlstead et al. 1993.
 const ROUTINE_WINDOW_S = 1800, OFF_ROUTINE_W = 2;
+// The player's hand reaching for a cat to pet it, s (ASSUMPTION: a slow, open-handed reach). A cat that slips away is
+// shown leaving for PET_SLIP_S (ASSUMPTION).
+const PET_REACH_S = 2, PET_SLIP_S = 6;
+// Events-log pacing: a line of a kind about the same subject is not repeated within LOG_REPEAT_S[kind] seconds, so the log
+// reads 10-30 lines an hour in the standard room. Game-design values, not behaviour; logging draws no random numbers.
+const LOG_REPEAT_S = { bout: 1800, hide: 1800, hold: 7200 };
+// Staying put and at ease under the hand counts as accepting it, as it does for a friendly bid from a cat (accepts()).
+const PET_STAY = new Set([A.REST, A.SLEEP, A.GROOM, A.PERCH]);
 // The bonus for carrying on with what a cat was doing (decide(): the last action). ASSUMPTION: the 0.6 is the earlier
 // tuning literal in decide() (4517e61, `sc += 0.6`), named here unchanged; no published source.
 const CARRY_ON = 0.6;
@@ -1512,6 +1520,8 @@ class Sim {
   clock() { const h = this.hour, hh = Math.floor(h), mm = Math.floor((h - hh) * 60); return `Day ${this.day + 1} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
   m2t(m) { return m / this.cfg.tile; }
   // n numbers every entry for the life of the run, so a row keeps its number after the 400-row window moves past it.
+  // A paced log line: `key` names the subject (a pair, a cat); the same kind and key are logged at most once per LOG_REPEAT_S.
+  logPaced(kind, key, msg, logKind) { const m = this.logSeen || (this.logSeen = {}), k = kind + ':' + key; if (this.t - (m[k] ?? -1e9) < LOG_REPEAT_S[kind]) return; m[k] = this.t; this.emit(msg, logKind || 'event'); }
   emit(msg, kind) { this.logN = (this.logN || 0) + 1; this.log.push({ n: this.logN, t: this.t, clock: this.clock(), msg, kind: kind || 'info' }); if (this.log.length > 400) this.log.shift(); }
   pointField(px, py) { return distField(this.map, { x: px | 0, y: py | 0, w: 1, h: 1 }); }
   randFloor(mainOnly) { for (let k = 0; k < 500; k++) { const x = 3 + this.rng() * ((mainOnly ? this.map.partitionX : this.map.W) - 6), y = 3 + this.rng() * (this.map.H - 6); if (walkable(this.map, x, y) && this.map.grid[(y | 0) * this.map.W + (x | 0)] === T.FLOOR && (k > 300 || this.map.clear[(y | 0) * this.map.W + (x | 0)] >= 5)) return [x, y]; /* goals in open floor, not wedged against walls or furniture */ } return [100, 80]; }
@@ -1856,6 +1866,44 @@ class Sim {
   }
   shooResponse(c, r) { const g = (this.shoos || []).filter(x => !x.done && x.response[c.id] && x.response[c.id] !== 'ignore').pop(); if (g) g.response[c.id] = r; }
   // The shoo's line, at the end of its window: each cat by what it did, from the tally kept as it happened.
+  // One stroke of petting, by a visitor or the player's hand: the cat's social need and stress fall, its last-petted time
+  // (the contact memory petCalm reads) is now, and jealous cats nearby are irritated.
+  petCat(h, c) {
+    c.petted = this.t; c.s.social = clamp(c.s.social - 0.04); c.s.stress = clamp(c.s.stress - 0.02); h.petting = c.id; h.petS = (h.petS || 0) + this.cfg.dt;
+    if (h.mode === 'visit' || h.mode === 'sit') this.logPaced('bout', 'pet' + c.id, `🤲 The visitor pets ${c.name}`);
+    for (const o of this.cats) if (o !== c && o.tr.jealousy > 0.3 && this.dist(o, c) < this.m2t(this.cfg.senseM)) { o.s.irritation = clamp(o.s.irritation + 0.03 * o.tr.jealousy); o.jealousOf = c.id; o.jealousT = this.t; }
+  }
+  // ----- the player petting one cat (the visitor path, aimed at one cat) -----
+  // sim.pet(catId): the hand, a person that only this cat may seek (h.only), reaches for it for PET_REACH_S. Then the cat
+  // re-decides with the hand beside it, as a cat near a visitor does: seek_human (humanSoc, need for company, stress,
+  // and the hand as a person-threat through threat()) against hiding, walking off and the rest. Seeking it is accepting:
+  // the hand strokes it through petCat for as long as the cat's own seek_human lasts. Anything else is slipping away; a
+  // cat that did not choose to leave walks off from the hand. Other cats perceive the hand only as a person nearby in
+  // threat(); they cannot seek it. Returns the live record, also sim.petting (null when idle):
+  //   { catId, phase: 'reaching' | 'stroking' | 'rejected' | 'done', until (sim seconds) }.
+  pet(catId) {
+    const c = this.catById(catId); if (!c) return null; if (this.petting) this.endPet();
+    const P = this.map.partitionX < this.map.W ? this.map.partitionX : this.map.W, cx = c.x > P ? (P + this.map.W) / 2 : P / 2, cy = this.map.H / 2, d = Math.hypot(cx - c.x, cy - c.y) || 1, off = this.m2t(0.4);
+    const hand = { id: 'pet', mode: 'pet', only: c.id, x: c.x + (cx - c.x) / d * off, y: c.y + (cy - c.y) / d * off, until: Infinity, sitting: false, petT: 0 };
+    this.humans.push(hand);
+    return (this.petting = { catId, phase: 'reaching', until: this.t + PET_REACH_S, hand, decided: false });
+  }
+  endPet() { const p = this.petting; if (!p) return; p.phase = 'done'; p.until = this.t; this.humans = this.humans.filter(h => h !== p.hand); this.petting = null; }
+  // Before the cats decide: when the reach ends, the cat re-decides with the hand there. After they decide: read its choice.
+  petPre() { const p = this.petting; if (!p) return; const c = this.catById(p.catId); if (!c) { this.endPet(); return; }
+    if (p.phase === 'reaching' && this.t >= p.until && !p.decided) { p.decided = true; this.decide(c); } } // decide() with its current action as prev: staying put keeps the carry-on bonus
+  petPost() { const p = this.petting; if (!p) return; const c = this.catById(p.catId); if (!c) { this.endPet(); return; }
+    const he = c.sex === 'M' ? 'he' : 'she';
+    if (p.phase === 'reaching' && p.decided) {
+      // Accepting is what accepts() counts for a friendly bid: answering it (seek_human), or staying put and at ease.
+      if (c.act && (c.act.type === A.SEEKH || PET_STAY.has(c.act.type))) { p.phase = 'stroking'; p.until = this.t + (c.act.until - this.tick) * this.cfg.dt; this.emit(`You pet ${c.name}: ${he} leans in.`, 'event'); }
+      else { if (!c.act || ![A.AVOID, A.FLEE, A.HIDE].includes(c.act.type)) { this.startAction(c, { type: A.AVOID }); c.act.from = p.hand; }
+        p.phase = 'rejected'; p.until = this.t + PET_SLIP_S; this.emit(`${c.name} slips away.`, 'event'); }
+      return; }
+    if (p.phase === 'stroking') { if (!c.act || !(c.act.type === A.SEEKH || PET_STAY.has(c.act.type)) || this.t >= p.until) { this.endPet(); return; }
+      if (Math.hypot(c.x - p.hand.x, c.y - p.hand.y) < this.m2t(0.6)) this.petCat(p.hand, c); return; }
+    if (p.phase === 'rejected' && this.t >= p.until) this.endPet();
+  }
   shooLine(g) {
     const name = id => (this.catById(id) || { name: '?' }).name, V = { flee: 'runs off', avoid: 'walks away', hide: 'runs to hide', freeze: 'freezes', hiss: 'hisses' };
     const named = Object.entries(g.response).filter(([, r]) => r !== 'ignore').map(([id, r]) => `${name(+id)} ${V[r]}`);
@@ -1891,6 +1939,7 @@ class Sim {
   updateHumans() {
     const dt = this.cfg.dt, sp = this.m2t(HUMAN_WALK_MS) * dt;
     for (const h of this.humans) {
+      if (h.mode === 'pet') { h.done = !this.petting || this.petting.hand !== h; continue; } // the player's hand: run by petStep
       if (h.mode === 'shoo') { h.done = this.t > h.until; continue; } // the hand: a threat for a few seconds, then gone
       const leaving = this.t > h.until;
       if (leaving) { h.gx = this.map.door.x; h.gy = this.map.door.y; h.sitting = false; h.goal = null; }
@@ -1913,17 +1962,17 @@ class Sim {
       h.attending = attending;
       if (!h.sitting && !attending) { if (h.goal != null && !leaving) this.walkField(h, this.fields[h.goal], sp); else { const hf = this.humanField || (this.humanField = this.pointField(this.map.door.x, this.map.door.y)); const inQuiet = h.x > this.map.partitionX; if (leaving && inQuiet) this.walkField(h, hf, sp); else { const dx = h.gx - h.x, dy = h.gy - h.y, d = Math.hypot(dx, dy); if (d > 0.5) { const k = Math.min(1, sp / d); h.x += dx * k; h.y += dy * k; } } } }
       h.done = leaving && Math.hypot(h.x - this.map.door.x, h.y - this.map.door.y) < 3;
+      if (h.done && (h.mode === 'visit' || h.mode === 'sit')) this.emit(`🧑 The visitor leaves${h.petS ? ` after ${Math.max(1, Math.round(h.petS / 60))} min of petting` : ', having petted no one'}`, 'event');
       // petting: friendly humans pet one nearby cat that wants it
       if (h.mode === 'visit' || h.mode === 'sit' || h.mode === 'feed') {
         const near = this.cats.filter(c => Math.hypot(c.x - h.x, c.y - h.y) < this.m2t(0.6) && c.act && c.act.type === A.SEEKH);
         if (near.length) {
-          const c = near[Math.floor(this.rng() * near.length)]; c.petted = this.t; c.s.social = clamp(c.s.social - 0.04); c.s.stress = clamp(c.s.stress - 0.02); h.petting = c.id;
-          for (const o of this.cats) if (o !== c && o.tr.jealousy > 0.3 && this.dist(o, c) < this.m2t(this.cfg.senseM)) { o.s.irritation = clamp(o.s.irritation + 0.03 * o.tr.jealousy); o.jealousOf = c.id; o.jealousT = this.t; }
+          this.petCat(h, near[Math.floor(this.rng() * near.length)]);
         } else h.petting = -1;
       }
       if (h.mode === 'vacuum') for (const c of this.cats) { const d = Math.hypot(c.x - h.x, c.y - h.y) * this.cfg.tile; if (d < 2.5) { c.s.stress = clamp(c.s.stress + 0.06 * (0.3 + c.tr.N) * (2.5 - d)); if (d < 1.2 && c.act && c.act.type !== A.FLEE && c.act.type !== A.HIDE && this.rng() < 0.3) c.act = null; } }
     }
-    const people = () => this.humans.filter(h => h.mode !== 'shoo').length, before = people(); this.humans = this.humans.filter(h => !h.done); if (this.vacuum && !this.humans.includes(this.vacuum)) this.vacuum = null;
+    const people = () => this.humans.filter(h => h.mode !== 'shoo' && h.mode !== 'pet').length, before = people(); this.humans = this.humans.filter(h => !h.done); if (this.vacuum && !this.humans.includes(this.vacuum)) this.vacuum = null;
     if (people() < before) this.doorOpen = this.t + 20;
 
     if (this.pendingPartition && !this.humans.some(h => h.x > this.map.partitionX)) { this.pendingPartition = false; this.doors.partition = false; this.applyPartition(); this.emit('\u{1F6AA} The quiet-room doorway is closed', 'event'); }
@@ -1975,6 +2024,8 @@ class Sim {
     // level stress settles at: a dirty or missing box wears the cat down from the same
     // bladder threshold the LITTER score uses (litterUrgeAt).
     const frustration = TU0.litterFrustration * Math.max(0, s.bladder - TU0.litterUrgeAt) * this.latrineSoil();
+    if (c.arrivedT !== undefined && !c.settledLogged && this.novelty(c) < 0.5) { c.settledLogged = true; this.emit(`🌱 ${c.name} is settling in`, 'event'); }
+    if (s.bladder > TU0.litterUrgeAt + 0.15 && this.latrineSoil() > 0.5 && !(c.act && c.act.type === A.LITTER)) this.logPaced('hold', c.id, `🚽 ${c.name} is holding on: the boxes are dirty`);
     // Petted lately: the calm of being handled kindly outlasts the visit (gentling lowered stress signs in shelter cats:
     // Gourkow & Fraser 2006; Gourkow, Hamon & Phillips 2014). Fed by the one contact memory, the time of the last pet.
     const calm = c.petted === undefined ? 0 : TU0.petCalm * Math.exp(-(this.t - c.petted) / (TU0.petCalmH * 3600));
@@ -2120,7 +2171,7 @@ class Sim {
         for (const o of this.cats) if (o !== c && o.act && o.act.type === A.TOY && o.act.toy === t) { const af = (c.mem[o.id] || { aff: 0 }).aff; v -= af > 0.5 ? 0.3 : 1.5; }
         if (v > tv) { tv = v; toy = t; } }
       add(A.TOY, TU.toyBase + 1.6 * s.play + 0.3 * tr.E + TY.agreeW * (tr.A - 0.5) + TY.impW * (tr.I - 0.5) + tv - 0.6 * s.stress + (c.age < 2 ? 0.5 : c.age > 8 ? -0.3 : 0), { toy }); }
-    if (this.humans.some(h => h.mode !== 'vacuum' && h.mode !== 'shoo')) { const jb = c.jealousT && this.t - c.jealousT < 120 ? 0.8 * tr.jealousy : 0; add(A.SEEKH, TU.seekHumanBase + 2.4 * tr.humanSoc + 1.0 * s.social - 1.5 * s.stress * tr.N + jb - 0.5 * s.sleep - 3 * threat); }
+    if (this.humans.some(h => h.mode !== 'vacuum' && h.mode !== 'shoo' && (h.only == null || h.only === c.id))) { const jb = c.jealousT && this.t - c.jealousT < 120 ? 0.8 * tr.jealousy : 0; add(A.SEEKH, TU.seekHumanBase + 2.4 * tr.humanSoc + 1.0 * s.social - 1.5 * s.stress * tr.N + jb - 0.5 * s.sleep - 3 * threat); }
     // social (incl. responses to incoming)
     const sense = this.m2t(this.cfg.senseM), contact = this.m2t(this.cfg.contactM);
     // A cat can see a friend across the room and go to it. Hostile options are still judged on the
@@ -2189,6 +2240,8 @@ class Sim {
     this.startAction(c, ch);
   }
   startAction(c, ch) {
+    if ((ch.type === A.PLAY || ch.type === A.ALLOGROOM) && ch.target >= 0) { const o = this.catById(ch.target); if (o) this.logPaced('bout', [ch.type, Math.min(c.id, o.id), Math.max(c.id, o.id)].join('-'), ch.type === A.PLAY ? `🐾 ${c.name} and ${o.name} play` : `💞 ${c.name} grooms ${o.name}`, 'social'); }
+    if (ch.type === A.HIDE && c.startleT != null && this.t - c.startleT < 30) this.logPaced('hide', c.id, `🫣 ${c.name} hides after the fright`);
     const r = this.rng, m = 60 / this.cfg.dt; // ticks per minute
     const durMin = { sleep: [25, 100], rest: [5, 30], groom: [1, 6], explore: [0.5, 3], eat: [1, 4], drink: [0.3, 1], litter: [1, 2], hide: [5, 35], perch: [5, 40], window: [2, 15], scratch: [0.3, 1], toy: [1, 4], seek_human: [2, 8],
       zoom: [0.4, 2], avoid: [0.2, 0.8], sniff: [0.2, 0.5], allogroom: [0.5, 3], play: [0.3, 1.5], stalk: [0.3, 1], chase: [0.15, 0.6], hiss: [0.1, 0.3], fight: [0.1, 0.5], flee: [0.2, 0.6], wait_food: [0.5, 2] }[ch.type];
@@ -2424,7 +2477,11 @@ class Sim {
     for (const h of this.humans) {
       const S = this.cfg.stimulus, dM = Math.hypot(h.x - c.x, h.y - c.y) * this.cfg.tile, reach = h.mode === 'vacuum' ? S.vacuumCutM : S.humanCutM;
       if (dM >= reach) continue;
-      const w = (h.mode === 'vacuum' ? 0.6 + 0.8 * c.tr.N : 1.3 * (1 - c.tr.humanSoc) * (0.3 + c.tr.N)) * (h.offRoutine ? OFF_ROUTINE_W : 1);
+      // A person threatens a cat by the cat's fear of people: poor socialisation (1 - humanSoc; direction Casey & Bradshaw
+      // 2008, McCune 1995) plus what it has learned of the caregiver's hand (c.mem.hand fear, from shoos) for the hand. No
+      // memory of other people exists. (A squared socialisation term was tried and broke PER03.none; Nov 16.)
+      const handFear = (h.mode === 'shoo' || h.mode === 'pet') && c.mem.hand ? c.mem.hand.fear : 0;
+      const w = (h.mode === 'vacuum' ? 0.6 + 0.8 * c.tr.N : 1.3 * Math.min(1, (1 - c.tr.humanSoc) + handFear) * (0.3 + c.tr.N)) * (h.offRoutine ? OFF_ROUTINE_W : 1);
       worst = Math.max(worst, this.falloff(dM, h.mode === 'vacuum' ? S.threatD0M : S.humanD0M, reach) * w);
     }
     return worst;
@@ -2490,7 +2547,7 @@ class Sim {
   // Extends a welcome bout, but never past a plausible length for one: called every tick while the
   // partner is still willing, an uncapped extension would make the bout run for ever.
   sustain(c, a, maxSeconds) { const o = this.catById(a.target); if (o) this.tether(c, o, this.cfg.tune.tetherS); const cap = a.start + Math.round(maxSeconds / this.cfg.dt); a.until = Math.min(cap, Math.max(a.until, this.tick + Math.round(20 / this.cfg.dt))); a.recip = true; }
-  nearestHuman(c) { let b = null, bd = 1e9; for (const h of this.humans) { if (h.mode === 'vacuum' || h.mode === 'shoo') continue; const d = Math.hypot(h.x - c.x, h.y - c.y); if (d < bd) { bd = d; b = h; } } return b; }
+  nearestHuman(c) { let b = null, bd = 1e9; for (const h of this.humans) { if (h.mode === 'vacuum' || h.mode === 'shoo' || (h.only != null && h.only !== c.id)) continue; const d = Math.hypot(h.x - c.x, h.y - c.y); if (d < bd) { bd = d; b = h; } } return b; }
 
   // ----- interactions & consumption -----
   resolve(c) {
@@ -2641,6 +2698,7 @@ class Sim {
     if (this.cfg.adLib) for (const st of this.map.stations) if (st.type === T.BOWL) st.food = 1.6;
     this.toyMoving = this.toys.some(t => this.t - t.mv.t <= 6 * this.cfg.toy.motionS);
     for (const c of this.cats) { c.px = c.x; c.py = c.y; this.updateState(c); }
+    this.petPre();
     // decisions (snapshot semantics: incoming from last tick)
     for (const c of this.cats) {
       const a = c.act;
@@ -2670,6 +2728,7 @@ class Sim {
       if (a && a.target >= 0 && !this.catById(a.target)) redo = true;
       if (redo) this.decide(c);
     }
+    this.petPost();
     for (const c of this.cats) if (c.act) this.moveCat(c);
     for (const c of this.cats) if (c.act) this.resolve(c);
     this.collect();
