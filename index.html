@@ -6908,13 +6908,25 @@ const ROOM = (() => {
   function place(r) {
     rect = r;
     const { w, h } = LAY.canvasIn(r, SOL.frame);
-    dpr = devicePixelRatio || 1;
+    dpr = backingScale(w, h);
     if (W !== w || H !== h) { W = w; H = h; bg = null; }
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     S = w / sim.map.W;
     bg = null;
   }
+  // Device pixels per CSS pixel of the backing store: the screen's ratio times the pinch zoom
+  // (visualViewport.scale; browser zoom already shows in devicePixelRatio), so every line, sprite and
+  // letter is redrawn as vectors at the size it is seen, never a magnified bitmap. Capped at 4096
+  // device pixels a side (a 4096 x 2520 store is ~41 MB), past which the browser scales the last store.
+  function backingScale(w, h) {
+    const pinch = (window.visualViewport && visualViewport.scale) || 1;
+    return Math.min((devicePixelRatio || 1) * Math.max(1, pinch), 4096 / Math.max(w, h, 1));
+  }
+  // A pinch changes the zoom without a resize of the layout: re-place the canvas at the new scale.
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => {
+    if (cv && rect && Math.abs(backingScale(W, H) - dpr) > 0.01) place(rect);
+  });
   // The floor, the walls and the two rooms, drawn once and kept: it only changes when the canvas does.
   function buildBg() {
     const M = sim.map, c = document.createElement('canvas');
@@ -7006,6 +7018,9 @@ const ROOM = (() => {
       ctx.beginPath(); ctx.moveTo(x1 + ux * ringR, y1 + uy * ringR); ctx.lineTo(x2 - ux * ringR, y2 - uy * ringR); ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
+    // People first, so a cat beside or under a person is always drawn above them, never hidden.
+    // The shoo's and the pet's hands are drawn as the sweep and the stroke, not as people.
+    for (const h of sim.humans) if (h.mode !== 'shoo' && h.mode !== 'pet') drawPerson(ctx, h, h.x * S, h.y * S, personPx(S));
     const sorted = sim.cats.slice().sort((a, b) => P[a.id][1] - P[b.id][1]);
     const icons = [];   // drawn after the name tags, so no tag or later cat ever covers one
     for (const c of sorted) {
@@ -7018,8 +7033,6 @@ const ROOM = (() => {
       const type = c.act ? c.act.type : A.REST, size = Math.max(14, R * 0.9), off = c === UI.selected ? (ringR + 3 + size / 2) / Math.SQRT2 : ringR * 0.75;
       icons.push([type, x + off, y - off, size, col]);
     }
-    // the shoo's and the pet's hands are drawn as the sweep and the stroke, not as people
-    for (const h of sim.humans) if (h.mode !== 'shoo' && h.mode !== 'pet') drawPerson(ctx, h, h.x * S, h.y * S, Math.max(26, 16 * S));
     // The room names sit over the cats on a light backing, so a cat walking past never hides one.
     ctx.font = `${TK.font.weight.bold} ${TK.font.size.ui}px ${TK.font.stack}`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -7066,7 +7079,7 @@ const ROOM = (() => {
       SPR.drawTooltip(ctx, `Event ${UI.marker.index} in the event log`, UI.markerBox.x + UI.markerBox.w / 2, UI.markerBox.y, W, H);
     } else if (!hoverCat && mouse) {
       // A person under the pointer is named by role, the way a cat is named.
-      const h = sim.humans.find(q => q.mode !== 'shoo' && q.mode !== 'pet' && Math.hypot(q.x * S - mouse[0], q.y * S - mouse[1]) < Math.max(13, 8 * S));
+      const h = sim.humans.find(q => q.mode !== 'shoo' && q.mode !== 'pet' && Math.hypot(q.x * S - mouse[0], q.y * S - mouse[1]) < personPx(S) / 2);
       if (h) SPR.drawTooltip(ctx, personOf(h).tag, h.x * S, h.y * S - Math.max(13, 8 * S), W, H);
     }
     if (UI.pet) {
@@ -7288,26 +7301,43 @@ const PERSON = {
   vacuum: { tag: 'Staff: vacuuming', staff: true, prop: 'vacuum' },
 };
 const personOf = h => PERSON[h.mode] || PERSON.visit;
+// A person seen from straight above, GTA 2 style: shoulders, arms at the sides, the crown of the head.
+// m is the drawn shoulder width (arms included), PERSON_M metres times the cats' own TK.size.catScale,
+// so a person and a cat keep their true proportion. ASSUMPTION (adult anthropometry, rounded):
+// biacromial/bideltoid breadth ~0.45 m, ~0.58 m across the arms at the sides, chest depth ~0.25 m,
+// head ~0.16 m wide x 0.20 m front to back. A cat is ~0.45 m nose to rump and ~0.15 m wide.
+const PERSON_M = 0.58;
+// ASSUMPTION (render only, Yugen's request): people are drawn PERSON_EXAG times larger than the cats'
+// scale, so the 0.45 m shoulders read ~2.2x a cat's 0.45 m body on screen, GTA 2 style. The sim's
+// positions, speeds and distances are untouched.
+const PERSON_EXAG = 2.2;
+const personPx = S => Math.max(40, PERSON_M * TK.size.catScale * PERSON_EXAG / sim.cfg.tile * S);
 function drawPerson(g, h, x, y, m) {
-  const P = personOf(h), RM = TK.room;
+  const P = personOf(h), RM = TK.room, ink = TK.color.ink, k = m / PERSON_M;   // k: px per metre
   const dx = h.x - (h._px === undefined ? h.x : h._px), dy = h.y - (h._py === undefined ? h.y : h._py);
   if (Math.hypot(dx, dy) > 0.02) h._ang = Math.atan2(dy, dx); else if (h._ang === undefined) h._ang = 0;
   h._px = h.x; h._py = h.y;
-  g.save(); g.translate(x, y); g.rotate(h._ang);
-  g.fillStyle = TK.room.shadow; g.beginPath(); g.ellipse(0, m * 0.12, m * 0.4, m * 0.3, 0, 0, 7); g.fill();
-  g.fillStyle = TK.color.muted; g.strokeStyle = TK.color.ink; g.lineWidth = 1;
-  g.beginPath(); g.ellipse(0, 0, m * 0.22, m * 0.36, 0, 0, 7); g.fill(); g.stroke();
+  const lw = Math.max(1, m * 0.025);
+  g.save(); g.translate(x, y); g.rotate(h._ang);          // +x is the way the person faces
+  g.fillStyle = RM.shadow; g.beginPath(); g.ellipse(-0.03 * k, 0.04 * k, 0.17 * k, 0.32 * k, 0, 0, 7); g.fill();
   // The prop, held out in front: a food scoop, a litter scoop, or the vacuum pushed on its pole. Standing
   // still (at a bowl or a litter box) the prop works back and forth; walking, it is carried steady.
-  const still = Math.hypot(dx, dy) <= 0.02, work = still && P.prop ? Math.sin(performance.now() / 180) * m * 0.08 : 0;
+  const still = Math.hypot(dx, dy) <= 0.02, work = still && P.prop ? Math.sin(performance.now() / 180) * 0.05 * k : 0;
   g.translate(work, 0);
-  g.fillStyle = RM.propInk; g.strokeStyle = RM.propInk; g.lineWidth = Math.max(1.5, m * 0.05);
-  if (P.prop === 'scoop') { g.beginPath(); g.arc(m * 0.42, m * 0.18, m * 0.11, 0, 7); g.fill(); }
-  else if (P.prop === 'litter') { g.fillRect(m * 0.32, m * 0.12, m * 0.18, m * 0.14); g.beginPath(); g.moveTo(m * 0.2, m * 0.19); g.lineTo(m * 0.32, m * 0.19); g.stroke(); }
-  else if (P.prop === 'vacuum') { g.beginPath(); g.moveTo(m * 0.1, 0); g.lineTo(m * 0.5, 0); g.stroke(); g.fillRect(m * 0.5, -m * 0.2, m * 0.14, m * 0.4); }
+  g.fillStyle = RM.propInk; g.strokeStyle = RM.propInk; g.lineWidth = Math.max(1.5, 0.03 * k);
+  if (P.prop === 'scoop') { g.beginPath(); g.moveTo(0.1 * k, 0.24 * k); g.lineTo(0.3 * k, 0.2 * k); g.stroke(); g.beginPath(); g.arc(0.34 * k, 0.2 * k, 0.06 * k, 0, 7); g.fill(); }
+  else if (P.prop === 'litter') { g.beginPath(); g.moveTo(0.1 * k, 0.24 * k); g.lineTo(0.28 * k, 0.2 * k); g.stroke(); g.fillRect(0.28 * k, 0.14 * k, 0.12 * k, 0.12 * k); }
+  else if (P.prop === 'vacuum') { g.beginPath(); g.moveTo(0.12 * k, 0); g.lineTo(0.46 * k, 0); g.stroke(); g.fillRect(0.46 * k, -0.15 * k, 0.09 * k, 0.3 * k); }
   g.translate(-work, 0);
-  g.fillStyle = TK.color.surfaceAlt; g.strokeStyle = TK.color.ink; g.lineWidth = 1;
-  g.beginPath(); g.arc(m * 0.05, 0, m * 0.2, 0, 7); g.fill(); g.stroke();
+  // Arms hang at the sides, a little forward when holding something.
+  const fwd = P.prop ? 0.06 * k : 0;
+  g.fillStyle = TK.color.muted; g.strokeStyle = ink; g.lineWidth = lw;
+  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(fwd * (s > 0 ? 1 : 0.4), s * 0.245 * k, 0.1 * k, 0.045 * k, 0, 0, 7); g.fill(); g.stroke(); }
+  // Shoulders and back: a rounded slab 0.45 m across, 0.25 m deep.
+  g.beginPath(); g.ellipse(0, 0, 0.125 * k, 0.225 * k, 0, 0, 7); g.fill(); g.stroke();
+  // The head: skin at the face side, hair over the crown and the back.
+  g.fillStyle = TK.color.surfaceAlt; g.beginPath(); g.ellipse(0.015 * k, 0, 0.1 * k, 0.08 * k, 0, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = ink; g.globalAlpha = 0.55; g.beginPath(); g.ellipse(-0.015 * k, 0, 0.08 * k, 0.075 * k, 0, 0, 7); g.fill(); g.globalAlpha = 1;
   g.restore();
 }
 
