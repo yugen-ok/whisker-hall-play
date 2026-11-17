@@ -528,6 +528,18 @@ const room = {
   tooltipInk: '#fff6ea',
 };
 
+// People, drawn from above. Each person's look is picked from these lists by a hash of their id (play.js
+// lookOf), never from the sim's random stream. ASSUMPTION (render only): a plain spread of human skin
+// tones, natural hair colours, and casual shirt colours; staff all wear the one uniform shirt.
+const person = {
+  skin: ['#f3d2b5', '#e5b48f', '#c98e64', '#a26a43', '#7a4a2c', '#553220'],
+  hair: { black: '#1d1714', brown: '#5a3a22', blonde: '#d8b46a', red: '#a3452a', grey: '#a9a49c' },
+  shirt: ['#c0504d', '#4f81bd', '#9bbb59', '#8064a2', '#f2c14e', '#e07b39', '#4bacc6', '#d9d2c5', '#5b5b5b'],
+  uniform: '#2f6d62',    // staff polo, one colour so staff read at a glance
+  trousers: '#3b3f4a',
+  outline: '#2b2118',
+};
+
 // Furniture, by what the object is. Each sprite is drawn from a body, an edge, one content colour and
 // one detail colour; every object has its own silhouette first and its own colour second.
 const object = {
@@ -719,7 +731,7 @@ function cssVars() {
   return ':root{\n ' + out.join(';\n ') + ';\n}';
 }
 
-const api = { color, room, object, activity, coat, cat, series, seriesDash, goalSeries, residentLine, font, space, size, radius, elevation, motion,
+const api = { color, room, person, object, activity, coat, cat, series, seriesDash, goalSeries, residentLine, font, space, size, radius, elevation, motion,
   contrast, contrastReport, cssVars };
 
 if (typeof module !== 'undefined' && module.exports && require.main === module) {
@@ -6988,12 +7000,20 @@ const ROOM = (() => {
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(bg, 0, 0, W, H);
     const M = sim.map, lw = Math.max(0.7, S * 0.35), minPx = 18;
+    // Draw order, back to front: the floor and low furniture; then people and the tall furniture (hide box, cat tree, scratching post) together by their foot line,
+    // so a person behind a cat tree is half hidden by it and one in front stands over it; then the cats.
+    const R = catR(), ringR = R * 1.55, P = {};
+    for (const c of sim.cats) P[c.id] = pos(c, f);
+    // A cat is drawn ~1.3x a hide box's size (catScale), so the box could never cover it from below: a
+    // cat inside a box is left out of the cats' pass instead, and the box alone stands for it.
+    const hidden = new Set(sim.cats.filter(c => isHiddenCat(c, P[c.id], S)));
+    const tall = [];
     for (const st of M.stations) {
       let x = st.x * S, y = st.y * S, w = st.w * S, h = st.h * S;
       if (st.type !== T.WINDOW && Math.min(w, h) < minPx) { const k = minPx / Math.min(w, h); x -= (w * k - w) / 2; y -= (h * k - h) / 2; w *= k; h *= k; }
       if (drag && drag.obj === st) continue;
-      SPR.drawObject(ctx, st.type, x, y, w, h, lw);
-      if (hoverObject === st) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2; SPR.rr(ctx, x - 2, y - 2, w + 4, h + 4, 6); ctx.stroke(); }
+      const box = { st, x, y, w, h };
+      if (TALL.has(st.type)) tall.push(box); else drawStation(ctx, box, lw);
     }
     // the doorways: the front door, and the gap in the partition
     SPR.drawDoorway(ctx, (M.door.x - 10) * S, (M.H - 2.4) * S, 20 * S, 2 * S, sim.doors.entrance, lw, false);
@@ -7004,8 +7024,6 @@ const ROOM = (() => {
     }
     for (const t of sim.toys) SPR.drawToy(ctx, t.x * S, t.y * S, Math.max(4, S * 1.8), lw);
 
-    const R = catR(), ringR = R * 1.55, P = {};
-    for (const c of sim.cats) P[c.id] = pos(c, f);
     // who is doing what with whom, as a line between the two, in the colour of the activity
     for (const c of sim.cats) {
       const a = c.act; if (!a || a.target < 0) continue;
@@ -7018,16 +7036,22 @@ const ROOM = (() => {
       ctx.beginPath(); ctx.moveTo(x1 + ux * ringR, y1 + uy * ringR); ctx.lineTo(x2 - ux * ringR, y2 - uy * ringR); ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
-    // People first, so a cat beside or under a person is always drawn above them, never hidden.
+    // People and tall furniture, sorted by the foot line (a person's centre, a piece's near edge). People
+    // come before the cats, so a cat beside or under a person is always drawn above them, never hidden.
     // The shoo's and the pet's hands are drawn as the sweep and the stroke, not as people.
-    for (const h of sim.humans) if (h.mode !== 'shoo' && h.mode !== 'pet') drawPerson(ctx, h, h.x * S, h.y * S, personPx(S));
+    const layer = tall.map(b => [b.y + b.h, () => drawStation(ctx, b, lw)]);
+    for (const h of sim.humans) if (h.mode !== 'shoo' && h.mode !== 'pet') layer.push([h.y * S, () => drawPerson(ctx, h, h.x * S, h.y * S, personPx(S))]);
+    layer.sort((a, b) => a[0] - b[0]);
+    for (const [, draw] of layer) draw();
     const sorted = sim.cats.slice().sort((a, b) => P[a.id][1] - P[b.id][1]);
     const icons = [];   // drawn after the name tags, so no tag or later cat ever covers one
     for (const c of sorted) {
       const [x, y] = P[c.id], inf = actInfo(sim, c), col = TK.activity[inf.cat];
       if (c === UI.selected) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, ringR + 3, 0, 7); ctx.stroke(); }
-      // Every cat is drawn opaque, a hiding one included: its hiding is said by the activity icon over it.
-      drawCat(ctx, c, x, y, now, inf);
+      // A cat hiding in a box is not drawn; the selected one shows through as a faint outline so it
+      // stays findable. Its hiding is also said by the activity icon over it.
+      if (!hidden.has(c)) drawCat(ctx, c, x, y, now, inf);
+      else if (c === UI.selected) { ctx.globalAlpha = 0.45; drawCat(ctx, c, x, y, now, inf); ctx.globalAlpha = 1; }
       // the activity, as an icon over the cat. The words live in the readout, where they can be read.
       // The selected cat's sits just outside its selection ring, so the ring never runs through it.
       const type = c.act ? c.act.type : A.REST, size = Math.max(14, R * 0.9), off = c === UI.selected ? (ringR + 3 + size / 2) / Math.SQRT2 : ringR * 0.75;
@@ -7291,6 +7315,17 @@ function drawCatFace(g, c, cx, cy, r) {
   for (const s of [-1, 1]) { g.fillStyle = c.eyes || CI.eye; g.beginPath(); g.arc(s * r * 0.38, r * 0.12, er, 0, 7); g.fill(); g.fillStyle = CI.lid; g.beginPath(); g.ellipse(s * r * 0.38, r * 0.12, er * 0.35, er * 0.75, 0, 0, 7); g.fill(); }
   g.restore();
 }
+// Furniture a cat or a person can be behind or inside; everything else lies flat on the floor.
+const TALL = new Set([T.HIDE, T.PERCH, T.SCRATCH]);
+function drawStation(ctx, b, lw) {
+  SPR.drawObject(ctx, b.st.type, b.x, b.y, b.w, b.h, lw);
+  if (hoverObject === b.st) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2; SPR.rr(ctx, b.x - 2, b.y - 2, b.w + 4, b.h + 4, 6); ctx.stroke(); }
+}
+// A cat is hidden when it is hiding and its drawn position is inside a hide box: then the box covers it.
+function isHiddenCat(c, p, S) {
+  if (!c.act || c.act.type !== A.HIDE) return false;
+  return sim.map.stations.some(st => st.type === T.HIDE && p[0] >= st.x * S && p[0] <= (st.x + st.w) * S && p[1] >= st.y * S && p[1] <= (st.y + st.h) * S);
+}
 // A person seen from above, as the cats are: shoulders broad across the line of travel, head on top.
 // Who a person is, by the sim's own mode: the hover tag and the prop they carry. Staff and visitors are
 // the same figure with the same walk; a staff member only carries what the job needs.
@@ -7329,16 +7364,63 @@ function drawPerson(g, h, x, y, m) {
   else if (P.prop === 'litter') { g.beginPath(); g.moveTo(0.1 * k, 0.24 * k); g.lineTo(0.28 * k, 0.2 * k); g.stroke(); g.fillRect(0.28 * k, 0.14 * k, 0.12 * k, 0.12 * k); }
   else if (P.prop === 'vacuum') { g.beginPath(); g.moveTo(0.12 * k, 0); g.lineTo(0.46 * k, 0); g.stroke(); g.fillRect(0.46 * k, -0.15 * k, 0.09 * k, 0.3 * k); }
   g.translate(-work, 0);
-  // Arms hang at the sides, a little forward when holding something.
-  const fwd = P.prop ? 0.06 * k : 0;
-  g.fillStyle = TK.color.muted; g.strokeStyle = ink; g.lineWidth = lw;
-  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(fwd * (s > 0 ? 1 : 0.4), s * 0.245 * k, 0.1 * k, 0.045 * k, 0, 0, 7); g.fill(); g.stroke(); }
-  // Shoulders and back: a rounded slab 0.45 m across, 0.25 m deep.
-  g.beginPath(); g.ellipse(0, 0, 0.125 * k, 0.225 * k, 0, 0, 7); g.fill(); g.stroke();
-  // The head: skin at the face side, hair over the crown and the back.
-  g.fillStyle = TK.color.surfaceAlt; g.beginPath(); g.ellipse(0.015 * k, 0, 0.1 * k, 0.08 * k, 0, 0, 7); g.fill(); g.stroke();
-  g.fillStyle = ink; g.globalAlpha = 0.55; g.beginPath(); g.ellipse(-0.015 * k, 0, 0.08 * k, 0.075 * k, 0, 0, 7); g.fill(); g.globalAlpha = 1;
+  // Arms hang at the sides, a little forward when holding something: a sleeve from the shoulder, then the
+  // bare forearm and the hand, slightly ahead of the shoulder line.
+  const L = lookOf(h), PT = TK.person, sw = L.male ? 0.225 : 0.195, fwd = P.prop ? 0.07 * k : 0.02 * k;
+  g.strokeStyle = PT.outline; g.lineWidth = lw;
+  for (const s of [-1, 1]) {
+    const ay = s * (sw + 0.02) * k, hx = fwd * (s > 0 ? 1.4 : 0.7) + 0.05 * k;
+    g.fillStyle = L.skin; g.beginPath(); g.ellipse(hx * 0.6, ay, 0.085 * k, 0.034 * k, 0, 0, 7); g.fill(); g.stroke();   // forearm
+    g.beginPath(); g.arc(hx + 0.05 * k, ay, 0.036 * k, 0, 7); g.fill(); g.stroke();                                     // hand
+    g.fillStyle = L.shirt; g.beginPath(); g.ellipse(-0.01 * k, ay * 0.97, 0.07 * k, 0.045 * k, 0, 0, 7); g.fill(); g.stroke();  // sleeve
+  }
+  // Shoulders and back: a rounded slab, broader on a man (0.45 m) than a woman (0.39 m), 0.25 m deep,
+  // with a collar at the neck on the side the person faces.
+  g.fillStyle = L.shirt; g.beginPath(); g.ellipse(0, 0, 0.125 * k, sw * k, 0, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = L.collar; g.beginPath(); g.ellipse(0.035 * k, 0, 0.05 * k, 0.085 * k, 0, -Math.PI / 2, Math.PI / 2); g.fill();
+  // Ears either side of the head, then the head, then the nose tip pointing the way the person faces.
+  g.fillStyle = L.skin;
+  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(0.005 * k, s * 0.082 * k, 0.026 * k, 0.018 * k, 0, 0, 7); g.fill(); g.stroke(); }
+  g.beginPath(); g.ellipse(0.015 * k, 0, 0.1 * k, 0.078 * k, 0, 0, 7); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(0.1 * k, -0.02 * k); g.quadraticCurveTo(0.148 * k, 0, 0.1 * k, 0.02 * k); g.closePath(); g.fill(); g.stroke();
+  drawHair(g, L, k, lw);
   g.restore();
+}
+// Hair over the crown and the back of the head, by style. The face side (+x) is left bare.
+function drawHair(g, L, k, lw) {
+  const st = L.hair, fill = () => { g.fill(); g.stroke(); };
+  g.fillStyle = L.hairCol; g.strokeStyle = TK.person.outline; g.lineWidth = lw * 0.8;
+  if (st === 'bald') return;
+  if (st === 'long') { g.beginPath(); g.ellipse(-0.075 * k, 0, 0.075 * k, 0.12 * k, 0, 0, 7); fill(); }       // falls onto the shoulders
+  if (st === 'ponytail') { g.beginPath(); g.ellipse(-0.16 * k, 0, 0.075 * k, 0.03 * k, 0, 0, 7); fill(); }
+  if (st === 'bun') { g.beginPath(); g.arc(-0.1 * k, 0, 0.042 * k, 0, 7); fill(); }
+  if (st === 'curly') {
+    for (let i = 0; i < 9; i++) { const t = Math.PI * (0.45 + i * 1.1 / 8); g.beginPath(); g.arc(0.012 * k + Math.cos(t) * 0.085 * k, Math.sin(t) * 0.07 * k, 0.03 * k, 0, 7); fill(); }
+    for (let i = 0; i < 9; i++) { const t = -Math.PI * (0.45 + i * 1.1 / 8); g.beginPath(); g.arc(0.012 * k + Math.cos(t) * 0.085 * k, Math.sin(t) * 0.07 * k, 0.03 * k, 0, 7); fill(); }
+  }
+  // the cap of hair: a buzz cut is a thin, close crop; the rest reach further toward the brow
+  const front = st === 'buzz' ? 0.045 : st === 'short' || st === 'curly' ? 0.075 : 0.06;
+  if (st === 'buzz') g.globalAlpha = 0.75;
+  g.beginPath(); g.ellipse(0.015 * k, 0, 0.102 * k, 0.08 * k, 0, Math.acos(front / 0.102) , -Math.acos(front / 0.102));
+  g.closePath(); g.fill(); if (st !== 'buzz') g.stroke(); g.globalAlpha = 1;
+  if (st === 'long' || st === 'short' || st === 'ponytail' || st === 'bun') {   // a parting down the middle
+    g.strokeStyle = TK.person.outline; g.globalAlpha = 0.35; g.beginPath(); g.moveTo((0.015 + front) * k, 0); g.lineTo(-0.06 * k, 0); g.stroke(); g.globalAlpha = 1;
+  }
+}
+// Each person's look, from a hash of their id: no draw from the sim's random stream, so the same person
+// always looks the same and a headless run is unchanged. Staff wear the uniform; visitors their own shirt.
+const HAIR_STYLES = { male: ['short', 'short', 'buzz', 'bald', 'curly', 'short'], female: ['long', 'ponytail', 'bun', 'curly', 'short', 'long'] };
+const HAIR_COLS = ['black', 'brown', 'brown', 'blonde', 'red', 'grey'];
+function hashId(id) { let x = 2166136261; for (const ch of String(id)) { x ^= ch.charCodeAt(0); x = Math.imul(x, 16777619); } return x >>> 0; }
+function lookOf(h) {
+  if (h._look && h._look.id === h.id && h._look.mode === h.mode) return h._look;
+  const PT = TK.person; let x = hashId(h.id);
+  const pick = arr => { x = Math.imul(x ^ (x >>> 15), 2246822507) >>> 0; x = (x ^ (x >>> 13)) >>> 0; return arr[x % arr.length]; };
+  const male = pick([true, false]), staff = personOf(h).staff, hairName = pick(HAIR_COLS);
+  const L = { id: h.id, mode: h.mode, male, hair: pick(male ? HAIR_STYLES.male : HAIR_STYLES.female), hairName, hairCol: PT.hair[hairName],
+    skin: pick(PT.skin), shirt: staff ? PT.uniform : pick(PT.shirt) };
+  L.collar = staff ? PT.trousers : L.skin;   // a staff polo's dark collar; a visitor's open neck
+  return (h._look = L);
 }
 
 // A fight or an arrival, marked where it happened and tied to a numbered line in the log. The line is
