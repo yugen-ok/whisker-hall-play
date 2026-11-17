@@ -7605,17 +7605,63 @@ const ROOM = (() => {
     }
     return [depth, pairs];
   }
+  // ---- surfaces: every object a body may not be drawn over unless it is using it, as its drawn footprint.
+  // Walls, the room edge and benches are the grid's WALL / OBST tiles; furniture is its drawn box; a toy is
+  // its drawn circle. The doorways' gaps are floor (the sim walks through them).
+  function surfaces() {
+    const st = sim.map.stations.filter(x => !(drag && drag.obj === x)).map(x => ({ kind: 'st', obj: x, b: stationBox(x) }));
+    const toys = sim.toys.map(t => ({ kind: 'toy', obj: t, x: t.x * S, y: t.y * S, r: Math.max(4, S * 1.8) }));
+    return st.concat(toys);
+  }
+  // What the sim says a body is using: the station it has arrived at (bowl, water, litter tray, bed, cat
+  // tree, sill, hide box, post), or the toy it is playing with. People use nothing.
+  function usesOf(o) {
+    const a = o && o.act; if (!a) return null;
+    if (a.type === A.TOY && a.toy) return a.toy;
+    return a.arrived && a.station >= 0 ? sim.map.stations[a.station] : null;
+  }
+  function circleRect(x, y, r, x0, y0, x1, y1) { const dx = x - Math.max(x0, Math.min(x1, x)), dy = y - Math.max(y0, Math.min(y1, y)); return dx * dx + dy * dy < r * r; }
+  // Is a body of radius r at (x, y) drawn over anything it is not using?
+  function blocked(x, y, r, use, SF) {
+    if (x - r < 0 || y - r < 0 || x + r > W || y + r > H) return true;
+    const M = sim.map, i0 = Math.max(0, Math.floor((x - r) / S)), i1 = Math.min(M.W - 1, Math.floor((x + r) / S)), j0 = Math.max(0, Math.floor((y - r) / S)), j1 = Math.min(M.H - 1, Math.floor((y + r) / S));
+    const sill = use && use.type === T.WINDOW;     // a cat on the sill sits against the wall
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const t = M.grid[j * M.W + i];
+      if ((t === T.WALL && !sill) || t === T.OBST) if (circleRect(x, y, r, i * S, j * S, (i + 1) * S, (j + 1) * S)) return true;
+    }
+    for (const f of SF) {
+      if (f.obj === use) continue;
+      if (f.kind === 'st') { if (circleRect(x, y, r, f.b.x, f.b.y, f.b.x + f.b.w, f.b.y + f.b.h)) return true; }
+      else if (Math.hypot(x - f.x, y - f.y) < r + f.r) return true;
+    }
+    return false;
+  }
+  // The nearest free floor to p: rings outward in fixed steps and angles (no RNG); of the first ring with a
+  // free spot, the one nearest the anchor (last frame's drawn spot), so the choice does not flicker.
+  function freeNear(p, r, use, SF, anchor) {
+    if (!blocked(p[0], p[1], r, use, SF)) return p;
+    const step = Math.max(1.5, r * 0.25), N = 24;
+    for (let k = 1; k <= 80; k++) {
+      let best = null, bd = Infinity;
+      for (let n = 0; n < N; n++) { const g = n / N * 2 * Math.PI, x = p[0] + Math.cos(g) * k * step, y = p[1] + Math.sin(g) * k * step;
+        if (blocked(x, y, r, use, SF)) continue; const d = Math.hypot(x - anchor[0], y - anchor[1]); if (d < bd) { bd = d; best = [x, y]; } }
+      if (best) return best;
+    }
+    return p;
+  }
   function declutter(P, people, hidden, now) {
-    const R = catR(), pr = personPx(S) * 0.32, cap = DC_MAX_M / sim.cfg.tile * S;
-    const boxes = sim.map.stations.filter(st => st.type !== T.WINDOW && !(drag && drag.obj === st)).map(st => ({ st, b: stationBox(st) }));
+    const R = catR(), pr = personPx(S) * 0.32, cap = DC_MAX_M / sim.cfg.tile * S, SF = surfaces();
     const B = [];
     for (const c of sim.cats) {
-      const a = c.act, use = a && a.arrived && a.station >= 0 ? sim.map.stations[a.station] : null;
+      const use = usesOf(c);
       const pin = hidden.has(c) || (UI.pet && UI.pet.cat === c) || (sim.petting && sim.petting.catId === c.id);
-      B.push({ key: 'c' + c.id, obj: c, raw: P[c.id], r: R * 0.95, w: pin ? 0 : use ? 0.4 : 1, use, skip: hidden.has(c) });
+      B.push({ key: 'c' + c.id, obj: c, raw: P[c.id], r: R * 0.95, w: pin ? 0 : use ? 0.4 : 1, use, pin, skip: hidden.has(c) });
     }
-    for (const h of people) B.push({ key: 'h' + h.id, obj: h, raw: [h.x * S, h.y * S], r: pr, w: 0.5, use: null, skip: false });
+    for (const h of people) B.push({ key: 'h' + h.id, obj: h, raw: [h.x * S, h.y * S], r: pr, w: 0.5, use: null, pin: false, skip: false });
     for (const b of B) b.t = b.raw.slice();
+    const inUse = (b, p) => { const u = b.use; if (u.type === undefined) return [u.x * S, u.y * S];   // a toy: on it
+      const q = stationBox(u); return [Math.min(q.x + q.w, Math.max(q.x, p[0])), Math.min(q.y + q.h, Math.max(q.y, p[1]))]; };
     if (dcOn) for (let it = 0; it < DC_ITER; it++) {
       for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
         const a = B[i], b = B[j]; if (a.skip || b.skip || a.w + b.w === 0) continue;
@@ -7625,34 +7671,34 @@ const ROOM = (() => {
         const ka = a.w / (a.w + b.w), kb = b.w / (a.w + b.w), ux = dx / d, uy = dy / d;
         a.t[0] -= ux * o * ka; a.t[1] -= uy * o * ka; b.t[0] += ux * o * kb; b.t[1] += uy * o * kb;
       }
-      for (const b of B) {
-        if (b.w === 0) { b.t = b.raw.slice(); continue; }
-        if (b.use) { const q = stationBox(b.use); b.t[0] = Math.min(q.x + q.w, Math.max(q.x, b.t[0])); b.t[1] = Math.min(q.y + q.h, Math.max(q.y, b.t[1])); continue; }
-        for (const { st, b: q } of boxes) {
-          const m = b.r * 0.6, x0 = q.x - m, x1 = q.x + q.w + m, y0 = q.y - m, y1 = q.y + q.h + m;
-          if (b.t[0] <= x0 || b.t[0] >= x1 || b.t[1] <= y0 || b.t[1] >= y1) continue;
-          if (b.obj.act && b.obj.act.station === st.id) continue;                          // on its way onto the piece it is using
-          const e = [b.t[0] - x0, x1 - b.t[0], b.t[1] - y0, y1 - b.t[1]], k = e.indexOf(Math.min(...e));
-          if (k === 0) b.t[0] = x0; else if (k === 1) b.t[0] = x1; else if (k === 2) b.t[1] = y0; else b.t[1] = y1;
-        }
-        b.t[0] = Math.min(W - b.r * 0.5, Math.max(b.r * 0.5, b.t[0])); b.t[1] = Math.min(H - b.r * 0.5, Math.max(b.r * 0.5, b.t[1]));
-      }
+      for (const b of B) { if (b.w === 0) b.t = b.raw.slice(); else if (b.use && b.use.type !== undefined) b.t = inUse(b, b.t); }
     }
-    // cap, then ease the drawn offset toward the target offset
     const dt = dcLast == null ? 1 : Math.max(0, Math.min(0.1, (now - dcLast) / 1000)); dcLast = now;
-    const k = 1 - Math.exp(-dt / DC_TAU_S), seen = new Set();
+    const k = 1 - Math.exp(-dt / DC_TAU_S), seen = new Set(), prevD = D, prevH = DH;
     D = {}; DH = new Map();
     for (const b of B) {
+      // the crowd push is capped at DC_MAX_M; the push off a surface is not: it goes as far as free floor is
       let tx = b.t[0] - b.raw[0], ty = b.t[1] - b.raw[1]; const m = Math.hypot(tx, ty); if (m > cap) { tx *= cap / m; ty *= cap / m; }
+      const prev = (b.key[0] === 'c' ? prevD[b.obj.id] : prevH.get(b.obj)) || b.raw;
+      const free = dcOn && !b.pin && !b.use;
+      if (free) { const q = freeNear([b.raw[0] + tx, b.raw[1] + ty], b.r, null, SF, prev); tx = q[0] - b.raw[0]; ty = q[1] - b.raw[1]; }
       if (b.skip) { tx = 0; ty = 0; }
       const o = dcOff.get(b.key) || [0, 0]; o[0] += (tx - o[0]) * k; o[1] += (ty - o[1]) * k;
+      // the eased spot may cut a corner of a surface on its way: then it stops at the nearest free floor
+      if (free && blocked(b.raw[0] + o[0], b.raw[1] + o[1], b.r, null, SF)) { const q = freeNear([b.raw[0] + o[0], b.raw[1] + o[1]], b.r, null, SF, prev); o[0] = q[0] - b.raw[0]; o[1] = q[1] - b.raw[1]; }
       dcOff.set(b.key, o); seen.add(b.key);
       b.d = [b.raw[0] + o[0], b.raw[1] + o[1]];
       if (b.key[0] === 'c') D[b.obj.id] = b.d; else DH.set(b.obj, b.d);
     }
     for (const key of [...dcOff.keys()]) if (!seen.has(key)) dcOff.delete(key);
     const [r0, p0] = overlapOf(B, 'raw'), [r1, p1] = overlapOf(B, 'd');
-    dcStats = { raw: r0, drawn: r1, pairsRaw: p0, pairsDrawn: p1, bodies: B.length };
+    // bodies drawn over an object they are not using (hidden and petted cats, which stay put, are left out)
+    const over = key => B.filter(b => !b.pin && !b.use && blocked(b[key][0], b[key][1], b.r, null, SF));
+    const oR = over('raw'), oD = over('d');
+    dcStats = { raw: r0, drawn: r1, pairsRaw: p0, pairsDrawn: p1, bodies: B.length,
+      catsOverRaw: oR.filter(b => b.key[0] === 'c').length, catsOverDrawn: oD.filter(b => b.key[0] === 'c').length,
+      peopleOverRaw: oR.filter(b => b.key[0] === 'h').length, peopleOverDrawn: oD.filter(b => b.key[0] === 'h').length,
+      maxOff: Math.max(0, ...B.map(b => Math.hypot(b.d[0] - b.raw[0], b.d[1] - b.raw[1]))) };
     return D;
   }
 
