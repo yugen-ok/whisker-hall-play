@@ -234,6 +234,9 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
    short name over its value; switched off, it is struck through and dimmed. */
 .goals{display:flex;gap:var(--sp-sm);width:100%;height:100%;min-height:0;align-items:stretch}
 .goals.m-stacked{flex-direction:column}
+/* A short phone's feed (layout: chart mode 'tickets'): the four goal tickets only; the chart and its controls live in the statistics view. */
+.goals.m-tickets{flex-direction:column;justify-content:center}
+.goals.m-tickets .ctl,.goals.m-tickets .plot,.goals.m-tickets .grow{display:none}
 .goals .legend{display:grid;gap:0;flex:none;align-content:center}
 .goals .leg{display:flex;align-items:center;gap:4px;min-height:var(--sz-target);padding:0 var(--sp-sm);text-align:left;
  background:var(--surface);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--line)}
@@ -304,10 +307,26 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .readout .ident{display:flex;flex-direction:column;flex:none;overflow:hidden}
 .readout .nm{font-size:var(--fs-lead);line-height:var(--lh-lead);font-weight:var(--fw-bold)}
 .readout .meta{color:var(--muted)}
-.readout.empty .doing,.readout.empty .blocks{visibility:hidden}
+.readout.empty .doing{visibility:hidden}
+.readout.empty .blocks{display:none}
 .readout .doing{display:flex;align-items:center;gap:var(--sp-sm);flex:none;font-weight:var(--fw-bold);
  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .readout .doing .dot{flex:none;width:10px;height:10px;border-radius:var(--r-pill)}
+.leaders{flex:none;margin-top:auto;display:flex;flex-direction:column}
+.leaders h3{margin:0;font-size:var(--fs-ui);line-height:var(--lh-ui);font-weight:var(--fw-bold);color:var(--muted)}
+.lrow{display:grid;grid-template-columns:64px repeat(3,minmax(0,1fr)); /* 64px label column, 3px face gap: ASSUMPTION, fitted by eye to "Friendly" at 14px; not in layout-metrics */align-items:center;gap:var(--sp-xs);height:var(--lh-ui);white-space:nowrap}
+.lrow .lab{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.lrow .none{grid-column:2 / span 3;color:var(--muted)}
+/* Narrow left column (layout leadersLayout 'grid'): a 2 x 2 grid of goal blocks, a heading over three entry lines. */
+.leaders.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,auto);gap:var(--sp-sm)}
+.leaders.grid .lrow{grid-template-columns:minmax(0,1fr);grid-auto-rows:var(--lh-ui);row-gap:0;height:auto}
+.leaders.grid .lrow .none{grid-column:auto}
+.leader{display:flex;align-items:center;gap:3px;min-width:0;height:var(--lh-ui);padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer;text-align:left}
+.leader:hover .nm{text-decoration:underline}
+.leader .face{flex:none}
+.leader .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.leader .num{flex:none;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums}
+.readout .blocks{flex:none}
 .blocks{display:flex;flex-wrap:wrap;gap:var(--sp-sm);align-content:flex-start;min-height:0}
 .block{min-width:0;overflow:hidden}
 .block h3{margin:0;font-size:var(--fs-ui);line-height:var(--lh-ui);font-weight:var(--fw-bold);color:var(--muted)}
@@ -1109,11 +1128,30 @@ function buildMap(cfg) {
   const bowls = stations.filter(s => s.type === T.BOWL);
   place(T.WATER, 4, 4, K.water, ALL);
   const farFromFood = (cx, cy, cl) => bowls.every(b => Math.hypot(b.cx - cx, b.cy - cy) > (cl >= 5 ? 30 : 18)); // >=1.5 m preferred, >=0.9 m (ASPCApro) minimum
-  const [l1, l2] = split(K.litter, 4 / 7); place(T.LITTER, 10, 8, l1, [Math.round(PX * 0.5), 10, PX - 2, H - 4], { soil: 0 }, farFromFood); if (l2) place(T.LITTER, 10, 8, l2, QUIET, { soil: 0 }, farFromFood); // 50 x 40 cm
+  // Reserved box sites. A room with the default box count or more is built with the default count (DEFAULT_COUNTS.litter)
+  // in its usual place in the order, so the furniture drawn after the boxes does not depend on how many boxes are added:
+  // the standard room is 29db130's, exactly, and boxes above the default go in at the end, by a wall and apart (below).
+  // A room configured below the default (crowded: 3, litter: 1) is built around its own count, as in 29db130 (ruled after
+  // gate-push2: building it around 4 and dropping one changed the crowded room and broke STR16).
+  const REF_LITTER = Math.min(K.litter, DEFAULT_COUNTS.litter);
+  const [l1, l2] = split(REF_LITTER, 4 / 7); place(T.LITTER, 10, 8, l1, [Math.round(PX * 0.5), 10, PX - 2, H - 4], { soil: 0 }, farFromFood); if (l2) place(T.LITTER, 10, 8, l2, QUIET, { soil: 0 }, farFromFood); // 50 x 40 cm
   const [p1, p2] = split(K.perch, 4 / 6); place(T.PERCH, 12, 12, p1, MAIN, { cap: 2, elevated: true }); if (p2) place(T.PERCH, 12, 12, p2, QUIET, { cap: 2, elevated: true }); // 60 cm cat-tree base
   const [b1, b2] = split(K.bed, 5 / 8); place(T.BED, 11, 11, b1, MAIN, { cap: 2 }); if (b2) place(T.BED, 11, 11, b2, QUIET, { cap: 2 }); // 55 cm beds
   const [h1, h2] = split(K.hide, 5 / 8); place(T.HIDE, 8, 6, h1, MAIN); if (h2) place(T.HIDE, 8, 6, h2, QUIET); // 40 x 30 cm boxes
   const [s1, s2] = split(K.scratch, 4 / 5); place(T.SCRATCH, 6, 6, s1, MAIN); if (s2) place(T.SCRATCH, 6, 6, s2, QUIET); // 30 cm post base
+  { // boxes above the default: added last (a room at or below the default already has its count)
+    const want = split(K.litter, 4 / 7), inMain = st => st.x < PX;
+    // Extra boxes go in a quiet spot by a wall, apart from the other boxes (Carney et al. 2014, AAFP/ISFM house-soiling
+    // guidelines: quiet, low-traffic locations; boxes side by side can be used as one box). Both preferences hold in the
+    // three roomier clearance tiers and are dropped in the last (cl 1), so a full room still gets its boxes.
+    // ASSUMPTIONS, no source gives numbers: "by a wall" = a wall tile within 0.6 m of the box centre; boxes at least 1 m apart.
+    const WALL_NEAR_M = 0.6, LITTER_GAP_M = 1.0, tl = cfg.tile;
+    const nearWall = (cx, cy) => { const r = Math.round(WALL_NEAR_M / tl); for (let j = Math.max(0, Math.round(cy) - r); j <= Math.min(H - 1, Math.round(cy) + r); j++) for (let i = Math.max(0, Math.round(cx) - r); i <= Math.min(W - 1, Math.round(cx) + r); i++) if (grid[j * W + i] === T.WALL) return true; return false; };
+    const litterSite = (cx, cy, cl) => farFromFood(cx, cy, cl) && (cl === 1 || (nearWall(cx, cy) && stations.every(st => st.type !== T.LITTER || Math.hypot(st.cx - cx, st.cy - cy) * tl >= LITTER_GAP_M)));
+    const have = [true, false].map(side => stations.filter(st => st.type === T.LITTER && inMain(st) === side).length);
+    if (want[0] > have[0]) place(T.LITTER, 10, 8, want[0] - have[0], [Math.round(PX * 0.5), 10, PX - 2, H - 4], { soil: 0 }, litterSite);
+    if (want[1] > have[1]) place(T.LITTER, 10, 8, want[1] - have[1], QUIET, { soil: 0 }, litterSite);
+  }
   let floor = 0; for (let i = 0; i < W * H; i++) if (grid[i] !== T.WALL && grid[i] !== T.DOOR) floor++;
   return { W, H, grid, stations, litter: stations.filter(s => s.type === T.LITTER), partitionX: PX, doorway, door: { x: dx0 + dw / 2, y: H - 5 }, sitSpot: { x: Math.round(PX * 0.55), y: Math.round(H / 2) }, floorM2: floor * cfg.tile * cfg.tile };
 }
@@ -1399,7 +1437,8 @@ const STAFF_PAUSE_S = { feed: 10, clean: 150 };
 // OFF_ROUTINE_W, and counts OFF_ROUTINE_W times as a threat in threat() while they stay. Both numbers ASSUMPTIONS
 // (approved, Erwin's Review 6; reach widened in Review 7, item 3); the direction is Carlstead et al. 1993.
 const ROUTINE_WINDOW_S = 1800, OFF_ROUTINE_W = 2;
-// The bonus for carrying on with what a cat was doing (decide(): the last action).
+// The bonus for carrying on with what a cat was doing (decide(): the last action). ASSUMPTION: the 0.6 is the earlier
+// tuning literal in decide() (4517e61, `sc += 0.6`), named here unchanged; no published source.
 const CARRY_ON = 0.6;
 // A cat busy with a need is not broken off by a moving toy: eating, drinking, the litter box, fleeing, fighting. Waiting
 // at an empty bowl is not one of them (Hall & Bradshaw 1998: hungry cats played more, not less).
@@ -1444,7 +1483,7 @@ class Sim {
   emit(msg, kind) { this.logN = (this.logN || 0) + 1; this.log.push({ n: this.logN, t: this.t, clock: this.clock(), msg, kind: kind || 'info' }); if (this.log.length > 400) this.log.shift(); }
   pointField(px, py) { return distField(this.map, { x: px | 0, y: py | 0, w: 1, h: 1 }); }
   randFloor(mainOnly) { for (let k = 0; k < 500; k++) { const x = 3 + this.rng() * ((mainOnly ? this.map.partitionX : this.map.W) - 6), y = 3 + this.rng() * (this.map.H - 6); if (walkable(this.map, x, y) && this.map.grid[(y | 0) * this.map.W + (x | 0)] === T.FLOOR && (k > 300 || this.map.clear[(y | 0) * this.map.W + (x | 0)] >= 5)) return [x, y]; /* goals in open floor, not wedged against walls or furniture */ } return [100, 80]; }
-  addCat(cat, newcomer) {
+  addCat(cat, newcomer, quiet) { // quiet: the caller writes the one log line (an arrival event)
     const [x, y] = this.randFloor(); cat.x = cat.px = x; cat.y = cat.py = y; cat.act = null; cat.incoming = [];
     for (const o of this.cats) { // familiarity: residents know each other a bit; newcomer is a stranger
       const base = newcomer ? 0 : (this.rng() - 0.45) * 0.4;
@@ -1452,15 +1491,15 @@ class Sim {
       o.mem[cat.id] = { aff: newcomer ? -0.1 : base, fear: 0, n: newcomer ? 0 : this.cfg.tune.familiarN + this.rng() * 20, wins: 0, losses: 0, last: -1e9 };
       cat.mem[o.id] = { aff: newcomer ? -0.1 : base + (this.rng() - 0.5) * 0.1, fear: 0, n: newcomer ? 0 : this.cfg.tune.familiarN + this.rng() * 20, wins: 0, losses: 0, last: -1e9 };
     }
-    this.cats.push(cat); if (newcomer && this.tick > 0) this.emit(`${cat.name} enters the colony`, 'event');
+    this.cats.push(cat); if (newcomer && !quiet && this.tick > 0) this.emit(`${cat.name} enters the colony`, 'event');
   }
   // newcomer = stranger to everyone, arrival time stamped; elevated stress baseline that habituates over days (Kessler & Turner 1999; Kry & Casey 2007)
   markNewcomer(cat) { cat.arrivedT = this.t; cat.mem.meals = {}; for (const o of this.cats) if (o !== cat) { o.mem[cat.id] = { aff: -0.1, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 }; cat.mem[o.id] = { aff: -0.1, fear: 0, n: 0, wins: 0, losses: 0, last: -1e9 }; } cat.s.stress = Math.max(cat.s.stress, 0.35 + 0.3 * cat.tr.N); }
-  admit() { const cat = sampleCat(this.rng, this.nextId++, this.L); this.addCat(cat, true); this.markNewcomer(cat); return cat; }
+  admit() { const cat = sampleCat(this.rng, this.nextId++, this.L); this.addCat(cat, true, true); this.markNewcomer(cat); return cat; }
   novelty(c) { // two-phase habituation (Kessler & Turner 1997): a fast fall over the first days, then a slow tail over weeks
     if (c.arrivedT === undefined) return 0; const d = (this.t - c.arrivedT) / 86400, H = this.cfg.habit || {};
     const w = H.fastShare != null ? H.fastShare : 0.6; return w * Math.exp(-d / (H.fastDays || 1.2)) + (1 - w) * Math.exp(-d / (H.slowDays || 14)); }
-  removeCat(cat) { this.cats = this.cats.filter(c => c !== cat); for (const o of this.cats) { if (o.act && o.act.target === cat.id) o.act = null; o.incoming = o.incoming.filter(i => i.from !== cat.id); } this.emit(`${cat.name} removed from the colony`, 'event'); }
+  removeCat(cat, quiet) { this.cats = this.cats.filter(c => c !== cat); for (const o of this.cats) { if (o.act && o.act.target === cat.id) o.act = null; o.incoming = o.incoming.filter(i => i.from !== cat.id); } if (!quiet) this.emit(`${cat.name} removed from the colony`, 'event'); }
   setNachshon(on) { const has = this.cats.includes(this.nachshon); if (on && !has) { this.nachshon.mem = {}; this.addCat(this.nachshon, true); } else if (!on && has) this.removeCat(this.nachshon); }
   catById(id) { return this.cats.find(c => c.id === id); }
   dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
@@ -1492,6 +1531,8 @@ class Sim {
   // How strongly this toy's motion draws this cat, 0..1 (config.js `toy`): recent, near, moving away from the cat, erratic.
   // A toy moved within the last tick is moving now (the tick is 2 s, so its age at the next decision is one tick, not a
   // decay). A sleeping cat does not see it, and a cat does not stalk a toy it has just knocked itself.
+  // ASSUMPTION: the 6 x motionS cutoff (here and in toyMoving) treats a toy as still once its motion salience has decayed
+  // to exp(-6), about 0.25% of its onset value; the factor 6 is a chosen cutoff, not a sourced one.
   toySalience(c, toy) {
     const TY = this.cfg.toy, mv = toy.mv, age = this.t - mv.t, ux = toy.x - c.x, uy = toy.y - c.y, d = Math.hypot(ux, uy), dM = d * this.cfg.tile;
     const away = d > 1e-6 ? (mv.hx * ux + mv.hy * uy) / d : 0;
@@ -1517,7 +1558,7 @@ class Sim {
   // setToyMotion; the gesture remembers which cats saw the toy move, so its log line can count those that ignored it.
   moveToy(id, x, y) {
     const toy = this.toys.find(t => t.id === id); if (!toy || !walkable(this.map, x, y)) return false;
-    toy.held = true; if (!toy.gesture) toy.gesture = { t0: this.t, best: {}, seen: new Set() };
+    toy.held = true; if (!toy.gesture) { toy.gesture = { t0: this.t, best: {}, seen: new Set() }; toy.pounced = null; }
     this.setToyMotion(toy, x, y, 'hand');
     for (const c of this.cats) if (this.toySalience(c, toy).m >= this.cfg.toy.seenMin) toy.gesture.seen.add(c.id);
     return true;
@@ -1538,7 +1579,9 @@ class Sim {
   toyPhase(c, toy, phase, prev, sal) {
     if (this.onToy) this.onToy(c, toy, phase, { by: toy.mv.by, d: sal.dM, m: sal.m, away: sal.away, prev });
     const g = toy.gesture; if (g && TOY_RANK[phase] && (!g.best[c.id] || TOY_RANK[phase] > TOY_RANK[g.best[c.id]])) g.best[c.id] = phase;
-    if (phase === 'pounce') this.emit(`${c.name} pounces on the toy.`, 'toy');
+    // At most one pounce line per cat per gesture: during the hand's gesture its summary line names the pounce; after it,
+    // a cat's first pounce gets a line and later ones do not (moveToy clears the record when a new gesture starts).
+    if (phase === 'pounce' && !(toy.pounced || (toy.pounced = new Set())).has(c.id)) { toy.pounced.add(c.id); if (!g) this.emit(`${c.name} pounces on the toy.`, 'toy'); }
     const by = toy.mv.by;
     if (typeof by === 'number' && by !== c.id && (phase === 'stalk' || phase === 'chase') && (prev == null || prev === 'watch')) {
       const o = this.catById(by); this.emit(`${o ? o.name : 'A cat'} knocks the toy; ${c.name} ${phase === 'chase' ? 'gives chase' : 'stalks it'}.`, 'toy'); }
@@ -1630,7 +1673,7 @@ class Sim {
     if (!this.wev) this.wev = [];
     if (scheduled && !this.doors.entrance && DOOR_EV.has(type)) return this.deferAtDoor(type, ent);
     const durS = ent && ent.durS; let mealShare = 0;
-    if (type === 'adopt') { if (this.cats.length > 1) { const cat = this.cats[Math.floor(r() * this.cats.length)]; this.removeCat(cat); this.stats.adoptions++; this.emit(`🏡 ${cat.name} is adopted`, 'event'); } return; }
+    if (type === 'adopt') { if (this.cats.length > 1) { const cat = this.cats[Math.floor(r() * this.cats.length)]; this.removeCat(cat, true); this.stats.adoptions++; this.emit(`🏡 ${cat.name} is adopted`, 'event'); } return; }
     if (type === 'newcomer' || type === 'intake') { if (this.cats.length >= ((this.cfg.turnover && this.cfg.turnover.cap) || this.cfg.maxCats || 16)) return; const nc = this.admit(); this.stats.intakes++; this.emit(`🌱 ${nc.name} arrives as a newcomer`, 'event'); this.beginEvent('newcomer', { cat: nc }); return; }
     const snap = this.evSnap();
     if (type === 'feed') { this.learnMeal(); const bw = M.stations.filter(s => s.type === T.BOWL); const RP = this.rationPlan && this.rationPlan.day === this.day ? this.rationPlan : null; mealShare = RP ? RP.perMeal : 1 / Math.max(1, this.cfg.feedTimes.length); bw.forEach(s => s.food = RP ? this.cats.length * this.cfg.tune.dailyRation * RP.perMeal / Math.max(1, bw.length) : this.cats.length * this.cfg.tune.dailyRation / Math.max(1, this.cfg.feedTimes.length) / Math.max(1, bw.length)); /* a measured ration, not an all-day supply */ this.lastFeed = this.t; this.addHuman('feed'); this.emit('🍽️ Staff fill the food bowls', 'event'); this.interruptAll(0.6, c => c.s.hunger > 0.2); }
@@ -3312,7 +3355,6 @@ const RESTART_W = TARGET;
 const RESTART_WORD_W = px(TX('restartWord') + 12);   // a link: 6px either side of its word
 // The clock is padded GAP, not PAD, at its sides: the eight pixels it gives back go to those words.
 const CLOCK_W = px(TX('clock') + 2 * GAP);
-const CONTROLS_MIN_W = px(TX('btnControls') + ICON_W + 2 * PAD + FACE_X);
 // A fight or an arrival is marked on the canvas at the spot it happened, tied to its log row by a shared
 // index. The marker is canvas paint, like the cats and the hover tooltip, so it takes no rectangle; what
 // the solver has to prove is that the canvas can hold the wider of the two labels.
@@ -3404,6 +3446,14 @@ const CHART_TOP_BLOCK_H = LINE + TARGET;   // a heading, and one row of three ca
 const CHART_BIG_H = TARGET + GAP + CHART_BIG_PLOT_H + TICK_H + 2 * PAD;
 function chartBigIn(view, frame) { const h = CHART_BIG_H; return { x: view.x + frame, y: view.y + view.h - frame - h, w: view.w - 2 * frame, h }; }
 
+// The top-cats slot: four goals, three cats each, a face, the name and the value per cat, in 21px text lines (LINE).
+// Wide (a 64px label column and three entries of 96px in a row): one line per goal. Narrow: a 2 x 2 grid of goal
+// blocks, each a heading line over three entry lines. LEADERS_LABEL_W and LEADERS_ENTRY_W: ASSUMPTION, fitted by eye to
+// "Friendly" and to a face, a seven-letter name and a value at 14px; not measured by layout-metrics.js.
+const LEADERS_LABEL_W = 64, LEADERS_ENTRY_W = 96;
+function leadersLayout(w) {
+  return w >= LEADERS_LABEL_W + 3 * LEADERS_ENTRY_W ? { mode: 'rows', h: 4 * LINE } : { mode: 'grid', h: 2 * 4 * LINE + GAP };
+}
 // ---------------------------------------------------------------- content model
 const textRows = (textW, innerW) => Math.max(1, Math.ceil(textW / Math.max(1, innerW)));
 const stretch = r => ({ w: r.w, h: r.h, stretch: true });
@@ -3658,14 +3708,18 @@ function desktop(W, H, st) {
   const cap = H - BAR_H - logMin;
   if (edMax > cap) throw new Shortfall('left panel holding the tallest editor', edMax, cap);
   const panelH = Math.min(cap, Math.max(edMax, CONTENT.readoutFit(leftW, 1e6).used));
-  const fit = CONTENT.readoutFit(leftW, panelH);
-  if (!fit.fits) throw new Shortfall('cat readout in the left panel', fit.required, panelH);
+  // The top cats (Nov 16 request, Erwin Reviews 15-16): a slot of their own at the foot of the readout panel, there
+  // whether or not a cat is picked. The readout gives up its optional blocks (personality, feelings) to keep it; an
+  // open editor takes the whole panel as before, so the panel and the log keep one size.
+  const lead = leadersLayout(leftW), readH = panelH - lead.h - GAP;
+  const fit = CONTENT.readoutFit(leftW, readH);
+  if (!fit.fits) throw new Shortfall('cat readout above the top cats in the left panel', fit.required, readH);
   out.push(R(st.editor.length ? 'editor-' + st.editor[0] : 'readout', 0, BAR_H, leftW, panelH));
   out.push(R('log', 0, BAR_H + panelH, leftW, H - BAR_H - panelH));
   return { rects: out, form: 'desktop', feedMode: 'values', chart: chartLayout(bandW - 2 * F, feedHeight(bandW - 2 * F)),
     chartBig: chartBigIn(out.find(r => r.id === 'view'), F), chartTops: true, frame: F, feedPad: F, cardChips: true,
     chipLong, pauseLabel, restartLabel: restartWord, toggleLong,
-    readoutShows: st.selected && !st.editor.length ? fit.shown : null,
+    readoutShows: st.selected && !st.editor.length ? fit.shown : null, leaders: st.editor.length ? null : lead,
     readoutPlacement: st.selected && st.editor.length ? 'displaced by the open editor, which takes the same panel'
       : 'the constant panel in the left column, over the event log' };
 }
@@ -3676,10 +3730,19 @@ function desktop(W, H, st) {
 function phonePortrait(W, H, st) {
   if (W < CANVAS_MIN_W.phone) throw new Shortfall('phone canvas width', CANVAS_MIN_W.phone, W);
   const cardCols = CONTENT.chipCols(W), cardsH = Math.ceil(CARDS.length / cardCols) * CARD_H;
-  const logMin = CONTENT.logHeightFor(W, st, LOG_MIN_MSGS['phone-portrait']);
   // 390px of width takes two goal boxes abreast: four goals and the switch are three rows.
   const roomNeed = CONTENT.viewNeed(W, 0, 'room', st);
-  const feedMode = 'values', feedH = feedHeight(W);
+  // A short phone (375x812, 360x800, 375x667) steps down, inside the viewport and with no page scroll:
+  //  1. the live feed keeps its four goal tickets and gives up its chart row and its Show/Per controls row (2 x 65px);
+  //     the same chart, with its controls, is one tap away in the statistics view (Show stats);
+  //  2. only if that is still short, the log floor goes from three whole messages to two. LOG_MIN_MSGS is our own
+  //     judgement, not a published minimum (see its comment), and the log pins to the newest line.
+  // No cited minimum (44px targets, 14px text, the canvas aspect) is touched.
+  const msgs0 = LOG_MIN_MSGS['phone-portrait'], fullFeed = feedHeight(W);
+  const shortBy = (fh, m) => roomNeed - (H - 2 * BAR_H - fh - cardsH - CONTENT.logHeightFor(W, st, m));
+  const tickets = shortBy(fullFeed, msgs0) > 0, logMsgs = tickets && shortBy(FEED_VALUES_H, msgs0) > 0 ? msgs0 - 1 : msgs0;
+  const logMin = CONTENT.logHeightFor(W, st, logMsgs);
+  const feedMode = 'values', feedH = tickets ? FEED_VALUES_H : fullFeed;
   const body = H - 2 * BAR_H - feedH - cardsH;
   const viewMax = body - logMin;
   const viewH = Math.min(viewMax, CONTENT.viewNeed(W, viewMax, st.view, st));
@@ -3722,7 +3785,7 @@ function phonePortrait(W, H, st) {
   const wordsFit = W - RESTART_WORD_W - GUIDE_W >= TOGGLE_MIN_W;
   out.push(...cols(by['bar-bottom'], [{ id: 'restart', w: wordsFit ? RESTART_WORD_W : RESTART_W }, { id: 'toggle-view' },
     { id: 'btn-guide', w: GUIDE_W }]));
-  return { rects: out, form: 'phone-portrait', feedMode, chart: chartLayout(W, feedHeight(W)), frame: FRAME.phone, feedPad: 0, cardChips: true,
+  return { rects: out, form: 'phone-portrait', feedMode, chart: tickets ? { mode: 'tickets', legendCols: 4, legendRows: 1, plot: { w: 0, h: 0 }, fits: true } : chartLayout(W, feedHeight(W)), frame: FRAME.phone, logFloor: logMsgs, feedPad: 0, cardChips: true,
     chipLong: Math.floor(W / cardCols) >= CARD_CHIP_LONG_W, pauseLabel: false, restartLabel: wordsFit,
     readoutShows: fitP ? fitP.shown : null,
     readoutPlacement: 'the goals and plan-chip bands under the room, while a cat is picked',
@@ -3847,7 +3910,7 @@ function solve(W, H, state) {
 }
 
 return { TX, px, FS, LINE, TARGET, GAP, PAD, BAR_H, CARD_H, ASPECT, FILL_MIN, BAR_MIN, BAR_VALUED_MIN,
-  CHART_MIN_H, READOUT_COL_W, EDITOR_FIELD_PAD, TIME_FIELD_W, LEFT_MAX_W, SPEED_TRACK, SPEED_W, SPEED_MAX_W, TOGGLE_W, TOGGLE_MIN_W, TOGGLE_SHORT_W,
+  CHART_MIN_H, leadersLayout, READOUT_COL_W, EDITOR_FIELD_PAD, TIME_FIELD_W, LEFT_MAX_W, SPEED_TRACK, SPEED_W, SPEED_MAX_W, TOGGLE_W, TOGGLE_MIN_W, TOGGLE_SHORT_W,
   GUIDE_W, MARKER_W, MARKERS, CARDS, PLAN_CARDS, CONTROL_CARDS, EDITABLE, CARD_CHIP_W, CARD_CHIP_LONG_W, TRI_W, TIMELINE_BIG_H, EDITOR_GAP, STAFF_BAR_H,
   PAUSE_W, PAUSE_ICON_W, RESTART_W, LOG_HEADER, LOG_PAD, LOG_MSGS,
   LOG_MIN_MSGS, CANVAS_MIN_W, FRAME, LEFT_W, canvasIn, framedRoom, NEED_LABELS,
@@ -6341,6 +6404,7 @@ BUILD['feed'] = node => buildChart(node, false);
 // own decision: the solver shows a reserved region does not fit at either phone size. The eight needs
 // are the required part; personality and affinity are the blocks that give way, and the engine names
 // which one it dropped.
+const LEADER_LAB = { stress: 'Stress', conflict: 'Conflict', friendly: 'Friendly', hiding: 'Hiding' };   // the goal tickets' own words
 function buildReadout(node) {
   const box = el('div', 'readout'); node.appendChild(box);
   const ident = el('div', 'ident'), nm = el('span', 'nm'), meta = el('span', 'meta');
@@ -6352,14 +6416,51 @@ function buildReadout(node) {
   doing.style.height = LAY.LINE + 'px';
   doing.append(dot, act);
   const blocks = el('div', 'blocks');
-  box.append(ident, doing, blocks);
+  // The leaders: the top three cats on each of the four goals over the chart's span (topCats, the same
+  // ranking the enlarged chart and the goal tooltips show), with each cat's face, name and value. It sits at
+  // the foot of the panel in the space the readout leaves, so it is on screen whether or not a cat is picked
+  // and the panel keeps its size; clicking an entry picks that cat.
+  const leaders = el('div', 'leaders'), lrows = {};
+  
+  for (const G of GOALS) { const r = el('div', 'lrow'); r.appendChild(el('span', 'lab', LEADER_LAB[G.id])); leaders.appendChild(r); lrows[G.id] = r; }
+  box.append(ident, doing, blocks, leaders);
+  const fillLeaders = () => {
+    const top = topCats(UI.chart.span);
+    leaders.title = 'The top three cats on each goal, ' + (SPANS.find(x => x[0] === UI.chart.span) || [0, UI.chart.span])[1].toLowerCase() + ' (the span the chart shows). Click a cat to pick it.';
+    // No heading row: with one, the block is 105px and the readout leaves 92px (330px used of 444, 12px padding).
+    for (const G of GOALS) {
+      const row = lrows[G.id], L = top[G.id], sig = JSON.stringify(L.map(x => [x.id, x.text]));
+      if (row.dataset.sig === sig) continue; row.dataset.sig = sig;
+      while (row.children.length > 1) row.lastChild.remove();
+      if (!L.length) { row.appendChild(el('span', 'none', 'none yet')); continue; }
+      for (const x of L) {
+        const cat = sim.cats.find(c => c.id === x.id);
+        // A 21px row, not a 44px button: four goals of three cats fit the 114px the readout leaves only at one
+        // text line each. It is keyboard reachable (role button, Enter or Space) and the cat is also picked in the room.
+        const b = el('span', 'leader'); b.setAttribute('role', 'button'); b.tabIndex = 0;
+        b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.onclick(); } };
+        b.title = `${x.name}: ${G.name} ${x.text}. Click to pick ${x.name}.`; b.dataset.cat = x.id;
+        // FACE: ASSUMPTION, 18 px so the face sits inside the 21 px text line (LAY.LINE) with room for the ears; radius 0.36 x FACE.
+        const cv = document.createElement('canvas'), dpr = window.devicePixelRatio || 1, FACE = 18;
+        cv.width = cv.height = Math.round(FACE * dpr); cv.style.width = cv.style.height = FACE + 'px'; cv.className = 'face';
+        if (cat) { const g = cv.getContext('2d'); g.scale(dpr, dpr); drawCatFace(g, cat, FACE / 2, FACE / 2 + 1, FACE * 0.36); }
+        b.append(cv, el('span', 'nm', x.name), el('span', 'num', x.text));
+        b.onclick = () => { const c = sim.cats.find(o => o.id === x.id); if (c) selectCat(c); };
+        row.appendChild(b);
+      }
+    }
+  };
   let width = 402;
   const render = () => {
     const c = UI.selected;
     if (c && !sim.cats.includes(c)) { selectCat(null); return; }
     // The panel keeps its size with no cat picked: it says how to pick one.
     box.classList.toggle('empty', !c);
-    if (!c) { nm.textContent = 'No cat picked'; meta.textContent = 'Click a cat in the room to see its needs, personality and friendships here.'; return; }
+    fillLeaders();
+    // The engine reserves the top cats their own slot at the foot of the panel (sol.leaders: 'rows' or 'grid', and its
+    // height); the readout above it gives up blocks to keep it. Where the engine reserves none (phones), it is not drawn.
+    const fitLeaders = () => { const L = SOL && SOL.leaders; leaders.style.display = L ? '' : 'none'; if (L) { leaders.className = 'leaders ' + L.mode; leaders.style.height = L.h + 'px'; } };
+    if (!c) { nm.textContent = 'No cat picked'; meta.textContent = 'Click a cat in the room to see its needs, personality and friendships here.'; fitLeaders(); return; }
     nm.textContent = c.name;
     meta.textContent = (c.arrivedT !== undefined ? 'Newcomer, ' : '') +
       `${c.sex === 'M' ? 'male' : 'female'}, ${c.age} y, ${c.coat.replace(/-/g, ' ')}, ${c.origin}`;
@@ -6400,6 +6501,7 @@ function buildReadout(node) {
       fillRows(blocks.blocks.affinity, os.map(({ o, m }) => ({ lab: o.name, frac: (m.aff + 1) / 2, num: (m.aff >= 0 ? '+' : '−') + Math.abs(m.aff).toFixed(2),
         col: m.aff > 0.15 ? TK.color.good : m.aff < -0.15 ? TK.color.alert : TK.color.lineStrong })));
     }
+    fitLeaders();
   };
   // The name and its wrapped description take exactly the height the engine reserved for them.
   return { place: r => { width = r.w; ident.style.height = LAY.CONTENT.readoutIdentH(width) + 'px'; }, tick: render };
@@ -6952,6 +7054,21 @@ function drawCat(g, c, x, y, now, info) {
   const dark = TK.contrast(head, CI.lid) < 3;               // a closed eye drawn dark would vanish
   if (asleep) { g.strokeStyle = dark ? CI.lidOnDark : CI.lid; g.lineWidth = Math.max(1.2, R * 0.08); for (const s of [-1, 1]) { g.beginPath(); g.arc(ex - er * 0.4, s * ey, er, -0.9, 0.9); g.stroke(); } }
   else for (const s of [-1, 1]) { g.fillStyle = c.eyes || CI.eye; g.beginPath(); g.arc(ex, s * ey, er, 0, 7); g.fill(); g.fillStyle = CI.lid; g.beginPath(); g.ellipse(ex + er * 0.2, s * ey, er * 0.35, er * 0.75, 0, 0, 7); g.fill(); }
+  g.restore();
+}
+// A cat's face for the leaders in the side panel: the head drawn in drawCat (same coat tokens, ears, tabby
+// forehead "M" and eye colour), turned to face the viewer, at radius r.
+function drawCatFace(g, c, cx, cy, r) {
+  const K = TK.coat[c.coat] || TK.coat.grey, CI = TK.cat, head = K.pattern === 'point' ? K.mark : K.base;
+  g.save(); g.translate(cx, cy); g.lineWidth = 1; g.strokeStyle = CI.edge; g.fillStyle = head;
+  for (const s of [-1, 1]) { g.beginPath(); g.moveTo(s * r * 0.25, -r * 0.8); g.lineTo(s * r * 0.95, -r * 1.35); g.lineTo(s * r * 0.9, -r * 0.35); g.closePath(); g.fill(); g.stroke(); }
+  g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill(); g.stroke();
+  if (K.pattern === 'tabby') { g.strokeStyle = K.mark; g.lineWidth = Math.max(1, r * 0.12); g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(-r * 0.36, -r * 0.1); g.lineTo(-r * 0.2, -r * 0.55); g.lineTo(0, -r * 0.3); g.lineTo(r * 0.2, -r * 0.55); g.lineTo(r * 0.36, -r * 0.1); g.stroke(); }
+  else if (K.pattern === 'patches' || K.pattern === 'bib') { g.save(); g.beginPath(); g.arc(0, 0, r, 0, 7); g.clip(); g.fillStyle = K.pattern === 'bib' ? K.mark : K.mark;
+    if (K.pattern === 'patches') { g.beginPath(); g.ellipse(-r * 0.55, -r * 0.45, r * 0.55, r * 0.45, 0.4, 0, 7); g.fill(); } else { g.beginPath(); g.ellipse(0, r * 0.95, r * 0.45, r * 0.4, 0, 0, 7); g.fill(); } g.restore(); }
+  const er = Math.max(1.2, r * 0.2);
+  for (const s of [-1, 1]) { g.fillStyle = c.eyes || CI.eye; g.beginPath(); g.arc(s * r * 0.38, r * 0.12, er, 0, 7); g.fill(); g.fillStyle = CI.lid; g.beginPath(); g.ellipse(s * r * 0.38, r * 0.12, er * 0.35, er * 0.75, 0, 0, 7); g.fill(); }
   g.restore();
 }
 // A person seen from above, as the cats are: shoulders broad across the line of travel, head on top.
