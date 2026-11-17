@@ -234,6 +234,12 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
    short name over its value; switched off, it is struck through and dimmed. */
 .goals{display:flex;gap:var(--sp-sm);width:100%;height:100%;min-height:0;align-items:stretch}
 .goals.m-stacked{flex-direction:column}
+/* Desktop band (layout chartLayout 'band'): legend, selects and the Enlarge "+" in one header row, the plot the full width under it. */
+.goals.m-band{display:grid;grid-template-columns:auto auto 1fr auto;grid-template-rows:var(--sz-target) minmax(0,1fr);gap:var(--sp-sm)}
+.goals.m-band .legend{grid-area:1 / 1}
+.goals.m-band .ctl{grid-area:1 / 2}
+.goals.m-band .grow{grid-area:1 / 4;align-self:start}
+.goals.m-band .plot{grid-area:2 / 1 / 3 / 5}
 /* A short phone's feed (layout: chart mode 'tickets'): the four goal tickets only; the chart and its controls live in the statistics view. */
 .goals.m-tickets{flex-direction:column;justify-content:center}
 .goals.m-tickets .ctl,.goals.m-tickets .plot,.goals.m-tickets .grow{display:none}
@@ -312,20 +318,46 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .readout .doing{display:flex;align-items:center;gap:var(--sp-sm);flex:none;font-weight:var(--fw-bold);
  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .readout .doing .dot{flex:none;width:10px;height:10px;border-radius:var(--r-pill)}
-.leaders{flex:none;margin-top:auto;display:flex;flex-direction:column}
-.leaders h3{margin:0;font-size:var(--fs-ui);line-height:var(--lh-ui);font-weight:var(--fw-bold);color:var(--muted)}
-.lrow{display:grid;grid-template-columns:64px repeat(3,minmax(0,1fr)); /* 64px label column, 3px face gap: ASSUMPTION, fitted by eye to "Friendly" at 14px; not in layout-metrics */align-items:center;gap:var(--sp-xs);height:var(--lh-ui);white-space:nowrap}
-.lrow .lab{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
-.lrow .none{grid-column:2 / span 3;color:var(--muted)}
-/* Narrow left column (layout leadersLayout 'grid'): a 2 x 2 grid of goal blocks, a heading over three entry lines. */
-.leaders.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,auto);gap:var(--sp-sm)}
-.leaders.grid .lrow{grid-template-columns:minmax(0,1fr);grid-auto-rows:var(--lh-ui);row-gap:0;height:auto}
-.leaders.grid .lrow .none{grid-column:auto}
-.leader{display:flex;align-items:center;gap:3px;min-width:0;height:var(--lh-ui);padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer;text-align:left}
-.leader:hover .nm{text-decoration:underline}
+/* The top cats (layout leadersLayout): a panel of its own, set off by a GAP margin, its own border and background.
+   'column' (desktop) and 'open' (phone, expanded): the title row, then per goal a label line over a 44px entry, the
+   face beside the name over the value. 'band' (phone): per goal a label line over the face and value, the "+" at the
+   right edge. Nothing is cut: no ellipsis, the band leaves the names to the expanded panel. */
+.leaders{position:absolute;inset:var(--sp-sm);box-sizing:border-box;padding:var(--sp-md);display:flex;flex-direction:column;
+ background:var(--surface);border:1px solid var(--lineStrong);border-radius:var(--r-md);box-shadow:var(--el-raised, none)}
+.leaders .lhead{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-sm);height:var(--sz-target);flex:none}
+.leaders .ttl{display:flex;flex-direction:column;min-width:0}
+.leaders h3{margin:0;font-size:var(--fs-lead);line-height:var(--lh-ui);font-weight:var(--fw-bold);white-space:nowrap}
+.leaders .grow{flex:none;width:var(--sz-target);height:var(--sz-target);font-size:var(--fs-lead);font-weight:var(--fw-bold);
+ color:var(--accent);background:var(--surface);border:0;border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--lineStrong);cursor:pointer;padding:0}
+.leaders .grow:hover{box-shadow:inset 0 0 0 2px var(--accent)}
+.leaders .lgoals{display:flex;flex-direction:column;min-height:0}
+.leaders.two .lgoals,.leaders.open .lgoals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:min-content;column-gap:var(--sp-sm);align-content:start}
+.lrow{display:flex;flex-direction:column;min-width:0;flex:none}
+.lrow .lab{color:var(--muted);line-height:var(--lh-ui);white-space:nowrap}
+.leader{display:flex;align-items:center;gap:6px;min-width:0;height:var(--sz-target);flex:none;padding:0 4px;border:0;border-radius:var(--r-sm);background:none;font:inherit;color:inherit;cursor:pointer;text-align:left}
+.leader:hover:not(:disabled){box-shadow:inset 0 0 0 1px var(--lineStrong)}
+.leader:hover:not(:disabled) .nm{text-decoration:underline}
+.leader:disabled{cursor:default}
 .leader .face{flex:none}
-.leader .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
-.leader .num{flex:none;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums}
+.leader .txt{display:flex;flex-direction:column;min-width:0;line-height:var(--lh-ui)}
+.leader .nm{white-space:nowrap}
+.leader .num{font-weight:var(--fw-bold);font-variant-numeric:tabular-nums;white-space:nowrap}
+.leader .none{color:var(--muted);white-space:nowrap}
+.leaders.band{flex-direction:row;align-items:stretch;padding:0 0 0 var(--sp-sm);gap:var(--sp-xs)}
+.leaders.band .lhead{order:9;height:auto;margin-left:auto}
+.leaders.band .ttl{display:none}
+.leaders.band .lgoals{flex:1 1 0;flex-direction:row;gap:var(--sp-xs);min-width:0}
+.leaders.band .grow{height:100%;box-shadow:none;border-left:1px solid var(--line);border-radius:0 var(--r-md) var(--r-md) 0}
+.leaders.band .lrow{flex:1 1 0;position:relative}
+.leaders.band .lrow .lab{position:absolute;left:4px;top:0;pointer-events:none}
+.leaders.band .leader{height:100%;align-items:flex-end;padding:0 4px 1px;gap:4px;width:100%}
+.leaders.band .leader .face{width:18px!important;height:18px!important}
+.leaders.band .leader .nm{display:none}
+.leaders.band .leader .txt{flex-direction:row}
+.leaders.band.tight{inset:0}
+.leader .num.short{display:none}
+.leaders.band .leader .num{display:none}
+.leaders.band .leader .num.short{display:inline}
 .readout .blocks{flex:none}
 .blocks{display:flex;flex-wrap:wrap;gap:var(--sp-sm);align-content:flex-start;min-height:0}
 .block{min-width:0;overflow:hidden}
@@ -347,12 +379,12 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
  border-bottom:1px solid var(--line)}
 /* The list's height is set to the whole rows that fit (play.js); scrolling snaps a row to its top.
    The scrollbar is thin and low-contrast: the line token on the card. */
-.log ol{position:relative;flex:none;min-height:0;margin:0;padding:var(--sp-logPad) 0;list-style:none;
+.log ol{position:relative;flex:none;min-height:0;margin:0;padding:0; /* no vertical padding: a padded foot would show part of the next row */list-style:none;
  overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--line) transparent;scroll-snap-type:y mandatory}
 .log li{scroll-snap-align:start}
 .log li.none{display:block;color:var(--muted)}
 .log li{display:grid;grid-template-columns:auto auto 1fr;gap:var(--sp-sm);align-items:baseline;
- padding:0 var(--sp-logPad);line-height:var(--lh-ui)}
+ padding:0 var(--sz-logPad);line-height:var(--lh-ui)}
 .log li .ix{font-weight:var(--fw-bold);font-variant-numeric:tabular-nums;color:var(--muted)}
 .log li .at{color:var(--muted);font-variant-numeric:tabular-nums}
 .log li.marked .ix{color:var(--accentInk);background:var(--accent);border-radius:var(--r-sm);padding:0 4px}
@@ -3425,6 +3457,13 @@ const TICK_H = 17;
 // The strip ends in an Enlarge button (a 44px target) at its right.
 function chartLayout(w, h) {
   const rowW = 4 * CHART_LEG_W + 2 * CHART_SEL_W + TARGET + 4 * GAP;
+  // Band (desktop, Nov 17 round 3): where the strip is taller than one row and wide enough for the legend, the
+  // selects and the Enlarge "+" abreast, they share one 44px header row and the plot runs the strip's full width
+  // under it: a long, low chart instead of a tall, narrow one, in the same strip height (the room does not move).
+  if (w >= rowW && h >= TARGET + GAP + CHART_PLOT_MIN.h + TICK_H) {
+    const plot = { w, h: h - TARGET - GAP };
+    return { mode: 'band', legendCols: 4, legendRows: 1, plot, fits: true };
+  }
   if (h < 2 * TARGET + CHART_PLOT_MIN.h) {
     const plot = { w: w - rowW, h };
     return { mode: 'row', legendCols: 4, legendRows: 1, plot, fits: plot.w >= CHART_PLOT_MIN.w && plot.h >= CHART_PLOT_MIN.h };
@@ -3446,13 +3485,32 @@ const CHART_TOP_BLOCK_H = LINE + TARGET;   // a heading, and one row of three ca
 const CHART_BIG_H = TARGET + GAP + CHART_BIG_PLOT_H + TICK_H + 2 * PAD;
 function chartBigIn(view, frame) { const h = CHART_BIG_H; return { x: view.x + frame, y: view.y + view.h - frame - h, w: view.w - 2 * frame, h }; }
 
-// The top-cats slot: four goals, three cats each, a face, the name and the value per cat, in 21px text lines (LINE).
-// Wide (a 64px label column and three entries of 96px in a row): one line per goal. Narrow: a 2 x 2 grid of goal
-// blocks, each a heading line over three entry lines. LEADERS_LABEL_W and LEADERS_ENTRY_W: ASSUMPTION, fitted by eye to
-// "Friendly" and to a face, a seven-letter name and a value at 14px; not measured by layout-metrics.js.
-const LEADERS_LABEL_W = 64, LEADERS_ENTRY_W = 96;
-function leadersLayout(w) {
-  return w >= LEADERS_LABEL_W + 3 * LEADERS_ENTRY_W ? { mode: 'rows', h: 4 * LINE } : { mode: 'grid', h: 2 * 4 * LINE + GAP };
+// The top cats (Nov 17 request: "the top performer cats on the side"): each goal's top cat over the chart's span,
+// with its face, name and value, every entry a 44px target (WCAG 2.1 SC 2.5.5). A panel of its own, set off from the
+// goals board by a GAP margin, its own border and background, titled "Top cats". Nothing in it is ever cut.
+//  'column' (desktop): a column at the right of the room band, the full body height, always on screen, an open
+//    editor included. The title row, then per goal a label line over one 44px entry (face; name over value).
+//  'band' (phone portrait): one 44px row under the goals band: per goal a label line over its face and value, and
+//    at the right edge a plain "+" (44px) that expands it. The names do not fit abreast at 375px, so the collapsed
+//    band leaves them out rather than cutting them.
+//  'open' (phone portrait, expanded): the title row and the four goals in two rows of two, with their names, taking the goals band, the band and the plan chips'
+//    band, as a picked cat's readout does; the "+" (now "-") collapses it.
+// LEADERS_COL_W: ASSUMPTION, fitted by eye to a 22px face, a nine-letter name at 14px and the panel's padding;
+// not measured by layout-metrics.js.
+const LEADERS_COL_W = 176;
+// Margin, a 1px border each side and padding, the title row, then the goals, each a
+// label line over its ranked entries (44px each). Column (desktop): as many ranked cats per goal as the body height
+// holds, up to LEADERS_MAX. Three a goal need a 754px window; a shorter one (1333x657) shows two. A two-column panel
+// was tried for it and rejected: it left the room 613px wide, too narrow for the enlarged chart (716px), and cut the
+// canvas by a quarter. Open (phone): two columns of two goals, as many each as fit under the room. Band (phone,
+// collapsed): the top cat only.
+const LEADERS_FRAME = 2 * GAP + 2, LEADERS_MIN = 2, LEADERS_MAX = 5;
+const leadersHead = () => LEADERS_FRAME + 2 * PAD + TARGET;
+const leadersH = (cols, k) => leadersHead() + (4 / cols) * (LINE + k * TARGET);
+function leadersLayout(mode, bodyH) {
+  if (mode === 'band') return { mode, k: 1, h: LEADERS_FRAME + TARGET };
+  const k = Math.min(LEADERS_MAX, Math.floor((bodyH - leadersHead() - 4 * LINE) / (4 * TARGET)));
+  return { mode, cols: 1, k, w: LEADERS_COL_W, h: leadersH(1, k) };
 }
 // ---------------------------------------------------------------- content model
 const textRows = (textW, innerW) => Math.max(1, Math.ceil(textW / Math.max(1, innerW)));
@@ -3536,7 +3594,8 @@ const CONTENT = {
   // The row pitch of each detail block, declared once for the solver and the drawn readout. A needs
   // row is a line plus 1 px so its bar clears the next label; the other two blocks are tighter lists.
   readoutRowH: { needs: LINE + 1, personality: LINE - 1, affinity: LINE },
-  readoutIdentH: (w) => FS.lead + 6 + textRows(TX('catMeta'), w - 2 * READOUT_PAD_X) * LINE,
+  // The name line is --lh-lead (FS.lead x 1.5 = 24px); FS.lead + 6 left the meta line 2px short (cut-off check, Nov 17).
+  readoutIdentH: (w) => px(FS.lead * 1.5) + textRows(TX('catMeta'), w - 2 * READOUT_PAD_X) * LINE,
   readoutBlocks: (w) => {
     const inner = w - 2 * READOUT_PAD_X;
     // A detail row is its label, a bar at one pixel per percent, and the value printed after the bar.
@@ -3688,16 +3747,27 @@ function desktop(W, H, st) {
     ['clock', 'pause', 'speed', ...PLAN_CARDS, 'restart', 'toggle-view', 'btn-guide'].map(id => ({ id, w: widths[id] })));
 
   // ---- the room band: the framed room over the goals strip.
-  const bodyH = H - BAR_H, band0 = W - LEFT_W;
+  // The top cats take a fixed column at the right; the room band shifts left of it.
+  const lead = leadersLayout('column', H - BAR_H), LW = lead.w;   // its h is the panel with its margin
+  // The left column's floor is the narrowest width at which the tallest editor still fits over the log's floor:
+  // with the top cats' column taken, the room may not squeeze it narrower than that.
+  const bodyH = H - BAR_H;
+  const edAt = w => Math.max(...Object.values(EDITABLE).map(ed => px(CONTENT.editor(w, ed))));
+  const capAt = w => H - BAR_H - CONTENT.logHeightFor(w, st, LOG_MIN_MSGS.desktop);
+  let leftMin = LEFT_W;
+  while (leftMin < LEFT_MAX_W && edAt(leftMin) > capAt(leftMin)) leftMin++;
+  const band0 = W - leftMin - LW;
   const strip = bw => feedHeight(bw - 2 * F) + F;
   const room = framedRoom(band0, bodyH - strip(band0), F);
   if (room.w < CANVAS_MIN_W.desktop) throw new Shortfall('room canvas width', CANVAS_MIN_W.desktop, room.w);
   // The room is now fixed. Width it cannot use goes to the left column, as long as the strip under
   // the room still fits its height at the narrower band.
-  let leftW = Math.min(LEFT_MAX_W, W - room.w - 2 * F);
-  while (leftW > LEFT_W && strip(W - leftW) > bodyH - room.outerH) leftW--;
-  const bandW = W - leftW;
+  let leftW = Math.min(LEFT_MAX_W, W - LW - room.w - 2 * F);
+  while (leftW > leftMin && strip(W - LW - leftW) > bodyH - room.outerH) leftW--;
+  const bandW = W - LW - leftW;
   out.push(R('view', leftW, BAR_H, bandW, room.outerH), R('feed', leftW, BAR_H + room.outerH, bandW, bodyH - room.outerH));
+  if (lead.k < LEADERS_MIN) throw new Shortfall('top cats column, ' + LEADERS_MIN + ' cats a goal', leadersH(1, LEADERS_MIN), bodyH);
+  out.push(R('leaders', leftW + bandW, BAR_H, LW, bodyH));
 
   // ---- the left column: one panel of one constant height over the event log, whatever it shows. The
   // panel holds the cat readout (a hint until a cat is picked) or the open editor in the same rectangle,
@@ -3708,18 +3778,14 @@ function desktop(W, H, st) {
   const cap = H - BAR_H - logMin;
   if (edMax > cap) throw new Shortfall('left panel holding the tallest editor', edMax, cap);
   const panelH = Math.min(cap, Math.max(edMax, CONTENT.readoutFit(leftW, 1e6).used));
-  // The top cats (Nov 16 request, Erwin Reviews 15-16): a slot of their own at the foot of the readout panel, there
-  // whether or not a cat is picked. The readout gives up its optional blocks (personality, feelings) to keep it; an
-  // open editor takes the whole panel as before, so the panel and the log keep one size.
-  const lead = leadersLayout(leftW), readH = panelH - lead.h - GAP;
-  const fit = CONTENT.readoutFit(leftW, readH);
-  if (!fit.fits) throw new Shortfall('cat readout above the top cats in the left panel', fit.required, readH);
+  const fit = CONTENT.readoutFit(leftW, panelH);
+  if (!fit.fits) throw new Shortfall('cat readout in the left panel', fit.required, panelH);
   out.push(R(st.editor.length ? 'editor-' + st.editor[0] : 'readout', 0, BAR_H, leftW, panelH));
   out.push(R('log', 0, BAR_H + panelH, leftW, H - BAR_H - panelH));
-  return { rects: out, form: 'desktop', feedMode: 'values', chart: chartLayout(bandW - 2 * F, feedHeight(bandW - 2 * F)),
+  return { rects: out, form: 'desktop', feedMode: 'values', chart: (b => b.mode === 'band' ? b : chartLayout(bandW - 2 * F, feedHeight(bandW - 2 * F)))(chartLayout(bandW - 2 * F, bodyH - room.outerH - F)),
     chartBig: chartBigIn(out.find(r => r.id === 'view'), F), chartTops: true, frame: F, feedPad: F, cardChips: true,
     chipLong, pauseLabel, restartLabel: restartWord, toggleLong,
-    readoutShows: st.selected && !st.editor.length ? fit.shown : null, leaders: st.editor.length ? null : lead,
+    readoutShows: st.selected && !st.editor.length ? fit.shown : null, leaders: lead,
     readoutPlacement: st.selected && st.editor.length ? 'displaced by the open editor, which takes the same panel'
       : 'the constant panel in the left column, over the event log' };
 }
@@ -3738,20 +3804,35 @@ function phonePortrait(W, H, st) {
   //  2. only if that is still short, the log floor goes from three whole messages to two. LOG_MIN_MSGS is our own
   //     judgement, not a published minimum (see its comment), and the log pins to the newest line.
   // No cited minimum (44px targets, 14px text, the canvas aspect) is touched.
+  // The top cats' band (leadersLayout 'band') sits under the goals band and is counted with it in every step.
+  //  3. only if that is still short (375x667), the top cats' band drops its GAP margin (its border and 44px entries stay);
+  //  4. and then the log floor goes to one whole message.
+  const leadFull = leadersLayout('band');
   const msgs0 = LOG_MIN_MSGS['phone-portrait'], fullFeed = feedHeight(W);
-  const shortBy = (fh, m) => roomNeed - (H - 2 * BAR_H - fh - cardsH - CONTENT.logHeightFor(W, st, m));
-  const tickets = shortBy(fullFeed, msgs0) > 0, logMsgs = tickets && shortBy(FEED_VALUES_H, msgs0) > 0 ? msgs0 - 1 : msgs0;
+  const shortBy = (fh, m, lb) => roomNeed - (H - 2 * BAR_H - fh - lb - cardsH - CONTENT.logHeightFor(W, st, m));
+  const tickets = shortBy(fullFeed, msgs0, leadFull.h) > 0;
+  let logMsgs = tickets && shortBy(FEED_VALUES_H, msgs0, leadFull.h) > 0 ? msgs0 - 1 : msgs0;
+  const tight = tickets && shortBy(FEED_VALUES_H, logMsgs, leadFull.h) > 0;
+  const leadP = tight ? { mode: 'band', tight: true, k: 1, h: leadFull.h - 2 * GAP } : leadFull, lbH = leadP.h;
+  if (tight && shortBy(FEED_VALUES_H, logMsgs, lbH) > 0) logMsgs = Math.max(1, logMsgs - 1);
   const logMin = CONTENT.logHeightFor(W, st, logMsgs);
   const feedMode = 'values', feedH = tickets ? FEED_VALUES_H : fullFeed;
-  const body = H - 2 * BAR_H - feedH - cardsH;
+  const body = H - 2 * BAR_H - feedH - lbH - cardsH;
   const viewMax = body - logMin;
   const viewH = Math.min(viewMax, CONTENT.viewNeed(W, viewMax, st.view, st));
   if (viewH < roomNeed && st.view === 'room') throw new Shortfall('phone canvas height', roomNeed, viewH);
   // A picked cat's readout takes the goals and chip bands, and from the log what its core still needs
   // as long as the log keeps its floor.
   const catPanel = st.selected && st.view === 'room';
-  const catH = catPanel ? Math.max(feedH + cardsH, Math.min(CONTENT.readoutFit(W, 1e6).required, feedH + cardsH + body - viewH - logMin)) : 0;
-  const logH = body - viewH - (catPanel ? catH - feedH - cardsH : 0);
+  // The expanded top cats take the goals, top-cats and chip bands (and from the log what they still need), as the readout does.
+  const leadOpen = !catPanel && st.view === 'room' && st.leadersOpen;
+  // Expanded, as many ranked cats per goal as the space under the room holds (two columns of two goals), at least one.
+  const openAvail = feedH + lbH + cardsH + body - viewH - logMin;
+  const openK = Math.min(LEADERS_MAX, Math.floor((openAvail - leadersHead() - 2 * LINE) / (2 * TARGET)));
+  if (leadOpen && openK < 1) throw new Shortfall('expanded top cats under the phone room', leadersH(2, 1), openAvail);
+  const openH = leadOpen ? Math.max(feedH + lbH + cardsH, leadersH(2, openK)) : 0;
+  const catH = catPanel ? Math.max(feedH + lbH + cardsH, Math.min(CONTENT.readoutFit(W, 1e6).required, feedH + lbH + cardsH + body - viewH - logMin)) : 0;
+  const logH = body - viewH - (catPanel ? catH - feedH - lbH - cardsH : leadOpen ? openH - feedH - lbH - cardsH : 0);
   // The statistics reallocation, which lives here rather than in the sub-solver so that the parent
   // layout is the one source of truth for every rectangle. In the statistics state only, the view takes
   // the live-feed band as well: the view alone is too short to carry the three control rows and a chart
@@ -3767,16 +3848,19 @@ function phonePortrait(W, H, st) {
   // needs it, and while editing, the chip that opened it is closed by the editor's own ✕ or Escape.
   const takesCards = !!EDITABLE['card-' + st.view];
   const band = rows({ x: 0, y: 0, w: W, h: H }, statsTakesFeed
-    ? [{ id: 'bar-top', h: BAR_H }, { id: 'view', h: viewH + feedH + (takesCards ? cardsH : 0) },
+    ? [{ id: 'bar-top', h: BAR_H }, { id: 'view', h: viewH + feedH + lbH + (takesCards ? cardsH : 0) },
       ...(takesCards ? [] : [{ id: 'cards', h: cardsH }]), { id: 'log', h: logH }, { id: 'bar-bottom', h: BAR_H }]
+    : leadOpen ? [{ id: 'bar-top', h: BAR_H }, { id: 'view', h: viewH }, { id: 'leaders', h: openH },
+      { id: 'log', h: logH }, { id: 'bar-bottom', h: BAR_H }]
     : catPanel ? [{ id: 'bar-top', h: BAR_H }, { id: 'view', h: viewH }, { id: 'readout', h: catH },
       { id: 'log', h: logH }, { id: 'bar-bottom', h: BAR_H }]
-    : [{ id: 'bar-top', h: BAR_H }, { id: 'view', h: viewH }, { id: 'feed', h: feedH },
+    : [{ id: 'bar-top', h: BAR_H }, { id: 'view', h: viewH }, { id: 'feed', h: feedH }, { id: 'leaders', h: lbH },
       { id: 'cards', h: cardsH }, { id: 'log', h: logH }, { id: 'bar-bottom', h: BAR_H }]);
   const by = Object.fromEntries(band.map(r => [r.id, r]));
   out.push(...cols(by['bar-top'], [{ id: 'clock', w: CLOCK_W }, { id: 'pause', w: PAUSE_ICON_W }, { id: 'speed', w: null }]));
   out.push(by.view, by.log);
   if (by.feed) out.push(by.feed);
+  if (by.leaders) out.push(by.leaders);
   const fitP = by.readout ? CONTENT.readoutFit(W, by.readout.h) : null;
   if (fitP && !fitP.fits) throw new Shortfall('cat readout under the phone room', fitP.required, by.readout.h);
   if (by.readout) out.push(by.readout);
@@ -3787,9 +3871,9 @@ function phonePortrait(W, H, st) {
     { id: 'btn-guide', w: GUIDE_W }]));
   return { rects: out, form: 'phone-portrait', feedMode, chart: tickets ? { mode: 'tickets', legendCols: 4, legendRows: 1, plot: { w: 0, h: 0 }, fits: true } : chartLayout(W, feedHeight(W)), frame: FRAME.phone, logFloor: logMsgs, feedPad: 0, cardChips: true,
     chipLong: Math.floor(W / cardCols) >= CARD_CHIP_LONG_W, pauseLabel: false, restartLabel: wordsFit,
-    readoutShows: fitP ? fitP.shown : null,
+    readoutShows: fitP ? fitP.shown : null, leaders: by.leaders ? (leadOpen ? { mode: 'open', cols: 2, k: openK, h: openH } : leadP) : null,
     readoutPlacement: 'the goals and plan-chip bands under the room, while a cat is picked',
-    reallocated: statsTakesFeed ? { what: takesCards ? 'the goals band and the plan chips' : 'the goals band', to: 'view', px: feedH + (takesCards ? cardsH : 0), inState: st.view,
+    reallocated: statsTakesFeed ? { what: takesCards ? 'the goals band and the plan chips' : 'the goals band', to: 'view', px: feedH + lbH + (takesCards ? cardsH : 0), inState: st.view,
       why: st.view === 'stats'
         ? 'three control rows plus a chart need ' + (3 * BAR_H + CHART_MIN_H + 2 * PAD) + 'px and the view band alone is ' + viewMax + 'px'
         : st.view === 'chart' ? 'the enlarged goals chart takes the view and the band it enlarges'
@@ -3893,8 +3977,9 @@ const VIEWPORTS = [
 // into the form whose rules it meets, so the layout degrades along the same three engines rather than
 // into a fourth unsolved one. The desktop engine needs room for its left column and a framed 420px canvas.
 const DESKTOP_MIN_H = 600;   // below 1333 x 657, the smallest supported laptop window, by a margin
-const DESKTOP_MIN_W = LEFT_W + CANVAS_MIN_W.desktop + 2 * FRAME.desktop;
+const DESKTOP_MIN_W = LEFT_W + LEADERS_COL_W + CANVAS_MIN_W.desktop + 2 * FRAME.desktop;
 function formFor(W, H) {
+  // The top cats' column doubles on a short window (leadersLayout), so the width floor follows the height.
   if (W >= DESKTOP_MIN_W && H >= DESKTOP_MIN_H) return 'desktop';
   return W >= H ? 'phone-landscape' : 'phone-portrait';
 }
@@ -3910,7 +3995,7 @@ function solve(W, H, state) {
 }
 
 return { TX, px, FS, LINE, TARGET, GAP, PAD, BAR_H, CARD_H, ASPECT, FILL_MIN, BAR_MIN, BAR_VALUED_MIN,
-  CHART_MIN_H, leadersLayout, READOUT_COL_W, EDITOR_FIELD_PAD, TIME_FIELD_W, LEFT_MAX_W, SPEED_TRACK, SPEED_W, SPEED_MAX_W, TOGGLE_W, TOGGLE_MIN_W, TOGGLE_SHORT_W,
+  CHART_MIN_H, leadersLayout, LEADERS_COL_W, READOUT_COL_W, EDITOR_FIELD_PAD, TIME_FIELD_W, LEFT_MAX_W, SPEED_TRACK, SPEED_W, SPEED_MAX_W, TOGGLE_W, TOGGLE_MIN_W, TOGGLE_SHORT_W,
   GUIDE_W, MARKER_W, MARKERS, CARDS, PLAN_CARDS, CONTROL_CARDS, EDITABLE, CARD_CHIP_W, CARD_CHIP_LONG_W, TRI_W, TIMELINE_BIG_H, EDITOR_GAP, STAFF_BAR_H,
   PAUSE_W, PAUSE_ICON_W, RESTART_W, LOG_HEADER, LOG_PAD, LOG_MSGS,
   LOG_MIN_MSGS, CANVAS_MIN_W, FRAME, LEFT_W, canvasIn, framedRoom, NEED_LABELS,
@@ -4739,7 +4824,8 @@ function layPage(page, body, nCats, nMetrics, rects, fails, notes, pager) {
     // and the selected cats), and naming them once is the entire economy of a small-multiple display.
     const nKey = 1 + nCats;
     const keyCellW = Math.max(TX('optCat'), TX('keyAggregate')) + SWATCH;
-    const keyCols = Math.max(1, Math.floor((body.w + GAP) / (keyCellW + GAP)));
+    // The key band pads GAP each side (.keyband padding 0 var(--sp-sm)), so the cells share body.w less 2 x GAP.
+    const keyCols = Math.max(1, Math.floor((body.w - 2 * GAP + GAP) / (keyCellW + GAP)));
     const pagerH = pager.free() ? 0 : BAR_H;
     // The key takes up to three rows, and never a row the panels wanted. A band that costs the page a
     // row of charts, or an extra page of them, has stopped being furniture and started being content;
@@ -5717,7 +5803,7 @@ function regionEl(id) {
 // The layout state the engine is asked to solve. On a phone the readout and the editors are views
 // rather than regions, which is the engine's own rule; this function only reports the state.
 function layoutState() {
-  return { editor: UI.editor.slice(), selected: !!UI.selected && FORM === 'desktop',
+  return { editor: UI.editor.slice(), selected: !!UI.selected && FORM === 'desktop', leadersOpen: !!UI.leadersOpen,
     view: UI.view, pointer: UI.pointer, burst: 1, labels: 'normal',
     marker: UI.marker && UI.view === 'room' && !(FORM === 'phone-landscape' && UI.selected) ? UI.marker.kind : 'none' };
 }
@@ -6227,16 +6313,22 @@ function chartData(spanKey, grainKey) {
 // the share of samples hidden (sample.cats), fights each cat was in on either side (stats.fightLog), and
 // friendly approaches started (the rise of sample.cats[id].fr across the span).
 const TOP_HEAD = { stress: 'Most stressed', conflict: 'Most in fights', friendly: 'Most friendly', hiding: 'Most hidden' };
-function topCats(spanKey) {
+function topCats(spanKey, n = 3) {
   const d = chartData(spanKey, '1h'), xs = sim.samples.filter(s => s.t > d.t0 && s.t <= d.t1), out = {};
   const acc = {}, name = {};
   for (const s of xs) for (const [id, p] of Object.entries(s.cats)) {
     const a = acc[id] || (acc[id] = { st: 0, hid: 0, n: 0, fr0: p.fr, fr1: p.fr }); a.st += p.stress; a.hid += p.hid; a.n++; a.fr1 = p.fr; name[id] = p.name; }
   const fights = {}; for (const f of sim.stats.fightLog) if (f.t > d.t0 && f.t <= d.t1) for (const id of [f.a, f.b]) fights[id] = (fights[id] || 0) + 1;
-  const rank = (val, fmt) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, 3).map(x => ({ ...x, text: fmt(x.v) }));
-  out.stress = rank(id => acc[id].st / acc[id].n, v => U.toCSS(v).toFixed(1));
-  out.conflict = rank(id => fights[id] || 0, v => String(v));
-  out.friendly = rank(id => acc[id].fr1 - acc[id].fr0, v => String(v));
+  const rank = (val, fmt) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, n).map(x => ({ ...x, text: fmt(x.v), full: fmt(x.v, true) }));
+  // full: the value in the stat boxes' own units, over the chart's Show span and at its Per bucket: stress "of 7",
+  // conflict and friendly contact as a rate per bucket ("/hour"), hiding "%". short: the same in the phone band's room.
+  const per = (UI.chart && UI.chart.grain) || '1h', gS = (GRAINS.find(g => g[0] === per) || [0, 0, 3600])[2];
+  const buckets = Math.max(1, (d.t1 - d.t0) / gS), rate = c => c / buckets;
+  const num = v => v >= 10 ? Math.round(v).toString() : (Math.round(v * 10) / 10).toString();
+  const PER_SHORT = { '10m': '/10m', '1h': '/h', '1d': '/d' };
+  out.stress = rank(id => acc[id].st / acc[id].n, (v, u) => U.toCSS(v).toFixed(1) + (u ? ' of 7' : '/7'));
+  out.conflict = rank(id => rate(fights[id] || 0), (v, u) => num(v) + (u ? PER[per] : PER_SHORT[per]));
+  out.friendly = rank(id => rate(acc[id].fr1 - acc[id].fr0), (v, u) => num(v) + (u ? PER[per] : PER_SHORT[per]));
   out.hiding = rank(id => acc[id].hid / acc[id].n, v => Math.round(v * 100) + '%');
   return out;
 }
@@ -6322,7 +6414,8 @@ function buildChart(host, big) {
     const dpr = devicePixelRatio || 1;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-    const C = TK.color, ph = h - LAY.TICK_H - 2, n = data.edges.length, X = i => n < 2 ? w / 2 : (i / (n - 1)) * (w - 6) + 2;
+    const C = TK.color, ph = h - LAY.TICK_H - 2, n = data.edges.length, X = i => n < 2 ? w / 2 : (i / (n - 1)) * (w - 14) + 3;
+    // The data runs from 3px (inside the 1px frame) to w - 11, so the 4px end markers clear the 2px now edge; ticks use the same map.
     g.fillStyle = C.surface; g.fillRect(0, 0, w, ph);
     g.strokeStyle = C.line; g.lineWidth = 1; g.strokeRect(0.5, 0.5, w - 1, ph - 1);
     // Tall enough to read across, the plot gets faint quarter lines.
@@ -6333,7 +6426,8 @@ function buildChart(host, big) {
       if (UI.chart.hidden.has(G.id)) return;
       const vs = data.series[si], max = G.range ? G.range[1] : Math.max(1, ...vs.filter(v => v != null)), min = G.range ? G.range[0] : 0;
       // Inset by the end marker's size, and clipped to the plot, so no line or marker leaves it.
-      const Y = v => ph - 5 - ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * (ph - 10);
+      // 7px: the 4px marker half-height, the 1px frame and 2px clear, so a marker at the top or foot is never cut.
+      const Y = v => ph - 7 - ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * (ph - 14);
       g.save(); g.beginPath(); g.rect(1, 1, w - 2, ph - 2); g.clip();
       g.strokeStyle = G.color; g.lineWidth = 1.5; g.setLineDash(G.dash); g.beginPath();
       let on = false, lx = 0, ly = 0;
@@ -6349,7 +6443,7 @@ function buildChart(host, big) {
     });
     // Time ticks under the plot, on whole hours or days, as many as stand apart; "now" at the right edge.
     g.font = `${TK.font.size.ui}px ${TK.font.stack}`; g.textBaseline = 'top'; g.fillStyle = C.muted;
-    const span = data.t1 - data.t0, TX_ = t => ((t - data.t0) / span) * (w - 6) + 2, lw0 = g.measureText('Mon 23:00').width + 12;
+    const span = data.t1 - data.t0, TX_ = t => ((t - data.t0) / span) * (w - 14) + 3, lw0 = g.measureText('Mon 23:00').width + 12;
     const step = [3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400].find(s => (s / span) * w >= lw0) || 7 * 86400;
     const nowW = g.measureText('now').width;
     g.fillText('now', w - nowW, ph + 2);
@@ -6416,51 +6510,14 @@ function buildReadout(node) {
   doing.style.height = LAY.LINE + 'px';
   doing.append(dot, act);
   const blocks = el('div', 'blocks');
-  // The leaders: the top three cats on each of the four goals over the chart's span (topCats, the same
-  // ranking the enlarged chart and the goal tooltips show), with each cat's face, name and value. It sits at
-  // the foot of the panel in the space the readout leaves, so it is on screen whether or not a cat is picked
-  // and the panel keeps its size; clicking an entry picks that cat.
-  const leaders = el('div', 'leaders'), lrows = {};
-  
-  for (const G of GOALS) { const r = el('div', 'lrow'); r.appendChild(el('span', 'lab', LEADER_LAB[G.id])); leaders.appendChild(r); lrows[G.id] = r; }
-  box.append(ident, doing, blocks, leaders);
-  const fillLeaders = () => {
-    const top = topCats(UI.chart.span);
-    leaders.title = 'The top three cats on each goal, ' + (SPANS.find(x => x[0] === UI.chart.span) || [0, UI.chart.span])[1].toLowerCase() + ' (the span the chart shows). Click a cat to pick it.';
-    // No heading row: with one, the block is 105px and the readout leaves 92px (330px used of 444, 12px padding).
-    for (const G of GOALS) {
-      const row = lrows[G.id], L = top[G.id], sig = JSON.stringify(L.map(x => [x.id, x.text]));
-      if (row.dataset.sig === sig) continue; row.dataset.sig = sig;
-      while (row.children.length > 1) row.lastChild.remove();
-      if (!L.length) { row.appendChild(el('span', 'none', 'none yet')); continue; }
-      for (const x of L) {
-        const cat = sim.cats.find(c => c.id === x.id);
-        // A 21px row, not a 44px button: four goals of three cats fit the 114px the readout leaves only at one
-        // text line each. It is keyboard reachable (role button, Enter or Space) and the cat is also picked in the room.
-        const b = el('span', 'leader'); b.setAttribute('role', 'button'); b.tabIndex = 0;
-        b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.onclick(); } };
-        b.title = `${x.name}: ${G.name} ${x.text}. Click to pick ${x.name}.`; b.dataset.cat = x.id;
-        // FACE: ASSUMPTION, 18 px so the face sits inside the 21 px text line (LAY.LINE) with room for the ears; radius 0.36 x FACE.
-        const cv = document.createElement('canvas'), dpr = window.devicePixelRatio || 1, FACE = 18;
-        cv.width = cv.height = Math.round(FACE * dpr); cv.style.width = cv.style.height = FACE + 'px'; cv.className = 'face';
-        if (cat) { const g = cv.getContext('2d'); g.scale(dpr, dpr); drawCatFace(g, cat, FACE / 2, FACE / 2 + 1, FACE * 0.36); }
-        b.append(cv, el('span', 'nm', x.name), el('span', 'num', x.text));
-        b.onclick = () => { const c = sim.cats.find(o => o.id === x.id); if (c) selectCat(c); };
-        row.appendChild(b);
-      }
-    }
-  };
+  box.append(ident, doing, blocks);
   let width = 402;
   const render = () => {
     const c = UI.selected;
     if (c && !sim.cats.includes(c)) { selectCat(null); return; }
     // The panel keeps its size with no cat picked: it says how to pick one.
     box.classList.toggle('empty', !c);
-    fillLeaders();
-    // The engine reserves the top cats their own slot at the foot of the panel (sol.leaders: 'rows' or 'grid', and its
-    // height); the readout above it gives up blocks to keep it. Where the engine reserves none (phones), it is not drawn.
-    const fitLeaders = () => { const L = SOL && SOL.leaders; leaders.style.display = L ? '' : 'none'; if (L) { leaders.className = 'leaders ' + L.mode; leaders.style.height = L.h + 'px'; } };
-    if (!c) { nm.textContent = 'No cat picked'; meta.textContent = 'Click a cat in the room to see its needs, personality and friendships here.'; fitLeaders(); return; }
+    if (!c) { nm.textContent = 'No cat picked'; meta.textContent = 'Click a cat in the room to see its needs, personality and friendships here.'; return; }
     nm.textContent = c.name;
     meta.textContent = (c.arrivedT !== undefined ? 'Newcomer, ' : '') +
       `${c.sex === 'M' ? 'male' : 'female'}, ${c.age} y, ${c.coat.replace(/-/g, ' ')}, ${c.origin}`;
@@ -6501,7 +6558,6 @@ function buildReadout(node) {
       fillRows(blocks.blocks.affinity, os.map(({ o, m }) => ({ lab: o.name, frac: (m.aff + 1) / 2, num: (m.aff >= 0 ? '+' : '−') + Math.abs(m.aff).toFixed(2),
         col: m.aff > 0.15 ? TK.color.good : m.aff < -0.15 ? TK.color.alert : TK.color.lineStrong })));
     }
-    fitLeaders();
   };
   // The name and its wrapped description take exactly the height the engine reserved for them.
   return { place: r => { width = r.w; ident.style.height = LAY.CONTENT.readoutIdentH(width) + 'px'; }, tick: render };
@@ -6522,6 +6578,54 @@ function fillRows(host, rows) {
   });
 }
 BUILD['readout'] = node => buildReadout(node);
+
+// ---------------------------------------------------------------- the top cats
+// Each goal's top cat over the chart's span (topCats, the same ranking the enlarged chart and the goal tooltips
+// show): its face, name and value, in the region the engine gives it (sol.leaders: a column of its own on desktop,
+// a band under the goals on phone portrait). Every entry is a 44px target; clicking one picks that cat.
+function buildLeaders(node) {
+  const box = el('div', 'leaders'), top = el('div', 'lhead'), ttl = el('div', 'ttl'), head = el('h3', null, 'Top cats'), lrows = {};
+  // The plain "+" that expands the band (phone portrait); the chart's Enlarge "+" is the same control.
+  const grow = el('button', 'grow', '+'); grow.type = 'button';
+  grow.onclick = () => { UI.leadersOpen = !UI.leadersOpen; applyLayout(); };
+  ttl.append(head); top.append(ttl, grow); box.appendChild(top);
+  const goals = el('div', 'lgoals'); box.appendChild(goals);
+  for (const G of GOALS) { const r = el('div', 'lrow'); r.appendChild(el('span', 'lab', LEADER_LAB[G.id])); goals.appendChild(r); lrows[G.id] = { r, bs: [] }; }
+  node.appendChild(box);
+  const entry = (G, x, i) => {
+    const b = el('button', 'leader'); b.type = 'button';
+    if (!x) { b.disabled = true; b.title = G.name + ': none yet'; b.appendChild(el('span', 'none', 'none yet')); return b; }
+    b.dataset.cat = x.id; b.title = `${i + 1}. ${x.name}: ${G.name} ${x.full}. Click to pick ${x.name}.`;
+    b.setAttribute('aria-label', `${G.name}, number ${i + 1}: ${x.name}, ${x.full}`);
+    b.onclick = () => { const c = sim.cats.find(o => o.id === x.id); if (c) { UI.leadersOpen = false; selectCat(c); } };
+    const cat = sim.cats.find(c => c.id === x.id);
+    // FACE: ASSUMPTION, 22 px inside the 44 px entry; radius 0.36 x FACE.
+    const cv = document.createElement('canvas'), dpr = window.devicePixelRatio || 1, FACE = 22;
+    cv.width = cv.height = Math.round(FACE * dpr); cv.style.width = cv.style.height = FACE + 'px'; cv.className = 'face';
+    if (cat) { const g = cv.getContext('2d'); g.scale(dpr, dpr); drawCatFace(g, cat, FACE / 2, FACE / 2 + 1, FACE * 0.36); }
+    const txt = el('span', 'txt'); txt.append(el('span', 'nm', x.name), el('span', 'num', x.full), el('span', 'num short', x.text));
+    b.append(cv, txt); return b;
+  };
+  const render = () => {
+    const L = SOL && SOL.leaders, mode = L ? L.mode : 'column', k = L ? L.k : 1;
+    const cls = 'leaders ' + mode + (L && L.cols === 2 ? ' two' : '') + (L && L.tight ? ' tight' : ''); if (box.className !== cls) box.className = cls;
+    const open = mode === 'open';
+    grow.textContent = open ? '−' : '+'; grow.style.display = mode === 'column' ? 'none' : '';
+    const word = open ? 'Collapse the top cats' : 'Expand the top cats, with their names';
+    grow.title = word; grow.setAttribute('aria-label', word); grow.setAttribute('aria-expanded', String(open));
+    const tops = topCats(UI.chart.span, k), span = (SPANS.find(x => x[0] === UI.chart.span) || [0, UI.chart.span])[1];
+    box.title = 'The top cats on each goal, ' + span.toLowerCase() + ' (the span the chart shows). Click a cat to pick it.';
+    for (const G of GOALS) {
+      const R = lrows[G.id], L2 = tops[G.id], sig = k + '|' + L2.map(x => x.id + ':' + x.full).join(',');
+      if (R.sig === sig) continue; R.sig = sig;
+      R.bs.forEach(b => b.remove()); R.bs = [];
+      const n = Math.max(1, L2.length);
+      for (let i = 0; i < n; i++) { const b = entry(G, L2[i], i); R.r.appendChild(b); R.bs.push(b); }
+    }
+  };
+  return { tick: render };
+}
+BUILD['leaders'] = node => buildLeaders(node);
 const TRN = [['N', 'Neurotic'], ['E', 'Extraverted'], ['D', 'Dominant'], ['I', 'Impulsive'], ['A', 'Agreeable']];
 
 // ---------------------------------------------------------------- the event log
