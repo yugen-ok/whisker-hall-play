@@ -244,7 +244,7 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .goals.m-tickets{flex-direction:column;justify-content:center}
 .goals.m-tickets .ctl,.goals.m-tickets .plot,.goals.m-tickets .grow{display:none}
 .goals .legend{display:grid;gap:0;flex:none;align-content:center}
-.goals .leg{display:flex;align-items:center;gap:4px;min-height:var(--sz-target);padding:0 var(--sp-sm);text-align:left;
+.goals .leg{display:flex;align-items:center;gap:4px;min-height:var(--sz-target);padding:0 var(--sp-xs);text-align:left;
  background:var(--surface);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--line)}
 .goals .leg:hover{box-shadow:inset 0 0 0 2px var(--accent)}
 .goals .leg .sw{flex:none;width:10px;height:10px;border-radius:2px}
@@ -261,6 +261,7 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .goals .ctl select{min-height:var(--sz-target);flex:1 1 auto;min-width:0}
 .goals .ctl .csel{display:flex;align-items:center;gap:var(--sp-sm);flex:none}
 .goals .ctl .csel .w{font-weight:var(--fw-bold);white-space:nowrap}
+.goals .ctl .csel .only{white-space:nowrap;line-height:var(--sz-target)}
 /* The strip's Enlarge button at its right end, and the enlarged chart's close button. */
 .goals .grow,.goals .close,.editor .close{flex:none;width:var(--sz-target);height:var(--sz-target);align-self:center;font-size:var(--fs-lead);font-weight:var(--fw-bold);
  color:var(--accent);background:var(--surface);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--lineStrong)}
@@ -2757,7 +2758,7 @@ return { Sim };
 'use strict';
 
 return {
- "generated": "2026-11-16T13:07:26.778Z",
+ "generated": "2026-11-17T18:25:13.252Z",
  "engine": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
  "fontStack": "\"Segoe UI\", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif",
  "size": {
@@ -3065,34 +3066,34 @@ return {
    "w": 106
   },
   "legName": {
-   "text": "Friendly",
+   "text": "Contacts",
    "px": 14,
    "chars": 8,
-   "w": 54
-  },
-  "legValue": {
-   "text": "99.9 of 7",
-   "px": 14,
-   "chars": 9,
    "w": 58
   },
-  "spanLabel": {
-   "text": "3 days",
+  "legValue": {
+   "text": "999/hour",
    "px": 14,
-   "chars": 6,
-   "w": 42
+   "chars": 8,
+   "w": 62
+  },
+  "spanLabel": {
+   "text": "All days",
+   "px": 14,
+   "chars": 8,
+   "w": 52
   },
   "grainLabel": {
-   "text": "10 min",
+   "text": "per hour",
    "px": 14,
-   "chars": 6,
-   "w": 46
+   "chars": 8,
+   "w": 57
   },
   "showWord": {
-   "text": "Show",
+   "text": "Window",
    "px": 14,
-   "chars": 4,
-   "w": 36
+   "chars": 6,
+   "w": 55
   },
   "topHead": {
    "text": "Most in fights",
@@ -3101,16 +3102,22 @@ return {
    "w": 92
   },
   "topLine": {
-   "text": "Nachshon 100%, Biscuit 100%, Pumpkin 100%",
+   "text": "Nachshon 99.9/hour, Biscuit 99.9/hour, Pumpkin 99.9/hour",
    "px": 14,
-   "chars": 41,
-   "w": 304
+   "chars": 56,
+   "w": 389
   },
   "perWord": {
-   "text": "Per",
+   "text": "Rate",
    "px": 14,
-   "chars": 3,
-   "w": 22
+   "chars": 4,
+   "w": 30
+  },
+  "fullStats": {
+   "text": "Open full stats",
+   "px": 14,
+   "chars": 15,
+   "w": 96
   },
   "tickLabel": {
    "text": "Mon 23:00",
@@ -3501,21 +3508,26 @@ const NEED_LABELS = METRICS.needs;
 const GOAL_IDS = ['stress', 'conflict', 'friendly', 'hiding'];
 const FEED_VALUES_H = px(LINE + (FS.lead + 12) + 2 * GAP);     // 65: the live feed's row
 // A legend entry is a 44px target: a 10px swatch, then its short name over its value at 14px.
-const CHART_LEG_W = px(14 + Math.max(TX('legName'), TX('legValue')) + 2 * GAP);
+const CHART_LEG_W = px(14 + Math.max(TX('legName'), TX('legValue')) + 2 * 4);   // swatch and gap, the text, 4px (--sp-xs) padding a side: four abreast fit 360px
 // A select: its widest option and the native arrow (24px), padded.
 // A select cell: its visible word ("Show", "Per"), a gap, then the select sized to its longest option.
-const CHART_SEL_W = px(Math.max(TX('showWord'), TX('perWord')) + GAP + Math.max(TX('spanLabel'), TX('grainLabel')) + 24 + 2 * GAP);
+// The window control carries its word ("Window [Today]"); the rate control is its option alone ("[per hour]"), which
+// says what it is. 24px: the select's arrow.
+const CHART_SPAN_W = px(TX('showWord') + GAP + TX('spanLabel') + 24 + 2 * GAP);
+const CHART_RATE_W = px(TX('grainLabel') + 24 + 2 * GAP);
+const CHART_SEL_W = CHART_SPAN_W;
+const CHART_SELS_W = CHART_SPAN_W + CHART_RATE_W;   // both controls; every row width below uses this
 // The plot's floor: it has to show a line, a few time ticks and the now edge. Our own judgement.
 const CHART_PLOT_MIN = { w: 160, h: 40 };
 // Stacked, the two labelled selects and the Enlarge button share one row.
-const CHART_CTL_ROW_W = 2 * CHART_SEL_W + TARGET + 2 * GAP;
+const CHART_CTL_ROW_W = CHART_SELS_W + TARGET + 2 * GAP;
 const TICK_H = 17;
 // One row (desktop): legend entries abreast, the plot, the two selects, side by side in one 65px row.
 // Stacked (phones): the legend on a row (two rows where four entries do not fit abreast), the selects
 // on a row, the plot under them.
 // The strip ends in an Enlarge button (a 44px target) at its right.
 function chartLayout(w, h) {
-  const rowW = 4 * CHART_LEG_W + 2 * CHART_SEL_W + TARGET + 4 * GAP;
+  const rowW = 4 * CHART_LEG_W + CHART_SELS_W + TARGET + 4 * GAP;
   // Band (desktop, Nov 17 round 3): where the strip is taller than one row and wide enough for the legend, the
   // selects and the Enlarge "+" abreast, they share one 44px header row and the plot runs the strip's full width
   // under it: a long, low chart instead of a tall, narrow one, in the same strip height (the room does not move).
@@ -3533,7 +3545,7 @@ function chartLayout(w, h) {
   return { mode: 'stacked', legendCols, legendRows, plot, fits: plot.w >= CHART_PLOT_MIN.w && plot.h >= CHART_PLOT_MIN.h && w >= CHART_CTL_ROW_W };
 }
 // The band's height is the live feed's: one row where the one-row chart fits, three otherwise.
-const feedHeight = w => (w >= 4 * CHART_LEG_W + 2 * CHART_SEL_W + TARGET + 4 * GAP + CHART_PLOT_MIN.w ? 1 : 3) * FEED_VALUES_H;
+const feedHeight = w => (w >= 4 * CHART_LEG_W + CHART_SELS_W + TARGET + 4 * GAP + CHART_PLOT_MIN.w ? 1 : 3) * FEED_VALUES_H;
 // The enlarged chart on desktop: a panel over the foot of the room, inside the room's view, the view's
 // width less its frame. Its header row holds the legend, the selects, "Open full stats" and the close
 // button; under it a plot of CHART_BIG_PLOT_H and its time ticks. The room does not resize.
@@ -3542,7 +3554,13 @@ const CHART_BIG_PLOT_H = 270;   // 240 before the top-cats column; its four bloc
 const CHART_TOP_W = px(Math.max(TX('topHead'), TX('topLine')) + 2 * GAP);
 const CHART_TOP_BLOCK_H = LINE + TARGET;   // a heading, and one row of three cat names, each a 44px target
 const CHART_BIG_H = TARGET + GAP + CHART_BIG_PLOT_H + TICK_H + 2 * PAD;
-function chartBigIn(view, frame) { const h = CHART_BIG_H; return { x: view.x + frame, y: view.y + view.h - frame - h, w: view.w - 2 * frame, h }; }
+// Its header row holds the legend only where the legend, both controls, "Open full stats" (its text and padding) and
+// the close button fit abreast; elsewhere the legend is left to the strip under the room, which toggles the same series.
+function chartBigIn(view, frame) {
+  const h = CHART_BIG_H, w = view.w - 2 * frame;
+  const legend = w - 2 * PAD >= 4 * CHART_LEG_W + CHART_SELS_W + px(TX('fullStats') + 2 * PAD) + TARGET + 4 * GAP;
+  return { x: view.x + frame, y: view.y + view.h - frame - h, w, h, legend };
+}
 
 // The top cats (Nov 17 request: "the top performer cats on the side"): each goal's top cat over the chart's span,
 // with its face, name and value, every entry a 44px target (WCAG 2.1 SC 2.5.5). A panel of its own, set off from the
@@ -4058,7 +4076,7 @@ return { TX, px, FS, LINE, TARGET, GAP, PAD, BAR_H, CARD_H, ASPECT, FILL_MIN, BA
   GUIDE_W, MARKER_W, MARKERS, CARDS, PLAN_CARDS, CONTROL_CARDS, EDITABLE, CARD_CHIP_W, CARD_CHIP_LONG_W, TRI_W, TIMELINE_BIG_H, EDITOR_GAP, STAFF_BAR_H,
   PAUSE_W, PAUSE_ICON_W, RESTART_W, LOG_HEADER, LOG_PAD, LOG_MSGS,
   LOG_MIN_MSGS, CANVAS_MIN_W, FRAME, LEFT_W, canvasIn, framedRoom, NEED_LABELS,
-  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, CHART_LEG_W, CHART_SEL_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
+  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, CHART_LEG_W, CHART_SEL_W, CHART_SPAN_W, CHART_RATE_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
   desktop, phonePortrait, phoneLandscape, contentBox, fillOf, FORMS, VIEWS, VIEWPORTS, formFor, solve, METRICS };
 });
 
@@ -6321,10 +6339,16 @@ for (const key of ['feeding', 'cleaning', 'vacuum', 'visitors']) {
 // Each series has its own scale inside the one plot (docs/LAYOUT.md section 5): average stress on its
 // fixed 1 to 7, hiding on a fixed 0 to 100%, and the two counts from 0 to the largest bucket in view.
 // No axis numbers are shared, because none would be true for all four.
-const SPANS = [['6h', '6 h', 6 * 3600], ['today', 'Today', 0], ['3d', '3 days', 3 * 86400], ['week', 'Week', 7 * 86400], ['all', 'All', -1]];
-const GRAINS = [['10m', '10 min', 600, 'per 10 min'], ['1h', '1 hour', 3600, 'per hour'], ['1d', '1 day', 86400, 'per day']];
-// A bucket size is offered for a span only where it gives between 3 and 300 buckets.
-const grainOk = (spanS, g) => spanS / g[2] >= 3 && spanS / g[2] <= 300;
+// The chart's two controls (Nov 17, chart clarity): the time window it covers, and the unit counts are written in.
+// They are independent: the rate unit is a unit, not the size of a chart point. The chart picks its own point size
+// (POINTS) and plots every count converted to the chosen rate, so "2/hour" means two an hour whatever the point size.
+const SPANS = [['6h', '6 hours', 6 * 3600], ['today', 'Today', 0], ['3d', '3 days', 3 * 86400], ['week', '7 days', 7 * 86400], ['all', 'All days', -1]];
+// Natural units only. Per hour is always offered; per day once the window holds a full day of record. One option
+// only is shown as text, not as a dropdown.
+const RATES = [['1h', 'per hour', 3600, '/hour'], ['1d', 'per day', 86400, '/day']];
+const rateOf = k => RATES.find(r => r[0] === k) || RATES[0];
+// The chart's point size: the largest that still gives at least 6 points over the window.
+const POINTS = [[600, '10 minutes'], [3600, '1 hour'], [86400, '1 day']];
 // The statistics view's range for each span, used when the chart is opened there.
 const SPAN_RANGE = { '6h': 21600, today: 86400, '3d': 259200, week: 604800, all: 0 };
 const GOALS = [
@@ -6333,10 +6357,10 @@ const GOALS = [
     level: s => U.toCSS(s.stress), range: [1, 7], fmt: v => v.toFixed(1) + ' of 7' },
   { id: 'conflict', name: 'Conflict', short: 'Conflict', metrics: [12, 14], color: TK.goalSeries.conflict, dash: [6, 3], mark: 'square',
     tip: 'Every fight and every single swat between two cats, counted as it happens. Lower is better.',
-    count: s => (s.fights || 0) + (s.swats || 0) },
+    count: s => (s.fights || 0) + (s.swats || 0), box: 'Fights', unitWord: 'fights and swats' },
   { id: 'friendly', name: 'Friendly contact', short: 'Friendly', metrics: [10], color: TK.goalSeries.friendly, dash: [2, 3], mark: 'triangle',
     tip: 'Every time one cat starts grooming, playing with or greeting another, counted as it happens. Higher is better.',
-    count: s => s.friendlies || 0 },
+    count: s => s.friendlies || 0, box: 'Contacts', unitWord: 'friendly contacts' },
   { id: 'hiding', name: 'Hiding', short: 'Hiding', metrics: [8], color: TK.goalSeries.hiding, dash: [8, 3, 2, 3], mark: 'diamond',
     tip: 'The share of cats in a hiding place, checked every 5 minutes. Lower is better.',
     level: s => s.hiding * 100, range: [0, 100], fmt: v => Math.round(v) + '%' },
@@ -6348,11 +6372,17 @@ function sampleAt(t) {
   return S[at];
 }
 // The chart's data for a span and a bucket size: bucket edges, and for each series its value per bucket.
-function chartData(spanKey, grainKey) {
+// The window's two edges: a span reaches back from now, Today from midnight, All days from the first sample.
+function spanBounds(spanKey) {
   const t1 = sim.t, first = sim.samples.length ? sim.samples[0].t : t1;
   const span = SPANS.find(s => s[0] === spanKey) || SPANS[1];
-  const t0 = span[2] > 0 ? t1 - span[2] : span[2] === 0 ? Math.floor(t1 / 86400) * 86400 : first;
-  const g = (GRAINS.find(x => x[0] === grainKey) || GRAINS[1])[2];
+  return { t0: span[2] > 0 ? t1 - span[2] : span[2] === 0 ? Math.floor(t1 / 86400) * 86400 : first, t1, first };
+}
+// The rates a window offers: per hour always, per day once the window holds a full day of record.
+const ratesFor = spanKey => { const b = spanBounds(spanKey), len = b.t1 - Math.max(b.t0, b.first); return RATES.filter(r => r[2] === 3600 || len >= r[2]); };
+function chartData(spanKey, rateKey) {
+  const { t0, t1, first } = spanBounds(spanKey), unit = rateOf(rateKey)[2];
+  const g = (POINTS.slice().reverse().find(p => (t1 - t0) / p[0] >= 6) || POINTS[0])[0];
   const edges = []; for (let a = t0; a < t1; a += g) edges.push([a, Math.min(t1, a + g)]);
   // A bucket is partial when the record does not cover all of it: the one still running at the right
   // edge, and one the shelter opened in the middle of. A count over part of a bucket is not a count
@@ -6364,40 +6394,42 @@ function chartData(spanKey, grainKey) {
     if (G.level) { const xs = sim.samples.filter(s => s.t > a && s.t <= b); return xs.length ? xs.reduce((m, s) => m + G.level(s), 0) / xs.length : null; }
     if (partial[i]) return null;
     // The rise of the cumulative counter between the samples at the bucket's two edges.
-    return G.count(sampleAt(b)) - G.count(sampleAt(a));
+    // converted to the chosen rate: the count over the point's span, written per hour or per day
+    return (G.count(sampleAt(b)) - G.count(sampleAt(a))) * unit / g;
   }));
-  return { t0, t1, g, edges, partial, series };
+  // The goal boxes' counts: the whole window's count as a rate in the chosen unit (null under 10 minutes of record).
+  const from = Math.max(t0, first), len = t1 - from;
+  const totals = GOALS.map(G => G.count && len >= 600 ? (G.count(sampleAt(t1)) - G.count(sampleAt(from))) * unit / len : null);
+  return { t0, t1, g, edges, partial, series, totals, unit: rateKey };
 }
 // The three cats at the top of each goal over the chart's span, from the per-cat records: mean stress and
 // the share of samples hidden (sample.cats), fights each cat was in on either side (stats.fightLog), and
 // friendly approaches started (the rise of sample.cats[id].fr across the span).
 const TOP_HEAD = { stress: 'Most stressed', conflict: 'Most in fights', friendly: 'Most friendly', hiding: 'Most hidden' };
+const rateNum = v => v >= 10 ? Math.round(v).toString() : (Math.round(v * 10) / 10).toString();
 function topCats(spanKey, n = 3) {
-  const d = chartData(spanKey, '1h'), xs = sim.samples.filter(s => s.t > d.t0 && s.t <= d.t1), out = {};
+  const d = spanBounds(spanKey), xs = sim.samples.filter(s => s.t > d.t0 && s.t <= d.t1), out = {};
   const acc = {}, name = {};
   for (const s of xs) for (const [id, p] of Object.entries(s.cats)) {
     const a = acc[id] || (acc[id] = { st: 0, hid: 0, n: 0, fr0: p.fr, fr1: p.fr }); a.st += p.stress; a.hid += p.hid; a.n++; a.fr1 = p.fr; name[id] = p.name; }
   const fights = {}; for (const f of sim.stats.fightLog) if (f.t > d.t0 && f.t <= d.t1) for (const id of [f.a, f.b]) fights[id] = (fights[id] || 0) + 1;
-  const rank = (val, fmt) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, n).map(x => ({ ...x, text: fmt(x.v), full: fmt(x.v, true) }));
-  // full: the value in the stat boxes' own units, over the chart's Show span and at its Per bucket: stress "of 7",
-  // conflict and friendly contact as a rate per bucket ("/hour"), hiding "%". short: the same in the phone band's room.
-  const per = (UI.chart && UI.chart.grain) || '1h', gS = (GRAINS.find(g => g[0] === per) || [0, 0, 3600])[2];
-  const buckets = Math.max(1, (d.t1 - d.t0) / gS), rate = c => c / buckets;
-  const num = v => v >= 10 ? Math.round(v).toString() : (Math.round(v * 10) / 10).toString();
-  const PER_SHORT = { '10m': '/10m', '1h': '/h', '1d': '/d' };
-  out.stress = rank(id => acc[id].st / acc[id].n, (v, u) => U.toCSS(v).toFixed(1) + (u ? ' of 7' : '/7'));
-  out.conflict = rank(id => rate(fights[id] || 0), (v, u) => num(v) + (u ? PER[per] : PER_SHORT[per]));
-  out.friendly = rank(id => rate(acc[id].fr1 - acc[id].fr0), (v, u) => num(v) + (u ? PER[per] : PER_SHORT[per]));
+  const rank = (val, fmt) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, n).map(x => { const t = fmt(x.v); return { ...x, text: t, full: t, short: t.replace(' of 7', '/7').replace('/hour', '/h').replace('/day', '/d') }; });   // short: the phone band's ~48px
+  // In the goal boxes' wording, over the chart's window: stress "of 7", fights and contacts as a rate in the chosen
+  // unit ("0.4/hour"), hiding "%".
+  const R = rateOf(UI.chart && UI.chart.grain), len = Math.max(600, d.t1 - Math.max(d.t0, d.first)), rate = c => c * R[2] / len;
+  out.stress = rank(id => acc[id].st / acc[id].n, v => U.toCSS(v).toFixed(1) + ' of 7');
+  out.conflict = rank(id => rate(fights[id] || 0), v => rateNum(v) + R[3]);
+  out.friendly = rank(id => rate(acc[id].fr1 - acc[id].fr0), v => rateNum(v) + R[3]);
   out.hiding = rank(id => acc[id].hid / acc[id].n, v => Math.round(v * 100) + '%');
   return out;
 }
 const topLine = list => list.length ? list.map(x => x.name + ' ' + x.text).join(', ') : 'none yet';
-// The legend's value: a level is its reading now; a count is the last full bucket's, per bucket.
-const PER = { '10m': '/10 min', '1h': '/hour', '1d': '/day' };
+// The goal box's value: a level is its reading now ("2.5 of 7", "12%"); a count is its rate over the whole window in
+// the chosen unit ("0.4/hour"), the same figure the top cats are ranked in.
 function legendValue(G, d, i) {
   if (G.level) return G.fmt(G.level(sampleAt(sim.t)));
-  const xs = d.series[i].filter(v => v != null), v = xs.length ? xs[xs.length - 1] : 0;   // partial buckets are already null
-  return v + PER[UI.chart.grain];
+  const v = d.totals[i];
+  return v == null ? 'not yet' : rateNum(v) + rateOf(d.unit)[3];
 }
 // Times before the shelter opened (a span reaching back past day 0) wrap like any clock.
 const dayOf = t => ((Math.floor(t / 86400) % 7) + 7) % 7, hourOf = t => (((t % 86400) + 86400) % 86400) / 3600;
@@ -6440,25 +6472,29 @@ function buildChart(host, big) {
   }
   const sel = (label, opts) => { const s = document.createElement('select'); s.setAttribute('aria-label', label);
     for (const [k, t] of opts) { const o = document.createElement('option'); o.value = k; o.textContent = t; s.appendChild(o); } return s; };
-  const spanSel = sel('Show', SPANS), grainSel = sel('One point per', GRAINS);
-  spanSel.title = 'How far back the chart goes'; grainSel.title = 'How much time each point covers';
-  // Each select carries its visible word: "Show [Today]", "Per [1 hour]".
-  const labelled = (word, s) => { const l = el('label', 'csel'); l.append(el('span', 'w', word), s); l.style.width = LAY.CHART_SEL_W + 'px'; return l; };
-  ctl.prepend(labelled('Show', spanSel), labelled('Per', grainSel));
-  const fixGrain = () => { const spanS = (UI.chart.span === 'all' ? Math.max(3600, sim.t - sim.samples[0].t) : UI.chart.span === 'today' ? 86400 : SPANS.find(s => s[0] === UI.chart.span)[2]);
-    // Only the bucket sizes that suit the span are listed (none shown disabled). The list is rebuilt only when
-    // that set changes: touching an open select's options or value every frame shuts its menu in Chrome.
-    const ok = GRAINS.filter(g => grainOk(spanS, g)), sig = ok.map(g => g[0]).join();
+  const spanSel = sel('Time window', SPANS), grainSel = sel('Counts written per', RATES);
+  spanSel.title = 'The stretch of time the chart, the goal boxes and the top cats cover';
+  grainSel.title = 'The unit fights and friendly contacts are counted in';
+  // "Window [Today]" and "[per hour]": the rate's option says what it is. Where only one rate suits the window it
+  // is plain text ("per hour") in the select's place.
+  const rateText = el('span', 'only');
+  const labelled = (word, w, ...xs) => { const l = el('label', 'csel'); if (word) l.append(el('span', 'w', word)); l.append(...xs); l.style.width = w + 'px'; return l; };
+  ctl.prepend(labelled('Window', LAY.CHART_SPAN_W, spanSel), labelled(null, LAY.CHART_RATE_W, grainSel, rateText));
+  const fixGrain = () => {
+    // The list is rebuilt only when the set changes: touching an open select's options every frame shuts its menu.
+    const ok = ratesFor(UI.chart.span), sig = ok.map(g => g[0]).join();
     if (grainSel.dataset.sig !== sig) {
       grainSel.dataset.sig = sig; grainSel.textContent = '';
       for (const [k, t] of ok) { const o = document.createElement('option'); o.value = k; o.textContent = t; grainSel.appendChild(o); }
     }
-    if (!ok.some(g => g[0] === UI.chart.grain)) UI.chart.grain = ok.some(g => g[0] === '1h') ? '1h' : ok[0][0];
+    if (!ok.some(g => g[0] === UI.chart.grain)) UI.chart.grain = ok[0][0];
+    const one = ok.length === 1; grainSel.style.display = one ? 'none' : ''; rateText.style.display = one ? '' : 'none';
+    rateText.textContent = ok[0][1];
     if (grainSel.value !== UI.chart.grain) grainSel.value = UI.chart.grain; };
   spanSel.onchange = () => { UI.chart.span = spanSel.value; fixGrain(); renderAll(); };
   grainSel.onchange = () => { UI.chart.grain = grainSel.value; renderAll(); };
   const entries = GOALS.map(G => {
-    const b = el('button', 'leg'), sw = el('span', 'sw'), tx = el('span', 'tx'), nm = el('span', 'nm', G.short), v = el('span', 'v');
+    const b = el('button', 'leg'), sw = el('span', 'sw'), tx = el('span', 'tx'), nm = el('span', 'nm', G.box || G.short), v = el('span', 'v');
     b.dataset.goal = G.id; sw.style.background = G.color; tx.append(nm, v); b.append(sw, tx); legend.appendChild(b);
     b.onclick = () => { UI.chart.hidden.has(G.id) ? UI.chart.hidden.delete(G.id) : UI.chart.hidden.add(G.id); renderAll(); };
     return { G, b, v };
@@ -6481,12 +6517,19 @@ function buildChart(host, big) {
     if (ph > 120) { g.fillStyle = C.surfaceAlt; for (let q = 1; q < 4; q++) g.fillRect(1, Math.round(ph * q / 4), w - 2, 1); }
     // The now edge, at the right.
     g.fillStyle = C.ink; g.fillRect(w - 2, 0, 2, ph);
+    let capH = 0;
+    // What the plot shows, in words, top left: the rate unit and the point size (each point covers that much time).
+    { const R = rateOf(data.unit), pt = (POINTS.find(p => p[0] === data.g) || POINTS[0])[1];
+      const cap = `Fights and contacts ${R[1]} · stress of 7 · hiding % · each point ${pt}`;
+      g.font = `${TK.font.size.ui}px ${TK.font.stack}`; g.textBaseline = 'top';
+      capH = ph >= 90 && g.measureText(cap).width <= w - 16 ? 22 : 0;   // only where the plot keeps 68px of data under it
+      if (capH) { g.fillStyle = C.muted; g.fillText(cap, 6, 4); } }
     GOALS.forEach((G, si) => {
       if (UI.chart.hidden.has(G.id)) return;
       const vs = data.series[si], max = G.range ? G.range[1] : Math.max(1, ...vs.filter(v => v != null)), min = G.range ? G.range[0] : 0;
       // Inset by the end marker's size, and clipped to the plot, so no line or marker leaves it.
       // 7px: the 4px marker half-height, the 1px frame and 2px clear, so a marker at the top or foot is never cut.
-      const Y = v => ph - 7 - ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * (ph - 14);
+      const Y = v => ph - 7 - ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * (ph - 14 - capH);   // under the caption
       g.save(); g.beginPath(); g.rect(1, 1, w - 2, ph - 2); g.clip();
       g.strokeStyle = G.color; g.lineWidth = 1.5; g.setLineDash(G.dash); g.beginPath();
       let on = false, lx = 0, ly = 0;
@@ -6515,7 +6558,7 @@ function buildChart(host, big) {
       const i = Math.max(0, Math.min(n - 1, Math.round(hover * (n - 1)))), x = X(i);
       g.fillStyle = C.ink; g.fillRect(Math.round(x), 0, 1, ph);
       const lines = [DAYS[dayOf(data.edges[i][0])] + ' ' + fmtTick(data.edges[i][0], 1)]
-        .concat(GOALS.map((G, si) => { const v = data.series[si][i]; return `${G.short} ${v == null ? '–' : G.level ? G.fmt(v) : v}`; }));
+        .concat(GOALS.map((G, si) => { const v = data.series[si][i]; return `${G.box || G.short} ${v == null ? '–' : G.level ? G.fmt(v) : rateNum(v) + rateOf(data.unit)[3]}`; }));
       SPR.drawTooltip(g, lines.join(' · '), x, 2, w, h);
     }
   }
@@ -6524,7 +6567,8 @@ function buildChart(host, big) {
       // The enlarged chart: its header row on desktop, stacked on a phone's view.
       const c = big ? { mode: FORM === 'desktop' ? 'big' : 'stacked', legendCols: r.w >= 4 * LAY.CHART_LEG_W ? 4 : 2 } : sol.chart, pad = big ? 12 : sol.feedPad;
       box.style.padding = big ? `${pad}px` : `0 ${pad}px ${pad}px`;
-      box.className = 'goals m-' + c.mode + (big ? ' big' : '');   // m-row, m-stacked or m-big ("row" alone is the readout's class)
+      box.className = 'goals m-' + c.mode + (big ? ' big' : '');
+      if (big) legend.style.display = FORM !== 'desktop' || (sol.chartBig && sol.chartBig.legend) ? '' : 'none';   // m-row, m-stacked or m-big ("row" alone is the readout's class)
       legend.style.gridTemplateColumns = `repeat(${c.legendCols},${LAY.CHART_LEG_W}px)`;
       // the enlarged chart on desktop: the top-cats column after the plot, at the width the solver reserved
       if (big) box.style.gridTemplateColumns = FORM === 'desktop' && sol.chartTops ? `auto 1fr ${LAY.CHART_TOP_W}px` : '';
@@ -6536,7 +6580,7 @@ function buildChart(host, big) {
       if (spanSel.value !== UI.chart.span) spanSel.value = UI.chart.span;
       fixGrain();
       if (grainSel.value !== UI.chart.grain) grainSel.value = UI.chart.grain;
-      const unitWord = GRAINS.find(x => x[0] === UI.chart.grain)[3];
+      const R = rateOf(UI.chart.grain), win = (SPANS.find(x => x[0] === UI.chart.span) || SPANS[1])[1].toLowerCase();
       data = chartData(UI.chart.span, UI.chart.grain);
       const top = topCats(UI.chart.span);
       if (tops) { tops.classList.toggle('hidden', !(FORM === 'desktop' && SOL.chartTops)); fillTops(top); }
@@ -6544,7 +6588,7 @@ function buildChart(host, big) {
         v.textContent = legendValue(G, data, i);
         const off = UI.chart.hidden.has(G.id);
         b.classList.toggle('off', off); b.setAttribute('aria-pressed', String(!off));
-        b.title = `${G.name}: ${v.textContent}${G.count ? ' (' + unitWord + ', the last full bucket)' : ' (now)'}. ${TOP_HEAD[G.id]} over the span shown: ${topLine(top[G.id])}. ${G.tip} Click to ${off ? 'show' : 'hide'} it on the chart.`;
+        b.title = `${G.name}: ${v.textContent}${G.count ? ' (' + G.unitWord + ' ' + R[1] + ', averaged over ' + win + ')' : ' (now)'}. ${TOP_HEAD[G.id]} over ${win}: ${topLine(top[G.id])}. ${G.tip} Click to ${off ? 'show' : 'hide'} it on the chart.`;
       });
       draw();
     },
@@ -6557,7 +6601,7 @@ BUILD['feed'] = node => buildChart(node, false);
 // own decision: the solver shows a reserved region does not fit at either phone size. The eight needs
 // are the required part; personality and affinity are the blocks that give way, and the engine names
 // which one it dropped.
-const LEADER_LAB = { stress: 'Stress', conflict: 'Conflict', friendly: 'Friendly', hiding: 'Hiding' };   // the goal tickets' own words
+const LEADER_LAB = { stress: 'Stress', conflict: 'Fights', friendly: 'Contacts', hiding: 'Hiding' };   // the goal tickets' own words
 function buildReadout(node) {
   const box = el('div', 'readout'); node.appendChild(box);
   const ident = el('div', 'ident'), nm = el('span', 'nm'), meta = el('span', 'meta');
@@ -6662,7 +6706,7 @@ function buildLeaders(node) {
     const cv = document.createElement('canvas'), dpr = window.devicePixelRatio || 1, FACE = 22;
     cv.width = cv.height = Math.round(FACE * dpr); cv.style.width = cv.style.height = FACE + 'px'; cv.className = 'face';
     if (cat) { const g = cv.getContext('2d'); g.scale(dpr, dpr); drawCatFace(g, cat, FACE / 2, FACE / 2 + 1, FACE * 0.36); }
-    const txt = el('span', 'txt'); txt.append(el('span', 'nm', x.name), el('span', 'num', x.full), el('span', 'num short', x.text));
+    const txt = el('span', 'txt'); txt.append(el('span', 'nm', x.name), el('span', 'num', x.full), el('span', 'num short', x.short));
     b.append(cv, txt); return b;
   };
   const render = () => {
