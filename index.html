@@ -7580,6 +7580,82 @@ const ROOM = (() => {
   const catR = () => Math.max(5, 3.85 * S * TK.size.catScale);
   const pos = (c, f) => [(c.px + (c.x - c.px) * f) * S, (c.py + (c.y - c.py) * f) * S];
 
+  // ---- render-time declutter (display only: the sim's positions are never written). Each frame the
+  // drawn position of every cat and person is its sim position plus a small offset that pushes bodies
+  // apart on screen (cat-cat, cat-person, person-person) and off furniture they are not using. A cat
+  // that has arrived at a station stays inside that station's drawn box; a hiding cat and a petted cat
+  // stay where the sim has them. ASSUMPTION (render only): 4 relaxation passes, offsets capped at
+  // DC_MAX_M metres and eased toward their target with a DC_TAU_S time constant, so nothing jitters or jumps.
+  const DC_MAX_M = 0.6, DC_TAU_S = 0.25, DC_ITER = 4;
+  const dcOff = new Map();          // key -> [ox, oy], the eased offset currently drawn
+  let dcLast = null, dcOn = true, dcStats = { raw: 0, drawn: 0, pairsRaw: 0, pairsDrawn: 0 };
+  let D = {}, DH = new Map();       // the last frame's drawn positions: cats by id, people by object
+  function stationBox(st) {
+    const minPx = 18; let x = st.x * S, y = st.y * S, w = st.w * S, h = st.h * S;
+    if (st.type !== T.WINDOW && Math.min(w, h) < minPx) { const k = minPx / Math.min(w, h); x -= (w * k - w) / 2; y -= (h * k - h) / 2; w *= k; h *= k; }
+    return { x, y, w, h };
+  }
+  // Overlap between bodies: the summed depth of interpenetration (px) and the count of touching pairs.
+  function overlapOf(B, key) {
+    let depth = 0, pairs = 0;
+    for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
+      const a = B[i], b = B[j]; if (a.skip || b.skip) continue;
+      const o = a.r + b.r - Math.hypot(a[key][0] - b[key][0], a[key][1] - b[key][1]);
+      if (o > 0) { depth += o; pairs++; }
+    }
+    return [depth, pairs];
+  }
+  function declutter(P, people, hidden, now) {
+    const R = catR(), pr = personPx(S) * 0.32, cap = DC_MAX_M / sim.cfg.tile * S;
+    const boxes = sim.map.stations.filter(st => st.type !== T.WINDOW && !(drag && drag.obj === st)).map(st => ({ st, b: stationBox(st) }));
+    const B = [];
+    for (const c of sim.cats) {
+      const a = c.act, use = a && a.arrived && a.station >= 0 ? sim.map.stations[a.station] : null;
+      const pin = hidden.has(c) || (UI.pet && UI.pet.cat === c) || (sim.petting && sim.petting.catId === c.id);
+      B.push({ key: 'c' + c.id, obj: c, raw: P[c.id], r: R * 0.95, w: pin ? 0 : use ? 0.4 : 1, use, skip: hidden.has(c) });
+    }
+    for (const h of people) B.push({ key: 'h' + h.id, obj: h, raw: [h.x * S, h.y * S], r: pr, w: 0.5, use: null, skip: false });
+    for (const b of B) b.t = b.raw.slice();
+    if (dcOn) for (let it = 0; it < DC_ITER; it++) {
+      for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
+        const a = B[i], b = B[j]; if (a.skip || b.skip || a.w + b.w === 0) continue;
+        let dx = b.t[0] - a.t[0], dy = b.t[1] - a.t[1], d = Math.hypot(dx, dy);
+        const o = a.r + b.r - d; if (o <= 0) continue;
+        if (d < 1e-6) { const g = ((i * 7 + j * 13) % 16) / 16 * 2 * Math.PI; dx = Math.cos(g); dy = Math.sin(g); d = 1; }   // a fixed direction, no RNG
+        const ka = a.w / (a.w + b.w), kb = b.w / (a.w + b.w), ux = dx / d, uy = dy / d;
+        a.t[0] -= ux * o * ka; a.t[1] -= uy * o * ka; b.t[0] += ux * o * kb; b.t[1] += uy * o * kb;
+      }
+      for (const b of B) {
+        if (b.w === 0) { b.t = b.raw.slice(); continue; }
+        if (b.use) { const q = stationBox(b.use); b.t[0] = Math.min(q.x + q.w, Math.max(q.x, b.t[0])); b.t[1] = Math.min(q.y + q.h, Math.max(q.y, b.t[1])); continue; }
+        for (const { st, b: q } of boxes) {
+          const m = b.r * 0.6, x0 = q.x - m, x1 = q.x + q.w + m, y0 = q.y - m, y1 = q.y + q.h + m;
+          if (b.t[0] <= x0 || b.t[0] >= x1 || b.t[1] <= y0 || b.t[1] >= y1) continue;
+          if (b.obj.act && b.obj.act.station === st.id) continue;                          // on its way onto the piece it is using
+          const e = [b.t[0] - x0, x1 - b.t[0], b.t[1] - y0, y1 - b.t[1]], k = e.indexOf(Math.min(...e));
+          if (k === 0) b.t[0] = x0; else if (k === 1) b.t[0] = x1; else if (k === 2) b.t[1] = y0; else b.t[1] = y1;
+        }
+        b.t[0] = Math.min(W - b.r * 0.5, Math.max(b.r * 0.5, b.t[0])); b.t[1] = Math.min(H - b.r * 0.5, Math.max(b.r * 0.5, b.t[1]));
+      }
+    }
+    // cap, then ease the drawn offset toward the target offset
+    const dt = dcLast == null ? 1 : Math.max(0, Math.min(0.1, (now - dcLast) / 1000)); dcLast = now;
+    const k = 1 - Math.exp(-dt / DC_TAU_S), seen = new Set();
+    D = {}; DH = new Map();
+    for (const b of B) {
+      let tx = b.t[0] - b.raw[0], ty = b.t[1] - b.raw[1]; const m = Math.hypot(tx, ty); if (m > cap) { tx *= cap / m; ty *= cap / m; }
+      if (b.skip) { tx = 0; ty = 0; }
+      const o = dcOff.get(b.key) || [0, 0]; o[0] += (tx - o[0]) * k; o[1] += (ty - o[1]) * k;
+      dcOff.set(b.key, o); seen.add(b.key);
+      b.d = [b.raw[0] + o[0], b.raw[1] + o[1]];
+      if (b.key[0] === 'c') D[b.obj.id] = b.d; else DH.set(b.obj, b.d);
+    }
+    for (const key of [...dcOff.keys()]) if (!seen.has(key)) dcOff.delete(key);
+    const [r0, p0] = overlapOf(B, 'raw'), [r1, p1] = overlapOf(B, 'd');
+    dcStats = { raw: r0, drawn: r1, pairsRaw: p0, pairsDrawn: p1, bodies: B.length };
+    return D;
+  }
+
   function attach(c) {
     cv = c; ctx = c.getContext('2d');
     c.addEventListener('mousedown', onDown);
@@ -7695,6 +7771,8 @@ const ROOM = (() => {
     // A cat is drawn ~1.3x a hide box's size (catScale), so the box could never cover it from below: a
     // cat inside a box is left out of the cats' pass instead, and the box alone stands for it.
     const hidden = new Set(sim.cats.filter(c => isHiddenCat(c, P[c.id], S)));
+    const people = sim.humans.filter(h => h.mode !== 'shoo' && h.mode !== 'pet');
+    const Q = declutter(P, people, hidden, now);   // drawn positions; P stays the sim's
     const tall = [];
     for (const st of M.stations) {
       let x = st.x * S, y = st.y * S, w = st.w * S, h = st.h * S;
@@ -7716,7 +7794,7 @@ const ROOM = (() => {
     for (const c of sim.cats) {
       const a = c.act; if (!a || a.target < 0) continue;
       const o = sim.catById(a.target); if (!o) continue;
-      const inf = actInfo(sim, c), [x1, y1] = P[c.id], [x2, y2] = P[o.id], d = Math.hypot(x2 - x1, y2 - y1);
+      const inf = actInfo(sim, c), [x1, y1] = Q[c.id], [x2, y2] = Q[o.id], d = Math.hypot(x2 - x1, y2 - y1);
       if (d < ringR * 2) continue;
       const ux = (x2 - x1) / d, uy = (y2 - y1) / d;
       ctx.strokeStyle = TK.activity[inf.cat]; ctx.globalAlpha = 0.6; ctx.lineWidth = 2;
@@ -7728,13 +7806,13 @@ const ROOM = (() => {
     // come before the cats, so a cat beside or under a person is always drawn above them, never hidden.
     // The shoo's and the pet's hands are drawn as the sweep and the stroke, not as people.
     const layer = tall.map(b => [b.y + b.h, () => drawStation(ctx, b, lw)]);
-    for (const h of sim.humans) if (h.mode !== 'shoo' && h.mode !== 'pet') layer.push([h.y * S, () => drawPerson(ctx, h, h.x * S, h.y * S, personPx(S))]);
+    for (const h of people) { const [hx, hy] = DH.get(h); layer.push([hy, () => drawPerson(ctx, h, hx, hy, personPx(S))]); }
     layer.sort((a, b) => a[0] - b[0]);
     for (const [, draw] of layer) draw();
-    const sorted = sim.cats.slice().sort((a, b) => P[a.id][1] - P[b.id][1]);
+    const sorted = sim.cats.slice().sort((a, b) => Q[a.id][1] - Q[b.id][1]);
     const icons = [];   // drawn after the name tags, so no tag or later cat ever covers one
     for (const c of sorted) {
-      const [x, y] = P[c.id], inf = actInfo(sim, c), col = TK.activity[inf.cat];
+      const [x, y] = Q[c.id], inf = actInfo(sim, c), col = TK.activity[inf.cat];
       if (c === UI.selected) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, ringR + 3, 0, 7); ctx.stroke(); }
       // A cat hiding in a box is not drawn; the selected one shows through as a faint outline so it
       // stays findable. Its hiding is also said by the activity icon over it.
@@ -7760,7 +7838,7 @@ const ROOM = (() => {
     const nameTags = [];
     for (const c of [UI.selected, hoverCat]) {
       if (!c || !sim.cats.includes(c)) continue;
-      const [x, y] = P[c.id], w = ctx.measureText(c.name).width + 2 * TK.space.sm, h = TK.font.line.ui + 6;
+      const [x, y] = Q[c.id], w = ctx.measureText(c.name).width + 2 * TK.space.sm, h = TK.font.line.ui + 6;
       const bx = Math.max(0, Math.min(W - w, x - w / 2)), by = Math.max(0, y + ringR + 4);
       SPR.rr(ctx, bx, by, w, h, TK.radius.sm); ctx.fillStyle = TK.room.tooltipBg; ctx.fill();
       ctx.fillStyle = TK.room.tooltipInk; ctx.fillText(c.name, bx + w / 2, by + h / 2);
@@ -7773,7 +7851,7 @@ const ROOM = (() => {
       ctx.strokeStyle = ok ? TK.color.good : TK.color.alert; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
       ctx.strokeRect(drag.x * S, drag.y * S, st.w * S, st.h * S); ctx.setLineDash([]);
     } else if (hoverCat && hoverCat === UI.selected && !UI.pet && typeof sim.pet === 'function') {
-      const [x, y] = P[hoverCat.id];
+      const [x, y] = Q[hoverCat.id];
       SPR.drawTooltip(ctx, tr('Click to pet'), x, y - ringR - 4, W, H);
     } else if (hoverDoor) {
       const d = doorBox();
@@ -7791,14 +7869,14 @@ const ROOM = (() => {
       SPR.drawTooltip(ctx, tr('Event {n} in the event log', { n: UI.marker.index }), UI.markerBox.x + UI.markerBox.w / 2, UI.markerBox.y, W, H);
     } else if (!hoverCat && mouse) {
       // A person under the pointer is named by role, the way a cat is named.
-      const h = sim.humans.find(q => q.mode !== 'shoo' && q.mode !== 'pet' && Math.hypot(q.x * S - mouse[0], q.y * S - mouse[1]) < personPx(S) / 2);
-      if (h) SPR.drawTooltip(ctx, tr(personOf(h).tag), h.x * S, h.y * S - Math.max(13, 8 * S), W, H);
+      const h = people.find(q => Math.hypot(DH.get(q)[0] - mouse[0], DH.get(q)[1] - mouse[1]) < personPx(S) / 2);
+      if (h) SPR.drawTooltip(ctx, tr(personOf(h).tag), DH.get(h)[0], DH.get(h)[1] - Math.max(13, 8 * S), W, H);
     }
     if (UI.pet) {
       const p = UI.pet, c = p.cat, r = sim.petting;
       if (!r || r.catId !== c.id || r.phase === 'done' || !sim.cats.includes(c)) { UI.pet = null; cv.style.cursor = SPR.CURSOR.grab; }
       // A refusal is drawn where the cat was when the hand set off: the hand stops there as the cat slips away.
-      else { const [x, y] = r.phase === 'rejected' ? p.at : P[c.id], ang = r.phase === 'rejected' ? p.ang : Math.atan2(c.fy, c.fx);
+      else { const [x, y] = r.phase === 'rejected' ? p.at : Q[c.id], ang = r.phase === 'rejected' ? p.ang : Math.atan2(c.fy, c.fx);
         const q = SPR.petPose(now - p.start, r.phase, x, y, ang, catR(), p.from[0], p.from[1]);
         SPR.drawHand(ctx, q.x, q.y - q.lift * catR() * 0.35, Math.max(28, catR() * 2.4), q.angle); }
     } else if (!UI.sweep && cv.style.cursor === 'none') cv.style.cursor = SPR.CURSOR.grab;   // a pet ended by Escape
@@ -7816,14 +7894,14 @@ const ROOM = (() => {
   // ---- input. Nothing here changes a rectangle: the layout engine enumerates these pointer states
   // and asserts the geometry is identical in all of them.
   const at = e => { const r = cv.getBoundingClientRect(), p = e.touches && e.touches[0] ? e.touches[0] : e; return [p.clientX - r.left, p.clientY - r.top]; };
-  function catAt(mx, my) { let b = null, bd = catR() * 1.8; for (const c of sim.cats) { const d = Math.hypot(c.x * S - mx, c.y * S - my); if (d < bd) { bd = d; b = c; } } return b; }
+  function catAt(mx, my) { let b = null, bd = catR() * 1.8; for (const c of sim.cats) { const p = D[c.id] || [c.x * S, c.y * S], d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; b = c; } } return b; }
   // Petting: the sim decides (sim.pet); the room draws the one hand at the pose for the phase the sim reports.
   // The sim's live record is sim.petting ({ catId, phase, until }, null when idle); UI.pet only keeps what the
   // drawing needs: when the hand set off, from where, and where the cat was then.
   // Petting needs the sim's sim.pet; in a tree without it, a click on the selected cat does nothing.
   function startPet(c, mx, my) {
     if (typeof sim.pet !== 'function' || !sim.pet(c.id)) return;
-    UI.pet = { cat: c, start: performance.now(), from: [mx, my], at: [c.x * S, c.y * S], ang: Math.atan2(c.fy, c.fx) };
+    UI.pet = { cat: c, start: performance.now(), from: [mx, my], at: (D[c.id] || [c.x * S, c.y * S]).slice(), ang: Math.atan2(c.fy, c.fx) };
     cv.style.cursor = 'none'; renderAll();
   }
   // The quiet-room doorway, padded to a full pointer target around its 4-tile gap.
@@ -7876,7 +7954,7 @@ const ROOM = (() => {
     }
     downAt = null;
   }
-  return { attach, place, draw, get S() { return S; }, get W() { return W; }, get H() { return H; }, invalidate() { bg = null; } };
+  return { attach, place, draw, get S() { return S; }, get declutter() { return dcOn; }, set declutter(v) { dcOn = !!v; dcOff.clear(); dcLast = null; }, declutterStats: () => dcStats, drawnAt: id => D[id], get W() { return W; }, get H() { return H; }, invalidate() { bg = null; } };
 })();
 
 // A cat seen from above, drawn TK.size.catScale times true scale (true scale: nose to rump is 2.33 R, so
@@ -8883,6 +8961,9 @@ root.Play = {
   get layout() { return SOL; }, get statsLayout() { return STATS.solution; },
   get state() { return UI; },
   S: () => ROOM.S,
+  // the render-time declutter: on/off (for a before/after), and the last frame's overlap, raw vs drawn
+  get declutter() { return ROOM.declutter; }, set declutter(v) { ROOM.declutter = v; },
+  declutterStats: () => ROOM.declutterStats(), drawnAt: id => ROOM.drawnAt(id), drawRoom: (now, f) => ROOM.draw(now, f),
   // the goals chart's data, as drawn, and the stress reading the readout and the statistics print
   chart: () => chartData(UI.chart.span, UI.chart.grain),
   openBigChart, closeBigChart,
