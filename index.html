@@ -237,25 +237,37 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .goals{display:flex;gap:var(--sp-sm);width:100%;height:100%;min-height:0;align-items:stretch}
 .goals.m-stacked{flex-direction:column}
 /* Desktop band (layout chartLayout 'band'): legend, selects and the Enlarge "+" in one header row, the plot the full width under it. */
-.goals.m-band{display:grid;grid-template-columns:auto auto 1fr auto;grid-template-rows:var(--sz-target) minmax(0,1fr);gap:var(--sp-sm)}
+.goals.m-band{display:grid;grid-template-columns:auto auto 1fr auto;grid-template-rows:var(--chip-h, var(--sz-target)) minmax(0,1fr);gap:var(--sp-sm)}
 .goals.m-band .legend{grid-area:1 / 1}
 .goals.m-band .ctl{grid-area:1 / 2}
 .goals.m-band .grow{grid-area:1 / 4;align-self:start}
 .goals.m-band .plot{grid-area:2 / 1 / 3 / 5}
 /* A short phone's feed (layout: chart mode 'tickets'): the four goal tickets only; the chart and its controls live in the statistics view. */
 .goals.m-tickets{flex-direction:column;justify-content:center}
-.goals.m-tickets .ctl,.goals.m-tickets .plot,.goals.m-tickets .grow{display:none}
+.goals.m-tickets .plot,.goals.m-tickets .grow{display:none}
+/* the colony-stats group (layout groupOutline): one outline and background behind the goals strip and the top cats */
+.gframe{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.gframe path{fill:var(--surface);stroke:var(--lineStrong);stroke-width:1;stroke-linejoin:round}
+.goals .gtitle{display:none;margin:0;font-size:var(--fs-lead);line-height:var(--lh-ui);font-weight:var(--fw-bold);flex:1 1 auto;min-width:0}
+.goals.m-tickets{justify-content:flex-start;gap:0}
+.goals.m-tickets .ctl{order:-1;height:var(--sz-target);padding:0 var(--sp-sm)}
+.goals.m-tickets .gtitle{display:block}
+.goals.m-tickets .legend{align-self:center}
+.goals.m-tickets.nohead{justify-content:center}
+.goals.m-tickets.nohead .ctl{display:none}
+.goals.m-tickets .ctl .csel .w{display:none}
+.goals.m-tickets .ctl .csel{width:auto!important}
 .goals .legend{display:grid;gap:0;flex:none;align-content:center}
-.goals .leg{display:flex;align-items:center;gap:4px;min-height:var(--sz-target);padding:0 var(--sp-xs);text-align:left;
+.goals .leg{display:flex;align-items:center;gap:4px;min-height:var(--chip-h, var(--sz-target));padding:4px var(--sp-xs);box-sizing:border-box;text-align:left;
  background:var(--surface);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--line)}
 .goals .leg:hover{box-shadow:inset 0 0 0 2px var(--accent)}
 .goals .leg .sw{flex:none;width:10px;height:10px;border-radius:2px}
 .goals .leg .tx{display:flex;flex-direction:column;min-width:0;line-height:16px}
-.goals .leg .nm{font-weight:var(--fw-bold);white-space:nowrap}
+.goals .leg .nm{font-weight:var(--fw-bold);hyphens:manual}
 .goals .leg .v{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .goals .leg.off .nm{text-decoration:line-through;color:var(--muted)}
 .goals .leg.off .sw{opacity:.3}
-.goals.m-tickets .leg{position:relative}
+.goals.m-tickets .leg{position:relative;padding-top:7px}
 .goals.m-tickets .leg .sw{position:absolute;top:2px;left:var(--sp-xs);right:var(--sp-xs);width:auto;height:3px}
 .goals.m-tickets .leg .nm{font-weight:var(--fw-normal, 400)}
 .goals .plot{flex:1 1 0;min-width:0;min-height:0;position:relative}
@@ -278,6 +290,7 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .goals.m-big .head{display:flex}
 .goals.m-big .fullstats{width:auto;height:var(--sz-target);color:var(--accent);margin-left:auto}
 .goals.big .ctl{flex-wrap:wrap}
+.goals.big .ctl .fullstats{height:var(--sz-target);width:auto;flex:none}
 .goals.m-big{display:grid;grid-template-columns:auto 1fr;grid-template-rows:var(--sz-target) 1fr;gap:var(--sp-sm)}
 .goals.m-big .plot{grid-column:1 / 3}
 /* The top-cats column beside the enlarged plot: four blocks, a heading and a line of three cat names each. */
@@ -338,9 +351,12 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
  color:var(--accent);background:var(--surface);border:0;border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--lineStrong);cursor:pointer;padding:0}
 .leaders .grow:hover{box-shadow:inset 0 0 0 2px var(--accent)}
 .leaders .lgoals{display:flex;flex-direction:column;min-height:0}
+.leaders .lsub{display:none;margin:0;font-size:var(--fs-ui);line-height:var(--lh-ui);font-weight:var(--fw-bold);flex:none}
+.leaders.column .lsub{display:block}
+.leaders.column,.leaders.band{background:none;border-color:transparent;box-shadow:none}
 .leaders.two .lgoals,.leaders.open .lgoals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:min-content;column-gap:var(--sp-sm);align-content:start}
 .lrow{display:flex;flex-direction:column;min-width:0;flex:none}
-.lrow .lab{color:var(--muted);line-height:var(--lh-ui);white-space:nowrap}
+.lrow .lab{color:var(--muted);line-height:var(--lh-ui);overflow-wrap:break-word;hyphens:manual}
 .leader{display:flex;align-items:center;gap:6px;min-width:0;height:var(--sz-target);flex:none;padding:0 4px;border:0;border-radius:var(--r-sm);background:none;font:inherit;color:inherit;cursor:pointer;text-align:left}
 .leader:hover:not(:disabled){box-shadow:inset 0 0 0 1px var(--lineStrong)}
 .leader:hover:not(:disabled) .nm{text-decoration:underline}
@@ -356,7 +372,7 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .leaders.band .lgoals{flex:1 1 0;flex-direction:row;gap:var(--sp-xs);min-width:0}
 .leaders.band .grow{height:100%;box-shadow:none;border-left:1px solid var(--line);border-radius:0 var(--r-md) var(--r-md) 0}
 .leaders.band .lrow{flex:1 1 0;position:relative}
-.leaders.band .lrow .lab{position:absolute;left:4px;top:0;pointer-events:none}
+.leaders.band .lrow .lab{position:absolute;left:4px;right:4px;top:2px;height:3px;background:var(--c);pointer-events:none}
 .leaders.band .leader{height:100%;align-items:flex-end;padding:0 4px 1px;gap:4px;width:100%}
 .leaders.band .leader .face{width:18px!important;height:18px!important}
 .leaders.band .leader .nm{display:none}
@@ -2801,38 +2817,38 @@ const list = (xs, and) => xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', 
 const S = {
   en: {
     pause: 'Pause', play: 'Play', restart: 'Restart', showStats: 'Show stats', stats: 'Stats', showRoom: 'Show room', room: 'Room',
-    howToPlay: 'How to play', events: 'Events', topCats: 'Top cats', needs: 'Needs', personality: 'Personality', feelsAbout: 'Feels about',
+    howToPlay: 'How to play', events: 'Events', topCats: 'Top cats', colonyStats: 'Colony stats', needs: 'Needs', personality: 'Personality', feelsAbout: 'Feels about',
     noCat: 'No cat picked', noCatHint: 'Click a cat in the room to see its needs, personality and friendships here.',
     chipFeeding: 'Feeding', chipLitter: 'Litter', chipVisitors: 'Visitors', chipVacuum: 'Vacuum',
-    goalStress: 'Stress', goalFights: 'Hostile', goalContacts: 'Friendly', goalHiding: 'Hiding',
+    goalStress: 'Stress', goalFights: 'Hostile interactions', goalContacts: 'Friendly interactions', goalHiding: 'Hiding',
     window: 'Window', span6h: '6 hours', spanToday: 'Today', span3d: '3 days', spanWeek: '7 days', spanAll: 'All days',
     perHour: 'per hour', perDay: 'per day', unitHour: '/hour', unitDay: '/day', unitHourShort: '/h', unitDayShort: '/d', of7: 'of 7', notYet: 'not yet',
     noneYet: 'none yet', language: 'Language', expandTop: 'Expand the top cats, with their names', collapseTop: 'Collapse the top cats',
-    caption: 'Hostile and friendly acts {rate} · stress of 7 · hiding % · each point {point}', pt10m: '10 minutes', pt1h: '1 hour', pt1d: '1 day',
+    caption: 'Hostile and friendly interactions {rate} · stress of 7 · hiding % · each point {point}', pt10m: '10 minutes', pt1h: '1 hour', pt1d: '1 day',
     now: 'now', enlarge: 'Enlarge chart',
   },
   ru: {
     pause: 'Пауза', play: 'Пуск', restart: 'Заново', showStats: 'Статистика', stats: 'Стат.', showRoom: 'Комната', room: 'Комн.',
-    howToPlay: 'Как играть', events: 'События', topCats: 'Лучшие кошки', needs: 'Потребности', personality: 'Характер', feelsAbout: 'Отношения',
+    howToPlay: 'Как играть', events: 'События', topCats: 'Лучшие кошки', colonyStats: 'Колония', needs: 'Потребности', personality: 'Характер', feelsAbout: 'Отношения',
     noCat: 'Кошка не выбрана', noCatHint: 'Нажмите на кошку в комнате, чтобы увидеть её потребности, характер и дружбу.',
     chipFeeding: 'Корм', chipLitter: 'Лоток', chipVisitors: 'Гости', chipVacuum: 'Пылесос',
-    goalStress: 'Стресс', goalFights: 'Враждебные', goalContacts: 'Дружеские', goalHiding: 'Прячутся',
+    goalStress: 'Стресс', goalFights: 'Враждебные взаимо­действия', goalContacts: 'Дружеские взаимо­действия', goalHiding: 'Прячутся',
     window: 'Период', span6h: '6 часов', spanToday: 'Сегодня', span3d: '3 дня', spanWeek: '7 дней', spanAll: 'Все дни',
     perHour: 'в час', perDay: 'в день', unitHour: '/час', unitDay: '/день', unitHourShort: '/ч', unitDayShort: '/д', of7: 'из 7', notYet: 'пока нет',
     noneYet: 'пока нет', language: 'Язык', expandTop: 'Развернуть список лучших кошек с именами', collapseTop: 'Свернуть список лучших кошек',
-    caption: 'Враждебные и дружеские действия {rate} · стресс из 7 · прячутся % · точка = {point}', pt10m: '10 минут', pt1h: '1 час', pt1d: '1 день',
+    caption: 'Враждебные и дружеские взаимодействия {rate} · стресс из 7 · прячутся % · точка = {point}', pt10m: '10 минут', pt1h: '1 час', pt1d: '1 день',
     now: 'сейчас', enlarge: 'Увеличить график',
   },
   he: {
     pause: 'השהיה', play: 'הפעלה', restart: 'מחדש', showStats: 'סטטיסטיקה', stats: 'נתונים', showRoom: 'לחדר', room: 'חדר',
-    howToPlay: 'איך משחקים', events: 'אירועים', topCats: 'מובילים', needs: 'צרכים', personality: 'אופי', feelsAbout: 'יחסים',
+    howToPlay: 'איך משחקים', events: 'אירועים', topCats: 'מובילים', colonyStats: 'המושבה', needs: 'צרכים', personality: 'אופי', feelsAbout: 'יחסים',
     noCat: 'לא נבחר חתול', noCatHint: 'לחצו על חתול בחדר כדי לראות כאן את הצרכים, האופי והחברויות שלו.',
     chipFeeding: 'האכלה', chipLitter: 'ארגז חול', chipVisitors: 'מבקרים', chipVacuum: 'שואב',
-    goalStress: 'מתח', goalFights: 'עוינות', goalContacts: 'ידידותיות', goalHiding: 'מסתתרים',
+    goalStress: 'מתח', goalFights: 'אינטראקציות עוינות', goalContacts: 'אינטראקציות ידידותיות', goalHiding: 'מסתתרים',
     window: 'טווח', span6h: '6 שעות', spanToday: 'היום', span3d: '3 ימים', spanWeek: '7 ימים', spanAll: 'כל הימים',
     perHour: 'לשעה', perDay: 'ליום', unitHour: '/שעה', unitDay: '/יום', unitHourShort: '/ש׳', unitDayShort: '/י׳', of7: 'מתוך 7', notYet: 'עדיין לא',
     noneYet: 'עדיין אין', language: 'שפה', expandTop: 'הרחבת רשימת החתולים המובילים עם שמותיהם', collapseTop: 'כיווץ רשימת החתולים המובילים',
-    caption: 'פעולות עוינות וידידותיות {rate} · מתח מתוך 7 · מסתתרים % · כל נקודה {point}', pt10m: '10 דקות', pt1h: 'שעה', pt1d: 'יום',
+    caption: 'אינטראקציות עוינות וידידותיות {rate} · מתח מתוך 7 · מסתתרים % · כל נקודה {point}', pt10m: '10 דקות', pt1h: 'שעה', pt1d: 'יום',
     now: 'עכשיו', enlarge: 'הגדלת הגרף',
   },
 };
@@ -3074,7 +3090,7 @@ const TR = {
     'You can split this time into as many or as few visits as you like.': 'Это время можно разделить на любое число визитов.',
     'Mon': 'Пн', 'Tue': 'Вт', 'Wed': 'Ср', 'Thu': 'Чт', 'Fri': 'Пт', 'Sat': 'Сб', 'Sun': 'Вс',
     // goals chart
-    'Average stress': 'Средний стресс', 'Conflict': 'Конфликты', 'Friendly contact': 'Дружба', 'Hostile': 'Враждебные', 'Friendly': 'Дружеские',
+    'Average stress': 'Средний стресс', 'Conflict': 'Конфликты', 'Friendly contact': 'Дружба', 'Hostile': 'Враждебные', 'Friendly': 'Дружеские', 'Hostile interactions': 'Враждебные взаимодействия', 'Friendly interactions': 'Дружеские взаимодействия',
     'Every hostile act one cat starts at another: a threat stare, a hiss, a chase or a swat. Lower is better.': 'Каждое враждебное действие одной кошки к другой, например угрожающий взгляд, шипение, погоня или удар лапой. Чем ниже, тем лучше.',
     'Every friendly act one cat starts with another: sniffing or greeting, grooming, or play. Higher is better.': 'Каждое дружеское действие одной кошки к другой: обнюхивание или приветствие, вылизывание или игра. Чем выше, тем лучше.',
     'Fights in this window: {n}': 'Драк за это окно: {n}', 'hostile acts': 'враждебные действия', 'friendly acts': 'дружеские действия', 'Most hostile': 'Самые враждебные', 'Hiding': 'Прячутся',
@@ -3194,7 +3210,7 @@ const TR = {
     'Shortened to fit staff time.': 'קוצר לפי זמן הצוות.', 'You chose {a} min each; the litter rounds leave {b}.': 'בחרתם {a} דק׳ לכל ביקור; אחרי הניקוי נשארות {b}.',
     'You can split this time into as many or as few visits as you like.': 'אפשר לחלק את הזמן הזה לכמה ביקורים שרוצים.',
     'Mon': 'ב׳', 'Tue': 'ג׳', 'Wed': 'ד׳', 'Thu': 'ה׳', 'Fri': 'ו׳', 'Sat': 'ש׳', 'Sun': 'א׳',
-    'Average stress': 'מתח ממוצע', 'Conflict': 'עימותים', 'Friendly contact': 'מגע חברותי', 'Hostile': 'עוינות', 'Friendly': 'ידידותיות',
+    'Average stress': 'מתח ממוצע', 'Conflict': 'עימותים', 'Friendly contact': 'מגע חברותי', 'Hostile': 'עוינות', 'Friendly': 'ידידותיות', 'Hostile interactions': 'אינטראקציות עוינות', 'Friendly interactions': 'אינטראקציות ידידותיות',
     'Every hostile act one cat starts at another: a threat stare, a hiss, a chase or a swat. Lower is better.': 'כל פעולה עוינת שחתול מתחיל כלפי אחר, כמו מבט מאיים, נשיפה, מרדף או מכת כפה. נמוך יותר עדיף.',
     'Every friendly act one cat starts with another: sniffing or greeting, grooming, or play. Higher is better.': 'כל פעולה ידידותית שחתול מתחיל עם אחר: הרחה או ברכה, ליקוק או משחק. גבוה יותר עדיף.',
     'Fights in this window: {n}': 'קטטות בחלון הזה: {n}', 'hostile acts': 'פעולות עוינות', 'friendly acts': 'פעולות ידידותיות', 'Most hostile': 'הכי עוינים', 'Hiding': 'הסתתרות',
@@ -3300,8 +3316,8 @@ const GUIDE = {
    follows from them. The model is calibrated against published shelter and colony studies, listed in REALISM.md.</p>`],
   ['The four goals and the chart', `<p><b>Stress</b> is the average Cat Stress Score, from 1 for relaxed to 7 for
    terrified. Lower is better.</p>
-   <p><b>Hostile</b> counts every hostile act a cat starts at another, such as a threat stare, a hiss, a chase or a swat. Lower is better. Fights are rare; their count is in the Hostile tooltip and each one is marked on the room.</p>
-   <p><b>Friendly</b> counts every friendly act a cat starts with another, such as sniffing or greeting, grooming, or play. Higher is better.</p>
+   <p><b>Hostile interactions</b> counts every hostile act a cat starts at another, such as a threat stare, a hiss, a chase or a swat. Lower is better. Fights are rare; their count is in the Hostile interactions tooltip and each one is marked on the room.</p>
+   <p><b>Friendly interactions</b> counts every friendly act a cat starts with another, such as sniffing or greeting, grooming, or play. Higher is better.</p>
    <p><b>Hiding</b> is the share of cats in a hiding place. Lower is better.</p>
    <p>The chart under the room draws all four over time. <b>Show</b> picks how far back it reaches, and <b>Per</b> picks how
    much time each point covers. Click a goal to hide or show its line, and hover it to see the three cats at its top.
@@ -3337,8 +3353,8 @@ const GUIDE = {
    что она делает, следует из них. Модель откалибрована по опубликованным исследованиям приютов и колоний (REALISM.md).</p>`],
   ['Четыре цели и график', `<p><b>Стресс</b> показывает среднюю оценку стресса кошки (CSS), от 1 (спокойна) до 7 (в ужасе).
    Чем ниже, тем лучше.</p>
-   <p><b>Враждебные</b> считают каждое враждебное действие одной кошки к другой, например угрожающий взгляд, шипение, погоню или удар лапой. Чем ниже, тем лучше. Драки редки, их число в подсказке, и каждая отмечена на комнате.</p>
-   <p><b>Дружеские</b> считают каждое дружеское действие, например обнюхивание или приветствие, вылизывание или игру. Чем выше, тем лучше.</p>
+   <p><b>Враждебные взаимодействия</b> считают каждое враждебное действие одной кошки к другой, например угрожающий взгляд, шипение, погоню или удар лапой. Чем ниже, тем лучше. Драки редки, их число в подсказке, и каждая отмечена на комнате.</p>
+   <p><b>Дружеские взаимодействия</b> считают каждое дружеское действие, например обнюхивание или приветствие, вылизывание или игру. Чем выше, тем лучше.</p>
    <p><b>Прячутся</b> показывает долю кошек в укрытии. Чем ниже, тем лучше.</p>
    <p>График под комнатой показывает все четыре во времени. <b>Период</b> задаёт, как далеко назад он смотрит, а единица задаёт,
    в чём считаются драки и дружба. Нажмите на цель, чтобы скрыть или показать её линию; наведите, чтобы увидеть трёх лучших
@@ -3371,8 +3387,8 @@ const GUIDE = {
    לא רבים וכמעט לא מסתתרים. לכל חתול אופי, צרכים ויחס משלו לאחרים, וכל מה שהוא עושה נובע מהם. המודל מכויל
    מול מחקרים שפורסמו על מקלטים ומושבות (REALISM.md).</p>`],
   ['ארבעת היעדים והגרף', `<p><b>מתח</b> הוא מדד המתח (CSS) הממוצע של החתולים, מ־1 רגוע עד 7 מבוהל. נמוך יותר עדיף.</p>
-   <p><b>עוינות</b> סופר כל פעולה עוינת שחתול מתחיל כלפי אחר, כמו מבט מאיים, נשיפה, מרדף או מכת כפה. נמוך יותר עדיף. קטטות נדירות, ומספרן בהסבר הצץ, וכל אחת מסומנת על החדר.</p>
-   <p><b>ידידותיות</b> סופר כל פעולה ידידותית, כמו הרחה או ברכה, ליקוק או משחק. גבוה יותר עדיף.</p>
+   <p><b>אינטראקציות עוינות</b> סופרות כל פעולה עוינת שחתול מתחיל כלפי אחר, כמו מבט מאיים, נשיפה, מרדף או מכת כפה. נמוך יותר עדיף. קטטות נדירות, ומספרן בהסבר הצץ, וכל אחת מסומנת על החדר.</p>
+   <p><b>אינטראקציות ידידותיות</b> סופרות כל פעולה ידידותית, כמו הרחה או ברכה, ליקוק או משחק. גבוה יותר עדיף.</p>
    <p><b>מסתתרים</b> הוא שיעור החתולים במחבוא. נמוך יותר עדיף.</p>
    <p>הגרף שמתחת לחדר מציג את ארבעתם לאורך זמן. <b>טווח</b> קובע כמה אחורה הוא מגיע, והיחידה קובעת במה נספרים
    קטטות ומגעים. לחצו על יעד כדי להסתיר או להציג את הקו שלו, ורחפו מעליו כדי לראות את שלושת החתולים המובילים.
@@ -3439,7 +3455,7 @@ return { LANGS, LABEL, NAME, DIR, S, LOG, TR, plRu, tr, clock, units, catDesc, g
 'use strict';
 
 return {
- "generated": "2026-11-18T09:06:51.936Z",
+ "generated": "2026-11-18T11:37:12.365Z",
  "engine": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
  "fontStack": "\"Segoe UI\", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif",
  "size": {
@@ -3768,13 +3784,21 @@ return {
    "text": "Враждебные",
    "px": 14,
    "chars": 10,
-   "w": 90
+   "w": 90,
+   "lines": 3
   },
   "legNameReg": {
    "text": "Враждебные",
    "px": 14,
    "chars": 10,
-   "w": 83
+   "w": 83,
+   "lines": 3
+  },
+  "topLabReg": {
+   "text": "Враждебные взаимодействия",
+   "px": 14,
+   "chars": 25,
+   "w": 191
   },
   "legValue": {
    "text": "999/hour",
@@ -4212,11 +4236,18 @@ const NEED_LABELS = METRICS.needs;
 // that is also the readout and toggles its series; a span select and a bucket-size select. Heights are
 // the feed's: one row of FEED_VALUES_H on desktop, three on a phone.
 const GOAL_IDS = ['stress', 'conflict', 'friendly', 'hiding'];
-const FEED_VALUES_H = px(LINE + (FS.lead + 12) + 2 * GAP);     // 65: the live feed's row
+const FEED_VALUES_H0 = px(LINE + (FS.lead + 12) + 2 * GAP);     // 65: the live feed's row
+// A goal chip (Nov 18: "Hostile interactions" / "Friendly interactions"): its name wraps at spaces and soft hyphens
+// (layout-metrics legName.lines, the most lines any language's name breaks into) over its value, 16px lines, 2px
+// (4px) padding top and bottom (a line's glyph box runs 17px); never under a 44px target. A legend row is this tall; a feed row holds it.
+const LEG_LINE = 16, CHIP_H = Math.max(TARGET, (METRICS.measured.legName.lines + 1) * LEG_LINE + 8);
+const FEED_VALUES_H = Math.max(FEED_VALUES_H0, CHIP_H);
+// a phone ticket: its colour bar (top 2px, 3px tall) and a 3px gap over the chip
+const TICKET_ROW_H = Math.max(FEED_VALUES_H0, CHIP_H + 3);   // its padding-top is 7px, not 4
 // A legend entry is a 44px target: a 10px swatch, then its short name over its value at 14px.
 // a phone ticket: the colour as a bar along its top (no swatch beside the text), the name in regular weight
-const CHART_TICKET_W = px(Math.max(TX('legNameReg'), TX('legValue')) + 2 * 4);
-const CHART_LEG_W = px(14 + Math.max(TX('legName'), TX('legValue')) + 2 * 4);   // swatch and gap, the text, 4px (--sp-xs) padding a side: four abreast fit 360px
+const CHART_TICKET_W = px(Math.max(TX('legNameReg'), TX('legValue')) + 2 * 4 + 2);
+const CHART_LEG_W = px(14 + Math.max(TX('legName'), TX('legValue')) + 2 * 4 + 2);   // +2: a wrapped name line's subpixel advance   // swatch and gap, the text, 4px (--sp-xs) padding a side: four abreast fit 360px
 // A select: its widest option and the native arrow (24px), padded.
 // A select cell: its visible word ("Show", "Per"), a gap, then the select sized to its longest option.
 // The window control carries its word ("Window [Today]"); the rate control is its option alone ("[per hour]"), which
@@ -4239,21 +4270,23 @@ function chartLayout(w, h) {
   // Band (desktop, Nov 17 round 3): where the strip is taller than one row and wide enough for the legend, the
   // selects and the Enlarge "+" abreast, they share one 44px header row and the plot runs the strip's full width
   // under it: a long, low chart instead of a tall, narrow one, in the same strip height (the room does not move).
-  if (w >= rowW && h >= TARGET + GAP + CHART_PLOT_MIN.h + TICK_H) {
-    const plot = { w, h: h - TARGET - GAP };
+  if (w >= rowW && h >= CHIP_H + GAP + CHART_PLOT_MIN.h + TICK_H) {
+    const plot = { w, h: h - CHIP_H - GAP };
     return { mode: 'band', legendCols: 4, legendRows: 1, plot, fits: true };
   }
-  if (h < 2 * TARGET + CHART_PLOT_MIN.h) {
+  if (h < CHIP_H + TARGET + CHART_PLOT_MIN.h) {
     const plot = { w: w - rowW, h };
     return { mode: 'row', legendCols: 4, legendRows: 1, plot, fits: plot.w >= CHART_PLOT_MIN.w && plot.h >= CHART_PLOT_MIN.h };
   }
   const legendCols = w >= 4 * CHART_LEG_W ? 4 : 2, legendRows = 4 / legendCols;
   // Stacked, the Enlarge button sits on the selects' row; the plot takes the rest.
-  const plot = { w, h: h - legendRows * TARGET - TARGET - 2 * GAP };
+  const plot = { w, h: h - legendRows * CHIP_H - TARGET - 2 * GAP };
   return { mode: 'stacked', legendCols, legendRows, plot, fits: plot.w >= CHART_PLOT_MIN.w && plot.h >= CHART_PLOT_MIN.h && w >= CHART_CTL_ROW_W };
 }
 // The band's height is the live feed's: one row where the one-row chart fits, three otherwise.
-const feedHeight = w => (w >= 4 * CHART_LEG_W + CHART_SELS_W + TARGET + 4 * GAP + CHART_PLOT_MIN.w ? 1 : 3) * FEED_VALUES_H;
+// One row holds a chip (FEED_VALUES_H); three rows stay at the feed's own 65px each, which the band or stacked chart fills.
+const feedHeight = w => w >= 4 * CHART_LEG_W + CHART_SELS_W + TARGET + 4 * GAP + CHART_PLOT_MIN.w ? FEED_VALUES_H
+  : Math.max(3 * FEED_VALUES_H0, (w >= 4 * CHART_LEG_W ? 1 : 2) * CHIP_H + TARGET + 2 * GAP + CHART_PLOT_MIN.h);   // stacked: the legend rows, the selects, the plot's floor
 // The enlarged chart on desktop: a panel over the foot of the room, inside the room's view, the view's
 // width less its frame. Its header row holds the legend, the selects, "Open full stats" and the close
 // button; under it a plot of CHART_BIG_PLOT_H and its time ticks. The room does not resize.
@@ -4290,12 +4323,21 @@ const LEADERS_COL_W = 176;
 // canvas by a quarter. Open (phone): two columns of two goals, as many each as fit under the room. Band (phone,
 // collapsed): the top cat only.
 const LEADERS_FRAME = 2 * GAP + 2, LEADERS_MIN = 2, LEADERS_MAX = 5;
-const leadersHead = () => LEADERS_FRAME + 2 * PAD + TARGET;
-const leadersH = (cols, k) => leadersHead() + (4 / cols) * (LINE + k * TARGET);
+// Column (desktop): the head row is the colony-stats group's title ("Colony stats", the window it covers under it),
+// and a LINE sub-title "Top cats" follows it (Yugen, Nov 18: one group for the window, the chips, the chart, the top cats).
+const leadersHead = mode => LEADERS_FRAME + 2 * PAD + TARGET + (mode === 'column' ? LINE : 0);
+// A goal's label line wraps in the column ("Hostile interactions", "Враждебные взаимодействия"): the two count goals
+// take LAB_ROWS lines each (their longest name, measured whole, at the column's text width); Stress and Hiding one.
+// In two columns (phone, expanded) a row of two goals is as tall as its longer label. The band shows no label words:
+// each goal's colour bar, under the ticket of the same goal and colour right above it, names it.
+const LAB_ROWS = textRowsL(TX('topLabReg'), LEADERS_COL_W - LEADERS_FRAME - 2 * PAD);
+function textRowsL(t, w) { return Math.max(1, Math.ceil(t / Math.max(1, w))); }
+const labLines = cols => cols === 1 ? 2 + 2 * LAB_ROWS : 2 * LAB_ROWS;
+const leadersH = (cols, k, mode) => leadersHead(mode) + labLines(cols) * LINE + (4 / cols) * k * TARGET;
 function leadersLayout(mode, bodyH) {
   if (mode === 'band') return { mode, k: 1, h: LEADERS_FRAME + TARGET };
-  const k = Math.min(LEADERS_MAX, Math.floor((bodyH - leadersHead() - 4 * LINE) / (4 * TARGET)));
-  return { mode, cols: 1, k, w: LEADERS_COL_W, h: leadersH(1, k) };
+  const k = Math.min(LEADERS_MAX, Math.floor((bodyH - leadersHead(mode) - labLines(1) * LINE) / (4 * TARGET)));
+  return { mode, cols: 1, k, w: LEADERS_COL_W, h: leadersH(1, k, mode) };
 }
 // ---------------------------------------------------------------- content model
 const textRows = (textW, innerW) => Math.max(1, Math.ceil(textW / Math.max(1, innerW)));
@@ -4551,7 +4593,7 @@ function desktop(W, H, st) {
   while (leftW > leftMin && strip(W - LW - leftW) > bodyH - room.outerH) leftW--;
   const bandW = W - LW - leftW;
   out.push(R('view', leftW, BAR_H, bandW, room.outerH), R('feed', leftW, BAR_H + room.outerH, bandW, bodyH - room.outerH));
-  if (lead.k < LEADERS_MIN) throw new Shortfall('top cats column, ' + LEADERS_MIN + ' cats a goal', leadersH(1, LEADERS_MIN), bodyH);
+  if (lead.k < LEADERS_MIN) throw new Shortfall('top cats column, ' + LEADERS_MIN + ' cats a goal', leadersH(1, LEADERS_MIN, 'column'), bodyH);
   out.push(R('leaders', leftW + bandW, BAR_H, LW, bodyH));
 
   // ---- the left column: one panel of one constant height over the event log, whatever it shows. The
@@ -4598,11 +4640,14 @@ function phonePortrait(W, H, st) {
   const tickets = shortBy(fullFeed, msgs0, leadFull.h) > 0;
   // the four tickets go two abreast in two rows when four abreast would not fit the width (the widest goal name,
   // in any language, sets a ticket's width): a row of tickets is FEED_VALUES_H
-  const tCols = W >= 4 * CHART_TICKET_W ? 4 : 2, TICKETS_H = (4 / tCols) * FEED_VALUES_H;
-  let logMsgs = tickets && shortBy(TICKETS_H, msgs0, leadFull.h) > 0 ? msgs0 - 1 : msgs0;
-  const tight = tickets && shortBy(TICKETS_H, logMsgs, leadFull.h) > 0;
+  const tCols = W >= 4 * CHART_TICKET_W ? 4 : 2, TICKETS0 = (4 / tCols) * TICKET_ROW_H;
+  let logMsgs = tickets && shortBy(TICKETS0, msgs0, leadFull.h) > 0 ? msgs0 - 1 : msgs0;
+  const tight = tickets && shortBy(TICKETS0, logMsgs, leadFull.h) > 0;
   const leadP = tight ? { mode: 'band', tight: true, k: 1, h: leadFull.h - 2 * GAP } : leadFull, lbH = leadP.h;
-  if (tight && shortBy(TICKETS_H, logMsgs, lbH) > 0) logMsgs = Math.max(1, logMsgs - 1);
+  if (tight && shortBy(TICKETS0, logMsgs, lbH) > 0) logMsgs = Math.max(1, logMsgs - 1);
+  // Over the tickets, the colony-stats group's header row (TARGET, no gap under it: the tickets' colour bars set them off): its title and the Window and rate selects. Only
+  // where it fits with every step above unchanged (375x812 yes; 375x667 no: there the selects stay in Show stats).
+  const groupHead = tickets && shortBy(TICKETS0 + TARGET, logMsgs, lbH) <= 0, TICKETS_H = TICKETS0 + (groupHead ? TARGET : 0);
   const logMin = CONTENT.logHeightFor(W, st, logMsgs);
   const feedMode = 'values', feedH = tickets ? TICKETS_H : fullFeed;
   const body = H - 2 * BAR_H - feedH - lbH - cardsH;
@@ -4616,7 +4661,7 @@ function phonePortrait(W, H, st) {
   const leadOpen = !catPanel && st.view === 'room' && st.leadersOpen;
   // Expanded, as many ranked cats per goal as the space under the room holds (two columns of two goals), at least one.
   const openAvail = feedH + lbH + cardsH + body - viewH - logMin;
-  const openK = Math.min(LEADERS_MAX, Math.floor((openAvail - leadersHead() - 2 * LINE) / (2 * TARGET)));
+  const openK = Math.min(LEADERS_MAX, Math.floor((openAvail - leadersHead() - labLines(2) * LINE) / (2 * TARGET)));
   if (leadOpen && openK < 1) throw new Shortfall('expanded top cats under the phone room', leadersH(2, 1), openAvail);
   const openH = leadOpen ? Math.max(feedH + lbH + cardsH, leadersH(2, openK)) : 0;
   const catH = catPanel ? Math.max(feedH + lbH + cardsH, Math.min(CONTENT.readoutFit(W, 1e6).required, feedH + lbH + cardsH + body - viewH - logMin)) : 0;
@@ -4658,7 +4703,7 @@ function phonePortrait(W, H, st) {
   const wordsFit = W - RESTART_WORD_W - GUIDE_W - LANG_W >= TOGGLE_MIN_W;
   out.push(...cols(by['bar-bottom'], [{ id: 'restart', w: wordsFit ? RESTART_WORD_W : RESTART_W }, { id: 'toggle-view' },
     { id: 'btn-guide', w: GUIDE_W }, { id: 'lang', w: LANG_W }]));
-  return { rects: out, form: 'phone-portrait', feedMode, chart: tickets ? { mode: 'tickets', legendCols: tCols, legendRows: 4 / tCols, plot: { w: 0, h: 0 }, fits: true } : chartLayout(W, feedHeight(W)), frame: FRAME.phone, logFloor: logMsgs, feedPad: 0, cardChips: true,
+  return { rects: out, form: 'phone-portrait', feedMode, chart: tickets ? { mode: 'tickets', groupHead, legendCols: tCols, legendRows: 4 / tCols, plot: { w: 0, h: 0 }, fits: true } : chartLayout(W, feedHeight(W)), frame: FRAME.phone, logFloor: logMsgs, feedPad: 0, cardChips: true,
     chipLong: Math.floor(W / cardCols) >= CARD_CHIP_LONG_W, pauseLabel: false, restartLabel: wordsFit,
     readoutShows: fitP ? fitP.shown : null, leaders: by.leaders ? (leadOpen ? { mode: 'open', cols: 2, k: openK, h: openH } : leadP) : null,
     readoutPlacement: 'the goals and plan-chip bands under the room, while a cat is picked',
@@ -4772,6 +4817,21 @@ function formFor(W, H) {
   if (W >= DESKTOP_MIN_W && H >= DESKTOP_MIN_H) return 'desktop';
   return W >= H ? 'phone-landscape' : 'phone-portrait';
 }
+// The colony-stats group (Yugen, Nov 18): the window scopes the chips, the chart and the top cats, so the goals strip
+// and the top cats are drawn as one panel: one outline and one background around both rectangles, inset GAP / 2.
+// Desktop: an L (the strip under the room joined to the top-cats column beside it, whichever side RTL puts it);
+// phone portrait: the rectangle around the stacked tickets and top-cats band. Null where the two are not both shown.
+function groupOutline(f, l) {
+  if (!f || !l) return null;
+  const g = GAP / 2, fb = f.y + f.h, lb = l.y + l.h;
+  if (l.y >= fb - 1 || f.y >= lb - 1) {   // stacked: one rectangle
+    const x0 = Math.min(f.x, l.x) + g, x1 = Math.max(f.x + f.w, l.x + l.w) - g, y0 = Math.min(f.y, l.y) + g, y1 = Math.max(fb, lb) - g;
+    return { pts: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] };
+  }
+  const right = l.x >= f.x + f.w / 2, bot = Math.max(fb, lb) - g;
+  const fo = right ? f.x + g : f.x + f.w - g, li = right ? l.x + g : l.x + l.w - g, lo = right ? l.x + l.w - g : l.x + g;
+  return { pts: [[fo, f.y + g], [li, f.y + g], [li, l.y + g], [lo, l.y + g], [lo, bot], [fo, bot]] };
+}
 // The one entry point the running UI uses. `state` is the same shape the solver enumerates.
 function solve(W, H, state) {
   const st = Object.assign({ editor: [], selected: false, view: 'room', pointer: 'idle', burst: 1,
@@ -4783,6 +4843,7 @@ function solve(W, H, state) {
   // from the right. The room's own canvas is a floor plan and is not mirrored; only where its view sits.
   if (st.dir === 'rtl') { for (const r of sol.rects) r.x = W - r.x - r.w; if (sol.chartBig) sol.chartBig.x = W - sol.chartBig.x - sol.chartBig.w; sol.dir = 'rtl'; }
   sol.byId = Object.fromEntries(sol.rects.map(r => [r.id, r]));
+  sol.group = groupOutline(sol.byId.feed, sol.byId.leaders);
   return sol;
 }
 
@@ -4791,7 +4852,7 @@ return { TX, px, FS, LINE, TARGET, GAP, PAD, BAR_H, CARD_H, ASPECT, FILL_MIN, BA
   GUIDE_W, MARKER_W, MARKERS, CARDS, PLAN_CARDS, CONTROL_CARDS, EDITABLE, CARD_CHIP_W, CARD_CHIP_LONG_W, TRI_W, TIMELINE_BIG_H, EDITOR_GAP, STAFF_BAR_H,
   PAUSE_W, PAUSE_ICON_W, RESTART_W, LOG_HEADER, LOG_PAD, LOG_MSGS,
   LOG_MIN_MSGS, CANVAS_MIN_W, FRAME, LEFT_W, canvasIn, framedRoom, NEED_LABELS,
-  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, LANG_W, CHART_LEG_W, CHART_TICKET_W, CHART_SEL_W, CHART_SPAN_W, CHART_RATE_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
+  GOAL_IDS, FEED_VALUES_H, CHIP_H, LEG_LINE, TICKET_ROW_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, LANG_W, CHART_LEG_W, CHART_TICKET_W, CHART_SEL_W, CHART_SPAN_W, CHART_RATE_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
   desktop, phonePortrait, phoneLandscape, contentBox, fillOf, FORMS, VIEWS, VIEWPORTS, formFor, solve, METRICS };
 });
 
@@ -6641,7 +6702,17 @@ function applyLayout() {
     s.left = r.x + 'px'; s.top = r.y + 'px'; s.width = r.w + 'px'; s.height = r.h + 'px';
     if (reg.api.place) reg.api.place(r, sol);
   }
+  app.style.setProperty('--chip-h', LAY.CHIP_H + 'px');
+  drawGroup(sol.group);
   renderAll();
+}
+// The colony-stats group (layout groupOutline): one outline and background behind the goals strip and the top cats.
+let groupSvg = null;
+function drawGroup(g) {
+  if (!groupSvg) { groupSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); groupSvg.setAttribute('class', 'gframe'); groupSvg.setAttribute('aria-hidden', 'true');
+    groupSvg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'path')); app.prepend(groupSvg); }
+  groupSvg.style.display = g ? '' : 'none';
+  if (g) groupSvg.firstChild.setAttribute('d', 'M' + g.pts.map(p => (p[0] + 0.5) + ' ' + (p[1] + 0.5)).join(' L') + ' Z');
 }
 
 // ---------------------------------------------------------------- chrome
@@ -7100,10 +7171,10 @@ const GOALS = [
   { id: 'stress', get name() { return tr('Average stress'); }, short: 'Stress', metrics: [0], color: TK.goalSeries.stress, dash: [], mark: 'circle',
     get tip() { return tr('The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.'); },
     level: s => U.toCSS(s.stress), range: [1, 7], fmt: v => v.toFixed(1) + ' ' + t('of7') },
-  { id: 'conflict', get name() { return tr('Hostile'); }, short: 'Hostile', metrics: [12, 14], color: TK.goalSeries.conflict, dash: [6, 3], mark: 'square',
+  { id: 'conflict', get name() { return tr('Hostile interactions'); }, short: 'Hostile interactions', metrics: [12, 14], color: TK.goalSeries.conflict, dash: [6, 3], mark: 'square',
     get tip() { return tr('Every hostile act one cat starts at another: a threat stare, a hiss, a chase or a swat. Lower is better.') + ' ' + tr('Fights in this window: {n}', { n: fightsInWindow() }); },
     count: s => s.hostiles || 0, box: 'Hostile', get unitWord() { return tr('hostile acts'); } },
-  { id: 'friendly', get name() { return tr('Friendly'); }, short: 'Friendly', metrics: [10], color: TK.goalSeries.friendly, dash: [2, 3], mark: 'triangle',
+  { id: 'friendly', get name() { return tr('Friendly interactions'); }, short: 'Friendly interactions', metrics: [10], color: TK.goalSeries.friendly, dash: [2, 3], mark: 'triangle',
     get tip() { return tr('Every friendly act one cat starts with another: sniffing or greeting, grooming, or play. Higher is better.'); },
     count: s => s.friendlies || 0, box: 'Friendly', get unitWord() { return tr('friendly acts'); } },
   { id: 'hiding', get name() { return tr('Hiding'); }, short: 'Hiding', metrics: [8], color: TK.goalSeries.hiding, dash: [8, 3, 2, 3], mark: 'diamond',
@@ -7200,6 +7271,8 @@ function buildChart(host, big) {
   const box = el('div', 'goals' + (big ? ' big' : '')); host.appendChild(box);
   const legend = el('div', 'legend'), plotBox = el('div', 'plot'), cv = document.createElement('canvas'), ctl = el('div', 'ctl');
   plotBox.appendChild(cv); box.append(legend, ctl, plotBox);
+  // The colony-stats group's title: shown on a phone, where the header row over the tickets carries it and the selects.
+  const gtitle = big ? null : el('h3', 'gtitle', t('colonyStats')); if (gtitle) ctl.prepend(gtitle);
   // The enlarged chart's top-cats column: four blocks, a heading and three cat names each; a name selects its cat.
   const tops = big ? el('div', 'tops') : null, topRows = {};
   if (tops) { for (const G of GOALS) { const blk = el('div', 'tblk'), row = el('div', 'trow'); blk.append(el('h3', null, TOP_HEAD[G.id]), row); blk.dataset.goal = G.id; tops.appendChild(blk); topRows[G.id] = row; }
@@ -7229,7 +7302,8 @@ function buildChart(host, big) {
   // is plain text ("per hour") in the select's place.
   const rateText = el('span', 'only');
   const labelled = (word, w, ...xs) => { const l = el('label', 'csel'); if (word) l.append(el('span', 'w', word)); l.append(...xs); l.style.width = w + 'px'; return l; };
-  ctl.prepend(labelled(t('window'), LAY.CHART_SPAN_W, spanSel), labelled(null, LAY.CHART_RATE_W, grainSel, rateText));
+  const spanCell = labelled(t('window'), LAY.CHART_SPAN_W, spanSel), rateCell = labelled(null, LAY.CHART_RATE_W, grainSel, rateText);
+  if (gtitle) gtitle.after(spanCell, rateCell); else ctl.prepend(spanCell, rateCell);
   const fixGrain = () => {
     // The list is rebuilt only when the set changes: touching an open select's options every frame shuts its menu.
     const ok = ratesFor(UI.chart.span), sig = ok.map(g => g[0]).join();
@@ -7317,7 +7391,7 @@ function buildChart(host, big) {
       // The enlarged chart: its header row on desktop, stacked on a phone's view.
       const c = big ? { mode: FORM === 'desktop' ? 'big' : 'stacked', legendCols: r.w >= 4 * LAY.CHART_LEG_W ? 4 : 2 } : sol.chart, pad = big ? 12 : sol.feedPad;
       box.style.padding = big ? `${pad}px` : `0 ${pad}px ${pad}px`;
-      box.className = 'goals m-' + c.mode + (big ? ' big' : '');
+      box.className = 'goals m-' + c.mode + (big ? ' big' : '') + (c.mode === 'tickets' && !c.groupHead ? ' nohead' : '');
       if (big) legend.style.display = FORM !== 'desktop' || (sol.chartBig && sol.chartBig.legend) ? '' : 'none';   // m-row, m-stacked or m-big ("row" alone is the readout's class)
       legend.style.gridTemplateColumns = `repeat(${c.legendCols},${c.mode === 'tickets' ? LAY.CHART_TICKET_W : LAY.CHART_LEG_W}px)`;
       // the enlarged chart on desktop: the top-cats column after the plot, at the width the solver reserved
@@ -7443,13 +7517,14 @@ BUILD['readout'] = node => buildReadout(node);
 // a band under the goals on phone portrait). Every entry is a 44px target; clicking one picks that cat.
 function buildLeaders(node) {
   const box = el('div', 'leaders'), top = el('div', 'lhead'), ttl = el('div', 'ttl'), head = el('h3', null, t('topCats')), lrows = {};
+  const sub = el('h4', 'lsub', t('topCats')), lrowLab = {};   // column: the head row is the group's title, and this names the top cats
   // The plain "+" that expands the band (phone portrait); the chart's Enlarge "+" is the same control.
   const grow = el('button', 'grow', '+'); grow.type = 'button';
   grow.onclick = () => { UI.leadersOpen = !UI.leadersOpen; applyLayout(); };
   const win = el('span', 'win');   // the window the panel covers, the chart's own: "Today · per hour"
-  ttl.append(head, win); top.append(ttl, grow); box.appendChild(top);
+  ttl.append(head, win); top.append(ttl, grow); box.append(top, sub);
   const goals = el('div', 'lgoals'); box.appendChild(goals);
-  for (const G of GOALS) { const r = el('div', 'lrow'); r.appendChild(el('span', 'lab', LEADER_LAB[G.id])); goals.appendChild(r); lrows[G.id] = { r, bs: [] }; }
+  for (const G of GOALS) { const r = el('div', 'lrow'), lab = el('span', 'lab', LEADER_LAB[G.id]); lab.style.setProperty('--c', G.color); r.appendChild(lab); lrowLab[G.id] = lab; goals.appendChild(r); lrows[G.id] = { r, bs: [] }; }
   node.appendChild(box);
   const entry = (G, x, i) => {
     const b = el('button', 'leader'); b.type = 'button';
@@ -7468,7 +7543,10 @@ function buildLeaders(node) {
   const render = () => {
     const L = SOL && SOL.leaders, mode = L ? L.mode : 'column', k = L ? L.k : 1;
     const cls = 'leaders ' + mode + (L && L.cols === 2 ? ' two' : '') + (L && L.tight ? ' tight' : ''); if (box.className !== cls) box.className = cls;
-    const open = mode === 'open';
+    const open = mode === 'open', htx = mode === 'column' ? t('colonyStats') : t('topCats');
+    if (head.textContent !== htx) head.textContent = htx;
+    // the band names each goal by its colour bar (under the ticket of the same colour); its words stay the accessible name
+    for (const G of GOALS) { const lb = lrowLab[G.id], word = mode === 'band' ? '' : LEADER_LAB[G.id]; if (lb.textContent !== word) lb.textContent = word; lb.title = LEADER_LAB[G.id]; lb.setAttribute('aria-label', LEADER_LAB[G.id]); }
     grow.textContent = open ? '−' : '+'; grow.style.display = mode === 'column' ? 'none' : '';
     const word = open ? t('collapseTop') : t('expandTop');
     grow.title = word; grow.setAttribute('aria-label', word); grow.setAttribute('aria-expanded', String(open));
