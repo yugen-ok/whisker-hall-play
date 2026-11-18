@@ -255,6 +255,9 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .goals .leg .v{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .goals .leg.off .nm{text-decoration:line-through;color:var(--muted)}
 .goals .leg.off .sw{opacity:.3}
+.goals.m-tickets .leg{position:relative}
+.goals.m-tickets .leg .sw{position:absolute;top:2px;left:var(--sp-xs);right:var(--sp-xs);width:auto;height:3px}
+.goals.m-tickets .leg .nm{font-weight:var(--fw-normal, 400)}
 .goals .plot{flex:1 1 0;min-width:0;min-height:0;position:relative}
 .goals .plot canvas{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
 .goals .ctl{display:flex;gap:var(--sp-sm);flex:none;align-items:center}
@@ -320,7 +323,7 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .readout.empty .blocks{display:none}
 .readout .doing{display:flex;align-items:center;gap:var(--sp-sm);flex:none;font-weight:var(--fw-bold);
  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.readout .doing .dot{flex:none;width:10px;height:10px;border-radius:var(--r-pill)}
+.readout .doing .dot{flex:none;display:block}
 /* The top cats (layout leadersLayout): a panel of its own, set off by a GAP margin, its own border and background.
    'column' (desktop) and 'open' (phone, expanded): the title row, then per goal a label line over a 44px entry, the
    face beside the name over the value. 'band' (phone): per goal a label line over the face and value, the "+" at the
@@ -330,6 +333,7 @@ input[type=range]{accent-color:var(--accent);height:var(--sz-target);cursor:poin
 .leaders .lhead{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-sm);height:var(--sz-target);flex:none}
 .leaders .ttl{display:flex;flex-direction:column;min-width:0}
 .leaders h3{margin:0;font-size:var(--fs-lead);line-height:var(--lh-ui);font-weight:var(--fw-bold);white-space:nowrap}
+.leaders .win{font-size:var(--fs-ui);line-height:var(--lh-ui);color:var(--ink);white-space:nowrap}
 .leaders .grow{flex:none;width:var(--sz-target);height:var(--sz-target);font-size:var(--fs-lead);font-weight:var(--fw-bold);
  color:var(--accent);background:var(--surface);border:0;border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--lineStrong);cursor:pointer;padding:0}
 .leaders .grow:hover{box-shadow:inset 0 0 0 2px var(--accent)}
@@ -534,10 +538,10 @@ const room = {
 // lookOf), never from the sim's random stream. ASSUMPTION (render only): a plain spread of human skin
 // tones, natural hair colours, and casual shirt colours; staff all wear the one uniform shirt.
 const person = {
-  skin: ['#f3d2b5', '#e5b48f', '#c98e64', '#a26a43', '#7a4a2c', '#553220'],
-  hair: { black: '#1d1714', brown: '#5a3a22', blonde: '#d8b46a', red: '#a3452a', grey: '#a9a49c', auburn: '#7a2e1c', darkBrown: '#3a2618' },
+  skin: ['#f0d8c4', '#ddb999', '#c19a78', '#977051', '#6e4c36', '#4a3326'],   // light to deep, muted (no orange or pink cast)
+  hair: { black: '#2b2220', darkBrown: '#4a3226', brown: '#6b4a32', auburn: '#7a3b22', red: '#8a4a2e', blonde: '#b08a5a', grey: '#9a958e' },   // natural, muted
   shirt: ['#c0504d', '#4f81bd', '#9bbb59', '#8064a2', '#f2c14e', '#e07b39', '#4bacc6', '#d9d2c5', '#5b5b5b'],
-  uniform: '#2f6d62',    // staff polo, one colour so staff read at a glance
+  uniform: '#6f7d58',    // the staff cap: a muted sage-olive, one colour so staff read at a glance
   trousers: '#3b3f4a',
   outline: '#2b2118',
 };
@@ -546,7 +550,7 @@ const person = {
 // one detail colour; every object has its own silhouette first and its own colour second.
 const object = {
   bowl:    { body: '#c4573c', edge: '#5a4030', content: '#8a5a32', detail: '#f4ead8' },   // coral bowl, kibble
-  water:   { body: '#33658a', edge: '#5a4030', content: '#4f8fb0', detail: '#ffffff' },   // steel-blue bowl, water
+  water:   { body: '#4b6a7a', edge: '#5a4030', content: '#7899a8', detail: '#f4ead8' },   // muted slate-blue bowl, water
   litter:  { body: '#8b8f7a', edge: '#5a4030', content: '#ece0c6', detail: '#8b8f7a' },   // tray, sand
   bed:     { body: '#7f9f74', edge: '#5a4030', content: '#e9e0c9', detail: '#5a4030' },   // sage cushion
   perch:   { body: '#c9b08a', edge: '#5a4030', content: '#9c7a59', detail: '#d8bf8c' },   // carpeted cat tree
@@ -561,11 +565,11 @@ const object = {
 // halo under it. Each clears 3:1 against both floors, and the glyph clears 4.5:1 on each.
 const activity = {
   rest:   '#4a5870',
-  need:   '#335d2e',
-  solo:   '#663c8c',
-  friend: '#1d626b',
-  host:   '#9c231b',
-  flee:   '#24569a',
+  need:   '#4b5e32',
+  solo:   '#6a4a68',
+  friend: '#33605a',
+  host:   '#8e3626',
+  flee:   '#3f5a78',
 };
 
 // Coats: real shelter fur. `pattern` says how base and mark are laid out on the body, so a tabby has
@@ -2800,11 +2804,11 @@ const S = {
     howToPlay: 'How to play', events: 'Events', topCats: 'Top cats', needs: 'Needs', personality: 'Personality', feelsAbout: 'Feels about',
     noCat: 'No cat picked', noCatHint: 'Click a cat in the room to see its needs, personality and friendships here.',
     chipFeeding: 'Feeding', chipLitter: 'Litter', chipVisitors: 'Visitors', chipVacuum: 'Vacuum',
-    goalStress: 'Stress', goalFights: 'Fights', goalContacts: 'Contacts', goalHiding: 'Hiding',
+    goalStress: 'Stress', goalFights: 'Hostile', goalContacts: 'Friendly', goalHiding: 'Hiding',
     window: 'Window', span6h: '6 hours', spanToday: 'Today', span3d: '3 days', spanWeek: '7 days', spanAll: 'All days',
     perHour: 'per hour', perDay: 'per day', unitHour: '/hour', unitDay: '/day', unitHourShort: '/h', unitDayShort: '/d', of7: 'of 7', notYet: 'not yet',
     noneYet: 'none yet', language: 'Language', expandTop: 'Expand the top cats, with their names', collapseTop: 'Collapse the top cats',
-    caption: 'Fights and contacts {rate} · stress of 7 · hiding % · each point {point}', pt10m: '10 minutes', pt1h: '1 hour', pt1d: '1 day',
+    caption: 'Hostile and friendly acts {rate} · stress of 7 · hiding % · each point {point}', pt10m: '10 minutes', pt1h: '1 hour', pt1d: '1 day',
     now: 'now', enlarge: 'Enlarge chart',
   },
   ru: {
@@ -2812,11 +2816,11 @@ const S = {
     howToPlay: 'Как играть', events: 'События', topCats: 'Лучшие кошки', needs: 'Потребности', personality: 'Характер', feelsAbout: 'Отношения',
     noCat: 'Кошка не выбрана', noCatHint: 'Нажмите на кошку в комнате, чтобы увидеть её потребности, характер и дружбу.',
     chipFeeding: 'Корм', chipLitter: 'Лоток', chipVisitors: 'Гости', chipVacuum: 'Пылесос',
-    goalStress: 'Стресс', goalFights: 'Драки', goalContacts: 'Дружба', goalHiding: 'Прячутся',
+    goalStress: 'Стресс', goalFights: 'Враждебные', goalContacts: 'Дружеские', goalHiding: 'Прячутся',
     window: 'Период', span6h: '6 часов', spanToday: 'Сегодня', span3d: '3 дня', spanWeek: '7 дней', spanAll: 'Все дни',
     perHour: 'в час', perDay: 'в день', unitHour: '/час', unitDay: '/день', unitHourShort: '/ч', unitDayShort: '/д', of7: 'из 7', notYet: 'пока нет',
     noneYet: 'пока нет', language: 'Язык', expandTop: 'Развернуть список лучших кошек с именами', collapseTop: 'Свернуть список лучших кошек',
-    caption: 'Драки и дружба {rate} · стресс из 7 · прячутся % · точка = {point}', pt10m: '10 минут', pt1h: '1 час', pt1d: '1 день',
+    caption: 'Враждебные и дружеские действия {rate} · стресс из 7 · прячутся % · точка = {point}', pt10m: '10 минут', pt1h: '1 час', pt1d: '1 день',
     now: 'сейчас', enlarge: 'Увеличить график',
   },
   he: {
@@ -2824,11 +2828,11 @@ const S = {
     howToPlay: 'איך משחקים', events: 'אירועים', topCats: 'מובילים', needs: 'צרכים', personality: 'אופי', feelsAbout: 'יחסים',
     noCat: 'לא נבחר חתול', noCatHint: 'לחצו על חתול בחדר כדי לראות כאן את הצרכים, האופי והחברויות שלו.',
     chipFeeding: 'האכלה', chipLitter: 'ארגז חול', chipVisitors: 'מבקרים', chipVacuum: 'שואב',
-    goalStress: 'מתח', goalFights: 'קטטות', goalContacts: 'מגעים', goalHiding: 'מסתתרים',
+    goalStress: 'מתח', goalFights: 'עוינות', goalContacts: 'ידידותיות', goalHiding: 'מסתתרים',
     window: 'טווח', span6h: '6 שעות', spanToday: 'היום', span3d: '3 ימים', spanWeek: '7 ימים', spanAll: 'כל הימים',
     perHour: 'לשעה', perDay: 'ליום', unitHour: '/שעה', unitDay: '/יום', unitHourShort: '/ש׳', unitDayShort: '/י׳', of7: 'מתוך 7', notYet: 'עדיין לא',
     noneYet: 'עדיין אין', language: 'שפה', expandTop: 'הרחבת רשימת החתולים המובילים עם שמותיהם', collapseTop: 'כיווץ רשימת החתולים המובילים',
-    caption: 'קטטות ומגעים {rate} · מתח מתוך 7 · מסתתרים % · כל נקודה {point}', pt10m: '10 דקות', pt1h: 'שעה', pt1d: 'יום',
+    caption: 'פעולות עוינות וידידותיות {rate} · מתח מתוך 7 · מסתתרים % · כל נקודה {point}', pt10m: '10 דקות', pt1h: 'שעה', pt1d: 'יום',
     now: 'עכשיו', enlarge: 'הגדלת הגרף',
   },
 };
@@ -3070,7 +3074,10 @@ const TR = {
     'You can split this time into as many or as few visits as you like.': 'Это время можно разделить на любое число визитов.',
     'Mon': 'Пн', 'Tue': 'Вт', 'Wed': 'Ср', 'Thu': 'Чт', 'Fri': 'Пт', 'Sat': 'Сб', 'Sun': 'Вс',
     // goals chart
-    'Average stress': 'Средний стресс', 'Conflict': 'Конфликты', 'Friendly contact': 'Дружба', 'Hiding': 'Прячутся',
+    'Average stress': 'Средний стресс', 'Conflict': 'Конфликты', 'Friendly contact': 'Дружба', 'Hostile': 'Враждебные', 'Friendly': 'Дружеские',
+    'Every hostile act one cat starts at another: a threat stare, a hiss, a chase or a swat. Lower is better.': 'Каждое враждебное действие одной кошки к другой, например угрожающий взгляд, шипение, погоня или удар лапой. Чем ниже, тем лучше.',
+    'Every friendly act one cat starts with another: sniffing or greeting, grooming, or play. Higher is better.': 'Каждое дружеское действие одной кошки к другой: обнюхивание или приветствие, вылизывание или игра. Чем выше, тем лучше.',
+    'Fights in this window: {n}': 'Драк за это окно: {n}', 'hostile acts': 'враждебные действия', 'friendly acts': 'дружеские действия', 'Most hostile': 'Самые враждебные', 'Hiding': 'Прячутся',
     'The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.':
       'Оценка стресса кошки (CSS), средняя по всем: 1 — спокойна, 7 — в ужасе. Измеряется каждые 5 минут. Чем ниже, тем лучше.',
     'Every fight and every single swat between two cats, counted as it happens. Lower is better.': 'Каждая драка и каждый удар лапой между кошками. Чем ниже, тем лучше.',
@@ -3187,7 +3194,10 @@ const TR = {
     'Shortened to fit staff time.': 'קוצר לפי זמן הצוות.', 'You chose {a} min each; the litter rounds leave {b}.': 'בחרתם {a} דק׳ לכל ביקור; אחרי הניקוי נשארות {b}.',
     'You can split this time into as many or as few visits as you like.': 'אפשר לחלק את הזמן הזה לכמה ביקורים שרוצים.',
     'Mon': 'ב׳', 'Tue': 'ג׳', 'Wed': 'ד׳', 'Thu': 'ה׳', 'Fri': 'ו׳', 'Sat': 'ש׳', 'Sun': 'א׳',
-    'Average stress': 'מתח ממוצע', 'Conflict': 'עימותים', 'Friendly contact': 'מגע חברותי', 'Hiding': 'הסתתרות',
+    'Average stress': 'מתח ממוצע', 'Conflict': 'עימותים', 'Friendly contact': 'מגע חברותי', 'Hostile': 'עוינות', 'Friendly': 'ידידותיות',
+    'Every hostile act one cat starts at another: a threat stare, a hiss, a chase or a swat. Lower is better.': 'כל פעולה עוינת שחתול מתחיל כלפי אחר, כמו מבט מאיים, נשיפה, מרדף או מכת כפה. נמוך יותר עדיף.',
+    'Every friendly act one cat starts with another: sniffing or greeting, grooming, or play. Higher is better.': 'כל פעולה ידידותית שחתול מתחיל עם אחר: הרחה או ברכה, ליקוק או משחק. גבוה יותר עדיף.',
+    'Fights in this window: {n}': 'קטטות בחלון הזה: {n}', 'hostile acts': 'פעולות עוינות', 'friendly acts': 'פעולות ידידותיות', 'Most hostile': 'הכי עוינים', 'Hiding': 'הסתתרות',
     'The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.':
       'מדד המתח (CSS) של כל חתול, בממוצע: 1 רגוע, 7 מבוהל. נמדד כל 5 דקות. נמוך יותר עדיף.',
     'Every fight and every single swat between two cats, counted as it happens. Lower is better.': 'כל קטטה וכל מכת כפה בין שני חתולים, נספרות כשהן קורות. נמוך יותר עדיף.',
@@ -3290,8 +3300,8 @@ const GUIDE = {
    follows from them. The model is calibrated against published shelter and colony studies, listed in REALISM.md.</p>`],
   ['The four goals and the chart', `<p><b>Stress</b> is the average Cat Stress Score, from 1 for relaxed to 7 for
    terrified. Lower is better.</p>
-   <p><b>Conflict</b> counts fights and swats between cats. Lower is better.</p>
-   <p><b>Friendly</b> counts the times a cat starts grooming, playing with or greeting another cat. Higher is better.</p>
+   <p><b>Hostile</b> counts every hostile act a cat starts at another, such as a threat stare, a hiss, a chase or a swat. Lower is better. Fights are rare; their count is in the Hostile tooltip and each one is marked on the room.</p>
+   <p><b>Friendly</b> counts every friendly act a cat starts with another, such as sniffing or greeting, grooming, or play. Higher is better.</p>
    <p><b>Hiding</b> is the share of cats in a hiding place. Lower is better.</p>
    <p>The chart under the room draws all four over time. <b>Show</b> picks how far back it reaches, and <b>Per</b> picks how
    much time each point covers. Click a goal to hide or show its line, and hover it to see the three cats at its top.
@@ -3327,8 +3337,8 @@ const GUIDE = {
    что она делает, следует из них. Модель откалибрована по опубликованным исследованиям приютов и колоний (REALISM.md).</p>`],
   ['Четыре цели и график', `<p><b>Стресс</b> показывает среднюю оценку стресса кошки (CSS), от 1 (спокойна) до 7 (в ужасе).
    Чем ниже, тем лучше.</p>
-   <p><b>Драки</b> считают число драк и ударов лапой между кошками. Чем ниже, тем лучше.</p>
-   <p><b>Дружба</b> считает, сколько раз кошка начинает вылизывать другую, играть с ней или здороваться. Чем выше, тем лучше.</p>
+   <p><b>Враждебные</b> считают каждое враждебное действие одной кошки к другой, например угрожающий взгляд, шипение, погоню или удар лапой. Чем ниже, тем лучше. Драки редки, их число в подсказке, и каждая отмечена на комнате.</p>
+   <p><b>Дружеские</b> считают каждое дружеское действие, например обнюхивание или приветствие, вылизывание или игру. Чем выше, тем лучше.</p>
    <p><b>Прячутся</b> показывает долю кошек в укрытии. Чем ниже, тем лучше.</p>
    <p>График под комнатой показывает все четыре во времени. <b>Период</b> задаёт, как далеко назад он смотрит, а единица задаёт,
    в чём считаются драки и дружба. Нажмите на цель, чтобы скрыть или показать её линию; наведите, чтобы увидеть трёх лучших
@@ -3361,8 +3371,8 @@ const GUIDE = {
    לא רבים וכמעט לא מסתתרים. לכל חתול אופי, צרכים ויחס משלו לאחרים, וכל מה שהוא עושה נובע מהם. המודל מכויל
    מול מחקרים שפורסמו על מקלטים ומושבות (REALISM.md).</p>`],
   ['ארבעת היעדים והגרף', `<p><b>מתח</b> הוא מדד המתח (CSS) הממוצע של החתולים, מ־1 רגוע עד 7 מבוהל. נמוך יותר עדיף.</p>
-   <p><b>קטטות</b> סופר קטטות ומכות כפה בין חתולים. נמוך יותר עדיף.</p>
-   <p><b>מגעים</b> סופר כמה פעמים חתול מתחיל ללקק, לשחק או לברך חתול אחר. גבוה יותר עדיף.</p>
+   <p><b>עוינות</b> סופר כל פעולה עוינת שחתול מתחיל כלפי אחר, כמו מבט מאיים, נשיפה, מרדף או מכת כפה. נמוך יותר עדיף. קטטות נדירות, ומספרן בהסבר הצץ, וכל אחת מסומנת על החדר.</p>
+   <p><b>ידידותיות</b> סופר כל פעולה ידידותית, כמו הרחה או ברכה, ליקוק או משחק. גבוה יותר עדיף.</p>
    <p><b>מסתתרים</b> הוא שיעור החתולים במחבוא. נמוך יותר עדיף.</p>
    <p>הגרף שמתחת לחדר מציג את ארבעתם לאורך זמן. <b>טווח</b> קובע כמה אחורה הוא מגיע, והיחידה קובעת במה נספרים
    קטטות ומגעים. לחצו על יעד כדי להסתיר או להציג את הקו שלו, ורחפו מעליו כדי לראות את שלושת החתולים המובילים.
@@ -3429,7 +3439,7 @@ return { LANGS, LABEL, NAME, DIR, S, LOG, TR, plRu, tr, clock, units, catDesc, g
 'use strict';
 
 return {
- "generated": "2026-11-17T19:26:07.759Z",
+ "generated": "2026-11-18T09:06:51.936Z",
  "engine": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
  "fontStack": "\"Segoe UI\", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif",
  "size": {
@@ -3628,6 +3638,24 @@ return {
    "chars": 52,
    "w": 343
   },
+  "noCatHint_en": {
+   "text": "Click a cat in the room to see its needs, personality and friendships here.",
+   "px": 14,
+   "chars": 75,
+   "w": 476
+  },
+  "noCatHint_ru": {
+   "text": "Нажмите на кошку в комнате, чтобы увидеть её потребности, характер и дружбу.",
+   "px": 14,
+   "chars": 76,
+   "w": 565
+  },
+  "noCatHint_he": {
+   "text": "לחצו על חתול בחדר כדי לראות כאן את הצרכים, האופי והחברויות שלו.",
+   "px": 14,
+   "chars": 63,
+   "w": 443
+  },
   "editorField": {
    "text": "Sessions per week",
    "px": 14,
@@ -3737,10 +3765,16 @@ return {
    "w": 106
   },
   "legName": {
-   "text": "Прячутся",
+   "text": "Враждебные",
    "px": 14,
-   "chars": 8,
-   "w": 65
+   "chars": 10,
+   "w": 90
+  },
+  "legNameReg": {
+   "text": "Враждебные",
+   "px": 14,
+   "chars": 10,
+   "w": 83
   },
   "legValue": {
    "text": "999/hour",
@@ -4180,6 +4214,8 @@ const NEED_LABELS = METRICS.needs;
 const GOAL_IDS = ['stress', 'conflict', 'friendly', 'hiding'];
 const FEED_VALUES_H = px(LINE + (FS.lead + 12) + 2 * GAP);     // 65: the live feed's row
 // A legend entry is a 44px target: a 10px swatch, then its short name over its value at 14px.
+// a phone ticket: the colour as a bar along its top (no swatch beside the text), the name in regular weight
+const CHART_TICKET_W = px(Math.max(TX('legNameReg'), TX('legValue')) + 2 * 4);
 const CHART_LEG_W = px(14 + Math.max(TX('legName'), TX('legValue')) + 2 * 4);   // swatch and gap, the text, 4px (--sp-xs) padding a side: four abreast fit 360px
 // A select: its widest option and the native arrow (24px), padded.
 // A select cell: its visible word ("Show", "Per"), a gap, then the select sized to its longest option.
@@ -4560,12 +4596,15 @@ function phonePortrait(W, H, st) {
   const msgs0 = LOG_MIN_MSGS['phone-portrait'], fullFeed = feedHeight(W);
   const shortBy = (fh, m, lb) => roomNeed - (H - 2 * BAR_H - fh - lb - cardsH - CONTENT.logHeightFor(W, st, m));
   const tickets = shortBy(fullFeed, msgs0, leadFull.h) > 0;
-  let logMsgs = tickets && shortBy(FEED_VALUES_H, msgs0, leadFull.h) > 0 ? msgs0 - 1 : msgs0;
-  const tight = tickets && shortBy(FEED_VALUES_H, logMsgs, leadFull.h) > 0;
+  // the four tickets go two abreast in two rows when four abreast would not fit the width (the widest goal name,
+  // in any language, sets a ticket's width): a row of tickets is FEED_VALUES_H
+  const tCols = W >= 4 * CHART_TICKET_W ? 4 : 2, TICKETS_H = (4 / tCols) * FEED_VALUES_H;
+  let logMsgs = tickets && shortBy(TICKETS_H, msgs0, leadFull.h) > 0 ? msgs0 - 1 : msgs0;
+  const tight = tickets && shortBy(TICKETS_H, logMsgs, leadFull.h) > 0;
   const leadP = tight ? { mode: 'band', tight: true, k: 1, h: leadFull.h - 2 * GAP } : leadFull, lbH = leadP.h;
-  if (tight && shortBy(FEED_VALUES_H, logMsgs, lbH) > 0) logMsgs = Math.max(1, logMsgs - 1);
+  if (tight && shortBy(TICKETS_H, logMsgs, lbH) > 0) logMsgs = Math.max(1, logMsgs - 1);
   const logMin = CONTENT.logHeightFor(W, st, logMsgs);
-  const feedMode = 'values', feedH = tickets ? FEED_VALUES_H : fullFeed;
+  const feedMode = 'values', feedH = tickets ? TICKETS_H : fullFeed;
   const body = H - 2 * BAR_H - feedH - lbH - cardsH;
   const viewMax = body - logMin;
   const viewH = Math.min(viewMax, CONTENT.viewNeed(W, viewMax, st.view, st));
@@ -4619,7 +4658,7 @@ function phonePortrait(W, H, st) {
   const wordsFit = W - RESTART_WORD_W - GUIDE_W - LANG_W >= TOGGLE_MIN_W;
   out.push(...cols(by['bar-bottom'], [{ id: 'restart', w: wordsFit ? RESTART_WORD_W : RESTART_W }, { id: 'toggle-view' },
     { id: 'btn-guide', w: GUIDE_W }, { id: 'lang', w: LANG_W }]));
-  return { rects: out, form: 'phone-portrait', feedMode, chart: tickets ? { mode: 'tickets', legendCols: 4, legendRows: 1, plot: { w: 0, h: 0 }, fits: true } : chartLayout(W, feedHeight(W)), frame: FRAME.phone, logFloor: logMsgs, feedPad: 0, cardChips: true,
+  return { rects: out, form: 'phone-portrait', feedMode, chart: tickets ? { mode: 'tickets', legendCols: tCols, legendRows: 4 / tCols, plot: { w: 0, h: 0 }, fits: true } : chartLayout(W, feedHeight(W)), frame: FRAME.phone, logFloor: logMsgs, feedPad: 0, cardChips: true,
     chipLong: Math.floor(W / cardCols) >= CARD_CHIP_LONG_W, pauseLabel: false, restartLabel: wordsFit,
     readoutShows: fitP ? fitP.shown : null, leaders: by.leaders ? (leadOpen ? { mode: 'open', cols: 2, k: openK, h: openH } : leadP) : null,
     readoutPlacement: 'the goals and plan-chip bands under the room, while a cat is picked',
@@ -4752,7 +4791,7 @@ return { TX, px, FS, LINE, TARGET, GAP, PAD, BAR_H, CARD_H, ASPECT, FILL_MIN, BA
   GUIDE_W, MARKER_W, MARKERS, CARDS, PLAN_CARDS, CONTROL_CARDS, EDITABLE, CARD_CHIP_W, CARD_CHIP_LONG_W, TRI_W, TIMELINE_BIG_H, EDITOR_GAP, STAFF_BAR_H,
   PAUSE_W, PAUSE_ICON_W, RESTART_W, LOG_HEADER, LOG_PAD, LOG_MSGS,
   LOG_MIN_MSGS, CANVAS_MIN_W, FRAME, LEFT_W, canvasIn, framedRoom, NEED_LABELS,
-  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, LANG_W, CHART_LEG_W, CHART_SEL_W, CHART_SPAN_W, CHART_RATE_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
+  GOAL_IDS, FEED_VALUES_H, CHART_BIG_PLOT_H, CHART_BIG_H, CHART_TOP_W, CHART_TOP_BLOCK_H, chartBigIn, LANG_W, CHART_LEG_W, CHART_TICKET_W, CHART_SEL_W, CHART_SPAN_W, CHART_RATE_W, CHART_PLOT_MIN, TICK_H, chartLayout, feedHeight, CONTENT, Shortfall, R, cols, rows, cardStack,
   desktop, phonePortrait, phoneLandscape, contentBox, fillOf, FORMS, VIEWS, VIEWPORTS, formFor, solve, METRICS };
 });
 
@@ -6281,7 +6320,11 @@ const REACH_M = 2.5;
 
 const SAMPLE_TICKS = 150;      // one statistics sample every 5 sim-minutes
 const SAMPLE_CAP = 8640;       // ... kept for 30 sim-days
+// The two interaction indicators, counted from the sim's own per-cat tally of the targeted acts each cat starts
+// (stats.initiated, "id:type"; display only). Friendly: sniff (the greeting / nose touch), allogroom, social play.
+// Hostile: stalk (the threat stare), hiss, chase (including the chase that displaces a cat from a bowl), fight (a swat).
 const FRIENDLY_STARTS = new Set([A.ALLOGROOM, A.PLAY, A.SNIFF].map(String));
+const HOSTILE_STARTS = new Set([A.STALK, A.HISS, A.CHASE, A.FIGHT].map(String));
 class PlaySim extends Sim {
   constructor(opts) { super(opts); this.player = null; this.moveVec = { x: 0, y: 0, run: false }; this.events = []; this.lastEv = {}; this.samples = []; this.sample(); }
   step() { super.step(); if (this.tick % SAMPLE_TICKS === 0) this.sample(); }
@@ -6290,7 +6333,8 @@ class PlaySim extends Sim {
   sample() {
     const cs = this.cats; if (!cs.length) return;
     // Friendly approaches each cat has started so far, from the sim's per-cat tally (initiated is "id:type").
-    const frBy = {}; for (const [k, v] of Object.entries(this.stats.initiated)) if (FRIENDLY_STARTS.has(k.slice(k.indexOf(':') + 1))) { const id = k.slice(0, k.indexOf(':')); frBy[id] = (frBy[id] || 0) + v; }
+    const frBy = {}, hoBy = {}; for (const [k, v] of Object.entries(this.stats.initiated)) { const ty = k.slice(k.indexOf(':') + 1), id = k.slice(0, k.indexOf(':'));
+      if (FRIENDLY_STARTS.has(ty)) frBy[id] = (frBy[id] || 0) + v; if (HOSTILE_STARTS.has(ty)) hoBy[id] = (hoBy[id] || 0) + v; }
     const per = {}; let st = 0, hu = 0, th = 0, bl = 0, ir = 0, sl = 0, so = 0, pl = 0, hid = 0, qu = 0, fr = 0, ho = 0, nNew = 0, hidNew = 0;
     // A new cat is one in the fast phase of settling in (cfg.habit.fastDays), when it hides the most.
     const newFor = ((this.cfg.habit && this.cfg.habit.fastDays) || 3) * 86400;
@@ -6298,7 +6342,7 @@ class PlaySim extends Sim {
       const ty = c.act ? c.act.type : A.REST, kind = CAT[ty] || 'solo';
       per[c.id] = { name: c.name, stress: c.s.stress, hunger: c.s.hunger, thirst: c.s.thirst, bladder: c.s.bladder,
         irritation: c.s.irritation, sleepiness: c.s.sleep, social: c.s.social, play: c.s.play,
-        hid: ty === A.HIDE ? 1 : 0, fr: frBy[c.id] || 0 };
+        hid: ty === A.HIDE ? 1 : 0, fr: frBy[c.id] || 0, ho: hoBy[c.id] || 0 };
       st += c.s.stress; hu += c.s.hunger; th += c.s.thirst; bl += c.s.bladder;
       ir += c.s.irritation; sl += c.s.sleep; so += c.s.social; pl += c.s.play;
       if (ty === A.HIDE) hid++; if (ty === A.WAIT) qu++; if (kind === 'friend') fr++; if (kind === 'host') ho++;
@@ -6307,15 +6351,15 @@ class PlaySim extends Sim {
     const n = cs.length, S = this.stats;
     // Friendly approaches started so far (grooming, playing with or greeting another cat), from the
     // sim's own per-cat tally of the actions each cat started.
-    let friendlies = 0;
-    for (const [k, v] of Object.entries(S.initiated)) if (FRIENDLY_STARTS.has(k.slice(k.indexOf(':') + 1))) friendlies += v;
+    let friendlies = 0, hostiles = 0;
+    for (const [k, v] of Object.entries(S.initiated)) { const ty = k.slice(k.indexOf(':') + 1); if (FRIENDLY_STARTS.has(ty)) friendlies += v; if (HOSTILE_STARTS.has(ty)) hostiles += v; }
     this.samples.push({ t: this.t, clock: this.clock(), n, cats: per,
       stress: st / n, hunger: hu / n, thirst: th / n, bladder: bl / n,
       irritation: ir / n, sleepiness: sl / n, social: so / n, play: pl / n,
       hiding: hid / n, queueing: qu / n, friendly: fr / n, hostile: ho / n,
       fights: S.resolvedFights || 0, swats: S.swats || 0, hisses: S.hisses || 0,
       intakes: S.intakes || 0, adoptions: S.adoptions || 0,
-      friendlies, supplants: S.supplants || 0, nNew, hidingNew: nNew ? hidNew / nNew : 0 });
+      friendlies, hostiles, supplants: S.supplants || 0, nNew, hidingNew: nNew ? hidNew / nNew : 0 });
     if (this.samples.length > SAMPLE_CAP) this.samples.shift();
   }
   setPlayer(c) { if (this.player) { this.player.cmd = null; if (this.player.act && this.player.act.manual) this.player.act = null; } this.player = c || null; if (c) { c.cmd = null; c.act = null; } }
@@ -7056,12 +7100,12 @@ const GOALS = [
   { id: 'stress', get name() { return tr('Average stress'); }, short: 'Stress', metrics: [0], color: TK.goalSeries.stress, dash: [], mark: 'circle',
     get tip() { return tr('The Cat-Stress-Score (CSS) of every cat, averaged: 1 is relaxed, 7 is terrified. Measured every 5 minutes. Lower is better.'); },
     level: s => U.toCSS(s.stress), range: [1, 7], fmt: v => v.toFixed(1) + ' ' + t('of7') },
-  { id: 'conflict', get name() { return tr('Conflict'); }, short: 'Conflict', metrics: [12, 14], color: TK.goalSeries.conflict, dash: [6, 3], mark: 'square',
-    get tip() { return tr('Every fight and every single swat between two cats, counted as it happens. Lower is better.'); },
-    count: s => (s.fights || 0) + (s.swats || 0), box: 'Fights', get unitWord() { return tr('fights and swats'); } },
-  { id: 'friendly', get name() { return tr('Friendly contact'); }, short: 'Friendly', metrics: [10], color: TK.goalSeries.friendly, dash: [2, 3], mark: 'triangle',
-    get tip() { return tr('Every time one cat starts grooming, playing with or greeting another, counted as it happens. Higher is better.'); },
-    count: s => s.friendlies || 0, box: 'Contacts', get unitWord() { return tr('friendly contacts'); } },
+  { id: 'conflict', get name() { return tr('Hostile'); }, short: 'Hostile', metrics: [12, 14], color: TK.goalSeries.conflict, dash: [6, 3], mark: 'square',
+    get tip() { return tr('Every hostile act one cat starts at another: a threat stare, a hiss, a chase or a swat. Lower is better.') + ' ' + tr('Fights in this window: {n}', { n: fightsInWindow() }); },
+    count: s => s.hostiles || 0, box: 'Hostile', get unitWord() { return tr('hostile acts'); } },
+  { id: 'friendly', get name() { return tr('Friendly'); }, short: 'Friendly', metrics: [10], color: TK.goalSeries.friendly, dash: [2, 3], mark: 'triangle',
+    get tip() { return tr('Every friendly act one cat starts with another: sniffing or greeting, grooming, or play. Higher is better.'); },
+    count: s => s.friendlies || 0, box: 'Friendly', get unitWord() { return tr('friendly acts'); } },
   { id: 'hiding', get name() { return tr('Hiding'); }, short: 'Hiding', metrics: [8], color: TK.goalSeries.hiding, dash: [8, 3, 2, 3], mark: 'diamond',
     get tip() { return tr('The share of cats in a hiding place, checked every 5 minutes. Lower is better.'); },
     level: s => s.hiding * 100, range: [0, 100], fmt: v => Math.round(v) + '%' },
@@ -7106,20 +7150,21 @@ function chartData(spanKey, rateKey) {
 // The three cats at the top of each goal over the chart's span, from the per-cat records: mean stress and
 // the share of samples hidden (sample.cats), fights each cat was in on either side (stats.fightLog), and
 // friendly approaches started (the rise of sample.cats[id].fr across the span).
-const TOP_HEAD = { get stress() { return tr('Most stressed'); }, get conflict() { return tr('Most in fights'); }, get friendly() { return tr('Most friendly'); }, get hiding() { return tr('Most hidden'); } };
+const TOP_HEAD = { get stress() { return tr('Most stressed'); }, get conflict() { return tr('Most hostile'); }, get friendly() { return tr('Most friendly'); }, get hiding() { return tr('Most hidden'); } };
 const rateNum = v => v >= 10 ? Math.round(v).toString() : (Math.round(v * 10) / 10).toString();
+// Fights over the chart's window, the detail the Hostile tooltip keeps (fights are too rare to rank by).
+function fightsInWindow() { const d = spanBounds((UI.chart && UI.chart.span) || 'today'); return sim.stats.fightLog.filter(f => f.t > d.t0 && f.t <= d.t1).length; }
 function topCats(spanKey, n = 3) {
   const d = spanBounds(spanKey), xs = sim.samples.filter(s => s.t > d.t0 && s.t <= d.t1), out = {};
   const acc = {}, name = {};
   for (const s of xs) for (const [id, p] of Object.entries(s.cats)) {
-    const a = acc[id] || (acc[id] = { st: 0, hid: 0, n: 0, fr0: p.fr, fr1: p.fr }); a.st += p.stress; a.hid += p.hid; a.n++; a.fr1 = p.fr; name[id] = p.name; }
-  const fights = {}; for (const f of sim.stats.fightLog) if (f.t > d.t0 && f.t <= d.t1) for (const id of [f.a, f.b]) fights[id] = (fights[id] || 0) + 1;
+    const a = acc[id] || (acc[id] = { st: 0, hid: 0, n: 0, fr0: p.fr, fr1: p.fr, ho0: p.ho || 0, ho1: p.ho || 0 }); a.st += p.stress; a.hid += p.hid; a.n++; a.fr1 = p.fr; a.ho1 = p.ho || 0; name[id] = p.name; }
   const rank = (val, fmt, fmtShort) => Object.keys(acc).map(id => ({ id: +id, name: name[id], v: val(id) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.id - b.id).slice(0, n).map(x => { const tx = fmt(x.v); return { ...x, text: tx, full: tx, short: fmtShort ? fmtShort(x.v) : tx }; });   // short: the phone band's ~48px
   // In the goal boxes' wording, over the chart's window: stress "of 7", fights and contacts as a rate in the chosen
   // unit ("0.4/hour"), hiding "%".
   const R = rateOf(UI.chart && UI.chart.grain), len = Math.max(600, d.t1 - Math.max(d.t0, d.first)), rate = c => c * R[2] / len;
   out.stress = rank(id => acc[id].st / acc[id].n, v => U.toCSS(v).toFixed(1) + ' ' + t('of7'), v => U.toCSS(v).toFixed(1) + '/7');
-  out.conflict = rank(id => rate(fights[id] || 0), v => rateNum(v) + unitOf(R[0]), v => rateNum(v) + unitShort(R[0]));
+  out.conflict = rank(id => rate(acc[id].ho1 - acc[id].ho0), v => rateNum(v) + unitOf(R[0]), v => rateNum(v) + unitShort(R[0]));
   out.friendly = rank(id => rate(acc[id].fr1 - acc[id].fr0), v => rateNum(v) + unitOf(R[0]), v => rateNum(v) + unitShort(R[0]));
   out.hiding = rank(id => acc[id].hid / acc[id].n, v => Math.round(v * 100) + '%');
   return out;
@@ -7127,8 +7172,11 @@ function topCats(spanKey, n = 3) {
 const topLine = list => list.length ? list.map(x => x.name + ' ' + x.text).join(', ') : tr('none yet');
 // The goal box's value: a level is its reading now ("2.5 of 7", "12%"); a count is its rate over the whole window in
 // the chosen unit ("0.4/hour"), the same figure the top cats are ranked in.
+// A level goal's chip over the chart's window: the mean of its readings in the window (what the top cats are ranked
+// on, per cat), so the chips, the chart and the top cats all speak of the same stretch of time.
+function windowLevel(G) { const d = spanBounds(UI.chart.span), xs = sim.samples.filter(s => s.t > d.t0 && s.t <= d.t1); return xs.length ? xs.reduce((a, s) => a + G.level(s), 0) / xs.length : null; }
 function legendValue(G, d, i) {
-  if (G.level) return G.fmt(G.level(sampleAt(sim.t)));
+  if (G.level) { const v = windowLevel(G); return v == null ? t('notYet') : G.fmt(v); }
   const v = d.totals[i];
   return v == null ? t('notYet') : rateNum(v) + unitOf(d.unit);
 }
@@ -7271,7 +7319,7 @@ function buildChart(host, big) {
       box.style.padding = big ? `${pad}px` : `0 ${pad}px ${pad}px`;
       box.className = 'goals m-' + c.mode + (big ? ' big' : '');
       if (big) legend.style.display = FORM !== 'desktop' || (sol.chartBig && sol.chartBig.legend) ? '' : 'none';   // m-row, m-stacked or m-big ("row" alone is the readout's class)
-      legend.style.gridTemplateColumns = `repeat(${c.legendCols},${LAY.CHART_LEG_W}px)`;
+      legend.style.gridTemplateColumns = `repeat(${c.legendCols},${c.mode === 'tickets' ? LAY.CHART_TICKET_W : LAY.CHART_LEG_W}px)`;
       // the enlarged chart on desktop: the top-cats column after the plot, at the width the solver reserved
       if (big) box.style.gridTemplateColumns = FORM === 'desktop' && sol.chartTops ? `auto 1fr ${LAY.CHART_TOP_W}px` : '';
       // Stacked, the Enlarge button joins the selects' row (chartLayout); in a row it ends the strip.
@@ -7311,7 +7359,9 @@ function buildReadout(node) {
   // 44px target would not fit in it. A cat is let go by clicking it again, by clicking the floor, or
   // with Escape.
   ident.append(nm, meta);
-  const doing = el('div', 'doing'), dot = el('span', 'dot'), act = el('span');
+  // The activity's icon is the map's own (SPR.drawActivityIcon, same colours), drawn on a small canvas: one icon set.
+  const ICON_PX = 18, doing = el('div', 'doing'), dot = document.createElement('canvas'), act = el('span');
+  dot.className = 'dot'; dot.style.width = dot.style.height = ICON_PX + 'px';
   doing.style.height = LAY.LINE + 'px';
   doing.append(dot, act);
   const blocks = el('div', 'blocks');
@@ -7322,11 +7372,13 @@ function buildReadout(node) {
     if (c && !sim.cats.includes(c)) { selectCat(null); return; }
     // The panel keeps its size with no cat picked: it says how to pick one.
     box.classList.toggle('empty', !c);
-    if (!c) { nm.textContent = t('noCat'); meta.textContent = t('noCatHint'); return; }
+    if (!c) { nm.textContent = t('noCat'); meta.textContent = t('noCatHint'); ident.style.height = ''; return; }
+    if (ident.dataset.h) ident.style.height = ident.dataset.h + 'px';
     nm.textContent = c.name;
     meta.textContent = I18N.catDesc(c, c.arrivedT !== undefined);
     const inf = actInfo(sim, c);
-    dot.style.background = TK.activity[inf.cat];
+    { const type = c.act ? c.act.type : A.REST, col = TK.activity[inf.cat], dpr = window.devicePixelRatio || 1, key = type + col + dpr;
+      if (dot.dataset.k !== key) { dot.dataset.k = key; dot.width = dot.height = Math.round(ICON_PX * dpr); const g = dot.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, ICON_PX, ICON_PX); SPR.drawActivityIcon(g, type, ICON_PX / 2, ICON_PX / 2, ICON_PX - 1, col); } }
     act.textContent = ((inf.onWay ? '→ ' : '') + tr(inf.verb) + (inf.pname ? ' ' + inf.pname : '')).replace(/[a-zа-я]/, ch => ch.toUpperCase());
     // The blocks are drawn at exactly the heights the layout engine reserved for them, read off the
     // engine's own model rather than left to the CSS to arrive at: that is what makes "the readout
@@ -7364,7 +7416,9 @@ function buildReadout(node) {
     }
   };
   // The name and its wrapped description take exactly the height the engine reserved for them.
-  return { place: r => { width = r.w; ident.style.height = LAY.CONTENT.readoutIdentH(width) + 'px'; }, tick: render };
+  // The ident row is cut to the height the engine reserved for a cat's name and description. With no cat picked the
+  // panel's blocks are empty, so the longer how-to-pick hint takes the room below it instead of being cut (auto height).
+  return { place: r => { width = r.w; ident.dataset.h = LAY.CONTENT.readoutIdentH(width); ident.style.height = UI.selected ? ident.dataset.h + 'px' : ''; }, tick: render };
 }
 function fillRows(host, rows) {
   while (host.children.length > rows.length) host.lastChild.remove();
@@ -7392,7 +7446,8 @@ function buildLeaders(node) {
   // The plain "+" that expands the band (phone portrait); the chart's Enlarge "+" is the same control.
   const grow = el('button', 'grow', '+'); grow.type = 'button';
   grow.onclick = () => { UI.leadersOpen = !UI.leadersOpen; applyLayout(); };
-  ttl.append(head); top.append(ttl, grow); box.appendChild(top);
+  const win = el('span', 'win');   // the window the panel covers, the chart's own: "Today · per hour"
+  ttl.append(head, win); top.append(ttl, grow); box.appendChild(top);
   const goals = el('div', 'lgoals'); box.appendChild(goals);
   for (const G of GOALS) { const r = el('div', 'lrow'); r.appendChild(el('span', 'lab', LEADER_LAB[G.id])); goals.appendChild(r); lrows[G.id] = { r, bs: [] }; }
   node.appendChild(box);
@@ -7419,6 +7474,7 @@ function buildLeaders(node) {
     grow.title = word; grow.setAttribute('aria-label', word); grow.setAttribute('aria-expanded', String(open));
     const tops = topCats(UI.chart.span, k), span = t({ '6h': 'span6h', today: 'spanToday', '3d': 'span3d', week: 'spanWeek', all: 'spanAll' }[UI.chart.span] || 'spanToday');
     box.title = tr('The top cats on each goal, {span} (the span the chart shows). Click a cat to pick it.', { span: span.toLowerCase() });
+    const wtx = span + ' · ' + rateWord(UI.chart.grain); if (win.textContent !== wtx) win.textContent = wtx;
     for (const G of GOALS) {
       const R = lrows[G.id], L2 = tops[G.id], sig = k + '|' + L2.map(x => x.id + ':' + x.full).join(',');
       if (R.sig === sig) continue; R.sig = sig;
@@ -7584,6 +7640,12 @@ const ROOM = (() => {
   let ox = 0, oy = 0, LBL = [], SPRB = [], HIDB = [], seq = { sprite: 0, label: 0 };
   const lblPrev = new Map();
   const catR = () => Math.max(5, 3.85 * S * TK.size.catScale);
+  // How far a cat's drawing reaches from its centre, by side (px): the body and head (1.25 R), the tail behind it
+  // the way it faces away (2.2 R, plus its stroke), and the selection ring when it is the selected cat.
+  function catExtent(c) {
+    const R = catR(), b = 1.25 * R, ring = c === UI.selected ? R * 1.55 + 3 + 1.5 : 0, a = Math.atan2(c.fy, c.fx), tx = -Math.cos(a) * 2.2 * R, ty = -Math.sin(a) * 2.2 * R, k = R * 0.2 + 1;
+    return { x0: Math.min(-b, -ring, tx - k), x1: Math.max(b, ring, tx + k), y0: Math.min(-b, -ring, ty - k), y1: Math.max(b, ring, ty + k) };
+  }
   const pos = (c, f) => [(c.px + (c.x - c.px) * f) * S, (c.py + (c.y - c.py) * f) * S];
 
   // ---- render-time declutter (display only: the sim's positions are never written). Each frame the
@@ -7592,8 +7654,8 @@ const ROOM = (() => {
   // that has arrived at a station stays inside that station's drawn box; a hiding cat and a petted cat
   // stay where the sim has them. ASSUMPTION (render only): 4 relaxation passes, offsets capped at
   // DC_MAX_M metres and eased toward their target with a DC_TAU_S time constant, so nothing jitters or jumps.
-  const DC_MAX_M = 0.6, DC_TAU_S = 0.25, DC_ITER = 4;
-  const dcOff = new Map();          // key -> [ox, oy], the eased offset currently drawn
+  const DC_MAX_M = 0.6, DC_TAU_S = 0.25, DC_ITER = 4, DC_VMAX = 6, DC_OVER_V = 8;   // DC_VMAX: the drawn offset changes by at most 6 caps a second
+  const dcOff = new Map(), dcFree = new Map();          // key -> [ox, oy], the eased offset currently drawn
   let dcLast = null, dcOn = true, dcStats = { raw: 0, drawn: 0, pairsRaw: 0, pairsDrawn: 0 };
   let D = {}, DH = new Map();       // the last frame's drawn positions: cats by id, people by object
   function stationBox(st) {
@@ -7656,6 +7718,11 @@ const ROOM = (() => {
     }
     return p;
   }
+  // A cat's spot kept inside the room's walls (2 tiles) with its whole drawing (catExtent) on the canvas.
+  function clampCat(c, p) {
+    const M = sim.map, x = catExtent(c);
+    return [Math.max(2 * S, -ox + 1 - x.x0, Math.min(M.W * S - 2 * S, W - ox - 1 - x.x1, p[0])), Math.max(2 * S, -oy + 1 - x.y0, Math.min(M.H * S - 2 * S, H - oy - 1 - x.y1, p[1]))];
+  }
   function declutter(P, people, hidden, now) {
     const R = catR(), pr = headR(S) * 0.94,   /* the head's mean radius */ cap = DC_MAX_M / sim.cfg.tile * S, SF = surfaces();
     const B = [];
@@ -7671,6 +7738,8 @@ const ROOM = (() => {
     if (dcOn) for (let it = 0; it < DC_ITER; it++) {
       for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
         const a = B[i], b = B[j]; if (a.skip || b.skip || a.w + b.w === 0) continue;
+        // two cats interacting with each other (grooming, sniffing, playing, fighting) are meant to touch
+        if (a.key[0] === 'c' && b.key[0] === 'c' && ((a.obj.act && a.obj.act.target === b.obj.id) || (b.obj.act && b.obj.act.target === a.obj.id))) continue;
         let dx = b.t[0] - a.t[0], dy = b.t[1] - a.t[1], d = Math.hypot(dx, dy);
         const o = a.r + b.r - d; if (o <= 0) continue;
         if (d < 1e-6) { const g = ((i * 7 + j * 13) % 16) / 16 * 2 * Math.PI; dx = Math.cos(g); dy = Math.sin(g); d = 1; }   // a fixed direction, no RNG
@@ -7687,18 +7756,37 @@ const ROOM = (() => {
       let tx = b.t[0] - b.raw[0], ty = b.t[1] - b.raw[1]; const m = Math.hypot(tx, ty); if (m > cap) { tx *= cap / m; ty *= cap / m; }
       const prev = (b.key[0] === 'c' ? prevD[b.obj.id] : prevH.get(b.obj)) || b.raw;
       const free = dcOn && !b.pin && !b.use;
-      if (free) { const q = freeNear([b.raw[0] + tx, b.raw[1] + ty], b.r, null, SF, prev); tx = q[0] - b.raw[0]; ty = q[1] - b.raw[1]; }
+      // The free spot is sticky (hysteresis): last frame's spot is kept while it is still free and still near
+      // where the body wants to be, so two equally good spots never take turns. Ties go to the spot nearest the
+      // last drawn position, scanned in a fixed order.
+      if (free) { const want = [b.raw[0] + tx, b.raw[1] + ty], keep = dcFree.get(b.key);
+        const q = keep && !blocked(keep[0], keep[1], b.r, null, SF) && Math.hypot(keep[0] - want[0], keep[1] - want[1]) < 2 * b.r && blocked(want[0], want[1], b.r, null, SF) ? keep : freeNear(want, b.r, null, SF, keep || prev);
+        if (q !== want) dcFree.set(b.key, q); else dcFree.delete(b.key);
+        tx = q[0] - b.raw[0]; ty = q[1] - b.raw[1]; }
       if (b.skip) { tx = 0; ty = 0; }
-      const o = dcOff.get(b.key) || [0, 0]; o[0] += (tx - o[0]) * k; o[1] += (ty - o[1]) * k;
-      // the eased spot may cut a corner of a surface on its way: then it stops at the nearest free floor
-      if (free && blocked(b.raw[0] + o[0], b.raw[1] + o[1], b.r, null, SF)) { const q = freeNear([b.raw[0] + o[0], b.raw[1] + o[1]], b.r, null, SF, prev); o[0] = q[0] - b.raw[0]; o[1] = q[1] - b.raw[1]; }
+      // the room edge is part of the target, not a snap afterwards: the body eases to its clamped spot
+      if (b.key[0] === 'c' && !b.skip) { const q = clampCat(b.obj, [b.raw[0] + tx, b.raw[1] + ty]); tx = q[0] - b.raw[0]; ty = q[1] - b.raw[1]; }
+      // Eased toward the target, and never faster than DC_VMAX caps per second on top of the sim's own motion:
+      // no instant snaps, even when the eased spot meets furniture (it slides off at that speed).
+      const o = dcOff.get(b.key) || [0, 0], vmax = cap * DC_VMAX * Math.max(dt, 1 / 60), o0 = o.slice();
+      o[0] += (tx - o[0]) * k; o[1] += (ty - o[1]) * k;
+      // over furniture on the way (a corner cut while easing): go straight to the free target, still at most vmax
+      // An eased spot over furniture (the straight path to the target crosses a piece) goes to the target itself
+      // at once: one step, after which it rests there. Projecting onto the nearest free floor instead makes the easing
+      // pull it back over the piece next frame, and the two take turns (the jitter this replaces).
+      const over = free && blocked(b.raw[0] + o[0], b.raw[1] + o[1], b.r, null, SF);
+      if (over) { o[0] = tx; o[1] = ty; }
+      const vm = over ? DC_OVER_V * vmax : vmax;
+      { const dx = o[0] - o0[0], dy = o[1] - o0[1], m2 = Math.hypot(dx, dy); if (m2 > vm && dcOff.has(b.key)) { o[0] = o0[0] + dx * vm / m2; o[1] = o0[1] + dy * vm / m2; } }
       dcOff.set(b.key, o); seen.add(b.key);
       b.d = [b.raw[0] + o[0], b.raw[1] + o[1]];
       // never drawn past the room: a cat inside the outer walls' inner face (2 tiles), a person's whole head inside the canvas
-      { const M = sim.map, e = b.key[0] === 'c' ? 2 * S : Math.max(0, headPx(S) + 1 - Math.min(ox, oy)); b.d[0] = Math.max(e, Math.min(M.W * S - e, b.d[0])); b.d[1] = Math.max(e, Math.min(M.H * S - e, b.d[1])); }
+      { const M = sim.map;
+        if (b.key[0] === 'c') b.d = clampCat(b.obj, b.d);   // a safety net: the eased target is already clamped
+        else { const e = Math.max(0, headPx(S) + 1 - Math.min(ox, oy)); b.d[0] = Math.max(e, Math.min(M.W * S - e, b.d[0])); b.d[1] = Math.max(e, Math.min(M.H * S - e, b.d[1])); } }
       if (b.key[0] === 'c') D[b.obj.id] = b.d; else DH.set(b.obj, b.d);
     }
-    for (const key of [...dcOff.keys()]) if (!seen.has(key)) dcOff.delete(key);
+    for (const key of [...dcOff.keys()]) if (!seen.has(key)) { dcOff.delete(key); dcFree.delete(key); }
     const [r0, p0] = overlapOf(B, 'raw'), [r1, p1] = overlapOf(B, 'd');
     // bodies drawn over an object they are not using (hidden and petted cats, which stay put, are left out)
     const over = key => B.filter(b => !b.pin && !b.use && blocked(b[key][0], b[key][1], b.r, null, SF));
@@ -7742,11 +7830,11 @@ const ROOM = (() => {
     if (W !== w || H !== h) { W = w; H = h; bg = null; }
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-    // The band: the reach of a cat's tail past its centre (2.2 R plus its stroke) beyond the one wall tile
-    // that already keeps every centre off the edge, solved twice since R scales with S. At least 1.6 tiles
-    // on top, so the wall above the windows reads as a wall.
+    // The band: a thin buffer (3 px) round the room, as the wall line. Nothing relies on it for room: labels are
+    // kept inside the canvas by the label placement, and a cat near an edge is drawn just far enough in that its
+    // body, tail and ring stay on the canvas (catExtent, the clamp in declutter).
     const M = sim.map; let s = w / M.W, m = 0;
-    for (let k = 0; k < 2; k++) { const R = Math.max(5, 3.85 * s * TK.size.catScale); m = Math.ceil(Math.max(2.45 * R + 4 - s, 1.6 * s)); s = Math.min((w - 2 * m) / M.W, (h - 2 * m) / M.H); }
+    m = 3; s = Math.min((w - 2 * m) / M.W, (h - 2 * m) / M.H);
     S = s; ox = (w - M.W * S) / 2; oy = (h - M.H * S) / 2;
     bg = null;
   }
@@ -7886,14 +7974,13 @@ const ROOM = (() => {
     for (const [, draw] of layer) draw();
     const sorted = sim.cats.slice().sort((a, b) => Q[a.id][1] - Q[b.id][1]);
     const labels = [], toC = (x, y) => [x + ox, y + oy];   // labels are placed and drawn in canvas coordinates
-    const tailR = R * 2.2 + R * 0.17 + 1;
     for (const c of sorted) {
       const [x, y] = Q[c.id], inf = actInfo(sim, c), col = TK.activity[inf.cat], sel = c === UI.selected;
       if (sel && !hidden.has(c)) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, ringR + 3, 0, 7); ctx.stroke(); }
       // A hiding cat is already drawn under its box; the selected one also shows through as a dashed
       // outline of its curl, so it stays findable.
       const hb = hidden.has(c) && HIDB.find(q => q.id === c.id);
-      if (!hidden.has(c)) { drawCat(ctx, c, x, y, now, inf); nseq++; const hr = Math.max(tailR, sel ? ringR + 3 + 1.5 : 0); SPRB.push({ kind: 'cat', id: c.id, x: x + ox - hr, y: y + oy - hr, w: 2 * hr, h: 2 * hr }); }
+      if (!hidden.has(c)) { drawCat(ctx, c, x, y, now, inf); nseq++; const xe = catExtent(c); SPRB.push({ kind: 'cat', id: c.id, x: x + ox + xe.x0, y: y + oy + xe.y0, w: xe.x1 - xe.x0, h: xe.y1 - xe.y0 }); }
       else if (hb && sel) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(x, y, hb.r + 2, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
       // the activity, as a bubble by the cat. The words live in the readout, where they can be read.
       // The selected cat's (and a hidden cat's) starts just outside its ring; the others overlap the body's edge.
@@ -7956,7 +8043,7 @@ const ROOM = (() => {
     } else if (!hoverCat && mouse) {
       // A person under the pointer is named by role, the way a cat is named.
       const mw = [mouse[0] - ox, mouse[1] - oy];
-      const h = people.find(q => Math.hypot(DH.get(q)[0] - mw[0], DH.get(q)[1] - mw[1]) < headR(S));
+      const h = people.find(q => Math.hypot(DH.get(q)[0] - mw[0], DH.get(q)[1] - mw[1]) < Math.max(10, headR(S)));
       if (h) tip(tr(personOf(h).tag), ...toC(...DH.get(h)), Math.max(13, 8 * S));
     }
     if (UI.pet) {
@@ -8258,7 +8345,7 @@ const personPx = S => Math.max(40, PERSON_M * TK.size.catScale * PERSON_EXAG / s
 // times a cat's drawn body length (CAT_BODY_R cat radii, nose to rump), so a person never dwarfs the cats;
 // it does not follow PERSON_EXAG. Drawn in head units: the head is an ellipse 1.0 long (the way the person
 // faces, +x) by 0.88 wide; every hair style stays within 1.08 of it, except a tail behind, at most 0.5 more.
-const HEAD_PX = 1.1, CAT_BODY_R = 2.2;
+const HEAD_PX = 0.5, CAT_BODY_R = 2.2;
 const headR = S => 0.5 * HEAD_PX * CAT_BODY_R * Math.max(5, 3.85 * S * TK.size.catScale);   // px, the head's long radius
 const headPx = S => 1.5 * headR(S);   // px, the farthest anything of a person is drawn from its centre (a ponytail's tip)
 function drawPerson(g, h, x, y) {
@@ -8266,7 +8353,9 @@ function drawPerson(g, h, x, y) {
   const dx = h.x - (h._px === undefined ? h.x : h._px), dy = h.y - (h._py === undefined ? h.y : h._py);
   if (Math.hypot(dx, dy) > 0.02) h._ang = Math.atan2(dy, dx); else if (h._ang === undefined) h._ang = 0;
   h._px = h.x; h._py = h.y;
-  const L = lookOf(h), PT = TK.person, lw = Math.max(1, u * 0.07) / u, RY = 0.88;
+  // At small sizes the details keep a minimum size in px (nose 2.5 px, ears 1.6 px; ears are dropped under a
+  // 7 px head radius, where they would only blur the outline), and curls become fewer, larger bumps.
+  const L = lookOf(h), PT = TK.person, lw = Math.max(1, u * 0.07) / u, RY = 0.88, px = v => v / u, small = u < 12;
   const head = () => { g.beginPath(); g.ellipse(0, 0, 1, RY, 0, 0, 7); };
   g.save(); g.translate(x, y); g.rotate(h._ang); g.scale(u, u);          // +x is the way the person faces
   g.fillStyle = RM.shadow; g.beginPath(); g.ellipse(-0.05, 0.1, 1.05, 0.95, 0, 0, 7); g.fill();
@@ -8278,8 +8367,8 @@ function drawPerson(g, h, x, y) {
   if (st === 'ponytail') { g.beginPath(); g.ellipse(-1.12, 0, 0.36, 0.15, 0, 0, 7); g.fill(); g.stroke(); }
   // ears either side, the head in skin (the face is what stays bare toward the front), the nose tip
   g.fillStyle = L.skin;
-  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(0.1, s * 0.9, 0.13, 0.15, 0, 0, 7); g.fill(); g.stroke(); }
-  g.beginPath(); g.moveTo(0.95, -0.14); g.quadraticCurveTo(1.18, 0, 0.95, 0.14); g.closePath(); g.fill(); g.stroke();
+  if (u >= 7) { const er = Math.max(0.13, px(1.6)); for (const s of [-1, 1]) { g.beginPath(); g.ellipse(0.1, s * (RY + er * 0.15), er, Math.max(0.15, px(1.8)), 0, 0, 7); g.fill(); g.stroke(); } }
+  { const nl = Math.max(0.18, px(2.5)), nw = Math.max(0.14, px(1.8)); g.beginPath(); g.moveTo(0.95, -nw); g.quadraticCurveTo(0.95 + 1.3 * nl, 0, 0.95, nw); g.closePath(); g.fill(); g.stroke(); }
   head(); g.fill(); g.stroke();
   // the hair over the back and sides of the head, clipped to it, with its front edge across the crown
   if (st !== 'bald') {
@@ -8288,10 +8377,14 @@ function drawPerson(g, h, x, y) {
     g.fillStyle = L.hairCol; if (st === 'buzz') g.globalAlpha = 0.75;
     g.beginPath(); g.moveTo(front, -1); g.quadraticCurveTo(front + 0.25, 0, front, 1); g.lineTo(-1.2, 1); g.lineTo(-1.2, -1); g.closePath(); g.fill();
     g.restore();
+    // a side parting and the crown: one faint line in the outline colour, so the head reads as hair from above
+    if (st !== 'buzz' && st !== 'curly') { g.save(); head(); g.clip(); g.globalAlpha = 0.35; g.strokeStyle = PT.outline; g.lineWidth = lw * 0.9;
+      g.beginPath(); g.moveTo(front - 0.02, -0.28); g.quadraticCurveTo(-0.3, -0.22, -0.55, -0.05); g.stroke(); g.restore(); }
     if (st === 'curly') {   // a bumpy edge on the head's outline: bumps of 0.16 centred at 0.92, so within 1.08
       g.fillStyle = L.hairCol;
-      for (let i = 0; i <= 10; i++) { const t = Math.PI * (0.42 + i * 1.16 / 10); g.beginPath(); g.arc(Math.cos(t) * 0.92, Math.sin(t) * 0.92 * RY, 0.16, 0, 7); g.fill(); g.stroke(); }
-      for (let i = 1; i <= 10; i++) { const t = -Math.PI * (0.42 + i * 1.16 / 10); g.beginPath(); g.arc(Math.cos(t) * 0.92, Math.sin(t) * 0.92 * RY, 0.16, 0, 7); g.fill(); g.stroke(); }
+      const nb = small ? 5 : 10, br = small ? 0.2 : 0.16, rc = 1.08 - br;
+      for (let i = 0; i <= nb; i++) { const t = Math.PI * (0.42 + i * 1.16 / nb); g.beginPath(); g.arc(Math.cos(t) * rc, Math.sin(t) * rc * RY, br, 0, 7); g.fill(); g.stroke(); }
+      for (let i = 1; i <= nb; i++) { const t = -Math.PI * (0.42 + i * 1.16 / nb); g.beginPath(); g.arc(Math.cos(t) * rc, Math.sin(t) * rc * RY, br, 0, 7); g.fill(); g.stroke(); }
     }
     if (st === 'bun') { g.fillStyle = L.hairCol; g.beginPath(); g.arc(-0.72, 0, 0.26, 0, 7); g.fill(); g.stroke(); }
     head(); g.stroke();
@@ -9097,6 +9190,8 @@ root.Play = {
   get view() { return UI.view; }, get form() { return FORM; },
   get layout() { return SOL; }, get statsLayout() { return STATS.solution; },
   get state() { return UI; },
+  windowStats: () => { const d = chartData(UI.chart.span, UI.chart.grain), R = rateOf(UI.chart.grain);
+    return { span: UI.chart.span, grain: UI.chart.grain, chips: Object.fromEntries(GOALS.map((G, i) => [G.id, G.level ? windowLevel(G) : d.totals[i]])), chipText: Object.fromEntries(GOALS.map((G, i) => [G.id, legendValue(G, d, i)])), top: topCats(UI.chart.span, 99) }; },
   S: () => ROOM.S, origin: () => ROOM.origin(), roomLabels: () => ROOM.labels(), roomSprites: () => ROOM.sprites(), roomHidden: () => ROOM.hidden(), roomOrder: () => ROOM.order(),
   // the render-time declutter: on/off (for a before/after), and the last frame's overlap, raw vs drawn
   get declutter() { return ROOM.declutter; }, set declutter(v) { ROOM.declutter = v; },
