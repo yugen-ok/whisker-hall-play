@@ -535,7 +535,7 @@ const room = {
 // tones, natural hair colours, and casual shirt colours; staff all wear the one uniform shirt.
 const person = {
   skin: ['#f3d2b5', '#e5b48f', '#c98e64', '#a26a43', '#7a4a2c', '#553220'],
-  hair: { black: '#1d1714', brown: '#5a3a22', blonde: '#d8b46a', red: '#a3452a', grey: '#a9a49c' },
+  hair: { black: '#1d1714', brown: '#5a3a22', blonde: '#d8b46a', red: '#a3452a', grey: '#a9a49c', auburn: '#7a2e1c', darkBrown: '#3a2618' },
   shirt: ['#c0504d', '#4f81bd', '#9bbb59', '#8064a2', '#f2c14e', '#e07b39', '#4bacc6', '#d9d2c5', '#5b5b5b'],
   uniform: '#2f6d62',    // staff polo, one colour so staff read at a glance
   trousers: '#3b3f4a',
@@ -6094,6 +6094,7 @@ function drawDoorway(g, x, y, w, h, open, lw, swing = true) {
 //   l: polyline   p: filled polygon   c: circle [cx, cy, r]   a: arc [cx, cy, r, from, to]
 //   f: filled   k: [cx, cy, r] an arc cut into that filled circle, in the badge colour
 const ICON = {
+  vacuum:     [{ l: [[6, 5], [14, 15]] }, { l: [[11, 15], [19, 15], [19, 19], [11, 19], [11, 15]] }],
   sleep:      [{ l: [[6, 7], [13, 7], [6, 13], [13, 13]] }, { l: [[15, 14], [20, 14], [15, 19], [20, 19]] }],
   rest:       [{ a: [12, 14, 6, Math.PI, 0] }, { l: [[6, 14], [18, 14]] }],
   groom:      [{ a: [12, 9, 5, 0.2, Math.PI - 0.2] }, { l: [[12, 13], [12, 19]] }, { a: [12, 19, 2.5, 0, Math.PI] }],
@@ -7577,6 +7578,11 @@ function selectCat(c) {
 // hovering, grabbing and dragging cannot move a single region.
 const ROOM = (() => {
   let cv = null, ctx = null, S = 3, W = 0, H = 0, dpr = 1, bg = null, rect = null, mouse = null;
+  // The room is drawn inset in the canvas by (ox, oy): the band around it is the room's outer wall, painted
+  // in the wall colour, deep enough that a cat's sprite, tail and selection ring at any edge stay on the canvas.
+  // Labels (activity bubbles, name tags, tooltips) are placed in canvas coordinates by placeLabels.
+  let ox = 0, oy = 0, LBL = [], SPRB = [], HIDB = [], seq = { sprite: 0, label: 0 };
+  const lblPrev = new Map();
   const catR = () => Math.max(5, 3.85 * S * TK.size.catScale);
   const pos = (c, f) => [(c.px + (c.x - c.px) * f) * S, (c.py + (c.y - c.py) * f) * S];
 
@@ -7651,7 +7657,7 @@ const ROOM = (() => {
     return p;
   }
   function declutter(P, people, hidden, now) {
-    const R = catR(), pr = personPx(S) * 0.32, cap = DC_MAX_M / sim.cfg.tile * S, SF = surfaces();
+    const R = catR(), pr = headR(S) * 0.94,   /* the head's mean radius */ cap = DC_MAX_M / sim.cfg.tile * S, SF = surfaces();
     const B = [];
     for (const c of sim.cats) {
       const use = usesOf(c);
@@ -7688,6 +7694,8 @@ const ROOM = (() => {
       if (free && blocked(b.raw[0] + o[0], b.raw[1] + o[1], b.r, null, SF)) { const q = freeNear([b.raw[0] + o[0], b.raw[1] + o[1]], b.r, null, SF, prev); o[0] = q[0] - b.raw[0]; o[1] = q[1] - b.raw[1]; }
       dcOff.set(b.key, o); seen.add(b.key);
       b.d = [b.raw[0] + o[0], b.raw[1] + o[1]];
+      // never drawn past the room: a cat inside the outer walls' inner face (2 tiles), a person's whole head inside the canvas
+      { const M = sim.map, e = b.key[0] === 'c' ? 2 * S : Math.max(0, headPx(S) + 1 - Math.min(ox, oy)); b.d[0] = Math.max(e, Math.min(M.W * S - e, b.d[0])); b.d[1] = Math.max(e, Math.min(M.H * S - e, b.d[1])); }
       if (b.key[0] === 'c') D[b.obj.id] = b.d; else DH.set(b.obj, b.d);
     }
     for (const key of [...dcOff.keys()]) if (!seen.has(key)) dcOff.delete(key);
@@ -7734,7 +7742,12 @@ const ROOM = (() => {
     if (W !== w || H !== h) { W = w; H = h; bg = null; }
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-    S = w / sim.map.W;
+    // The band: the reach of a cat's tail past its centre (2.2 R plus its stroke) beyond the one wall tile
+    // that already keeps every centre off the edge, solved twice since R scales with S. At least 1.6 tiles
+    // on top, so the wall above the windows reads as a wall.
+    const M = sim.map; let s = w / M.W, m = 0;
+    for (let k = 0; k < 2; k++) { const R = Math.max(5, 3.85 * s * TK.size.catScale); m = Math.ceil(Math.max(2.45 * R + 4 - s, 1.6 * s)); s = Math.min((w - 2 * m) / M.W, (h - 2 * m) / M.H); }
+    S = s; ox = (w - M.W * S) / 2; oy = (h - M.H * S) / 2;
     bg = null;
   }
   // Device pixels per CSS pixel of the backing store: the screen's ratio times the pinch zoom
@@ -7754,9 +7767,14 @@ const ROOM = (() => {
     const M = sim.map, c = document.createElement('canvas');
     c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
     const g = c.getContext('2d'); g.scale(dpr, dpr);
-    const qx = M.partitionX < M.W ? M.partitionX * S : W;
-    drawPlanks(g, 0, 0, qx, H, S);
-    if (qx < W) drawRug(g, qx, 0, W - qx, H, S);
+    // the outer wall band all round, a darker skirting line where it meets the room, then the room inset
+    g.fillStyle = TK.room.wall; g.fillRect(0, 0, W, H);
+    g.fillStyle = TK.room.wallInk; g.fillRect(ox - 2, oy - 2, M.W * S + 4, M.H * S + 4);
+    g.translate(ox, oy);
+    const qx = M.partitionX < M.W ? M.partitionX * S : M.W * S;
+    const RW = M.W * S, RH = M.H * S;
+    drawPlanks(g, 0, 0, qx, RH, S);
+    if (qx < RW) drawRug(g, qx, 0, RW - qx, RH, S);
     // Walls are painted run by run. Fixed obstacles are collected into their rectangles (a run that
     // continues one on the row above with the same span extends it) and drawn as benches.
     const benches = [];
@@ -7792,6 +7810,7 @@ const ROOM = (() => {
   // The quiet room's woven rug: a basket weave in two greens inside a bound, stitched edge.
   function drawRug(g, x0, y0, w, h, s) {
     const R = TK.room, c = Math.max(4, 3 * s);
+    g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();   // the weave's last cells stop at the rug's edge
     g.fillStyle = R.rug; g.fillRect(x0, y0, w, h);
     g.fillStyle = R.rugWeave;
     for (let j = 0, y = y0; y < y0 + h; j++, y += c) for (let i = 0, x = x0; x < x0 + w; i++, x += c) {
@@ -7800,7 +7819,7 @@ const ROOM = (() => {
     const m = 2 * s;                                   // the binding sits below the room name, never through it
     g.strokeStyle = R.rugEdge; g.lineWidth = Math.max(3, 1.5 * s); SPR.rr(g, x0 + m, y0 + m, w - 2 * m, h - 2 * m, 3 * s); g.stroke();
     g.lineWidth = Math.max(1.5, s * 0.6); g.setLineDash([Math.max(3, s * 1.5), Math.max(3, s * 1.5)]);
-    SPR.rr(g, x0 + m + s, y0 + m + s, w - 2 * m - 2 * s, h - 2 * m - 2 * s, 2 * s); g.stroke(); g.setLineDash([]);
+    SPR.rr(g, x0 + m + s, y0 + m + s, w - 2 * m - 2 * s, h - 2 * m - 2 * s, 2 * s); g.stroke(); g.setLineDash([]); g.restore();
   }
 
   function draw(now, f) {
@@ -7809,7 +7828,9 @@ const ROOM = (() => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(bg, 0, 0, W, H);
+    ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);   // world (room) coordinates from here to the label layer
     const M = sim.map, lw = Math.max(0.7, S * 0.35), minPx = 18;
+    SPRB = []; HIDB = []; let nseq = 0;
     // Draw order, back to front: the floor and low furniture; then people and the tall furniture (hide box, cat tree, scratching post) together by their foot line,
     // so a person behind a cat tree is half hidden by it and one in front stands over it; then the cats.
     const R = catR(), ringR = R * 1.55, P = {};
@@ -7818,7 +7839,15 @@ const ROOM = (() => {
     // cat inside a box is left out of the cats' pass instead, and the box alone stands for it.
     const hidden = new Set(sim.cats.filter(c => isHiddenCat(c, P[c.id], S)));
     const people = sim.humans.filter(h => h.mode !== 'shoo' && h.mode !== 'pet');
-    const Q = declutter(P, people, hidden, now);   // drawn positions; P stays the sim's
+    const Q = Object.assign({}, declutter(P, people, hidden, now));   // drawn positions (a copy: a hidden cat is drawn at its box); P stays the sim's
+    // A hiding cat is drawn first, curled up (tail tucked round it) and sized to sit inside its box's
+    // footprint, so the box drawn over it covers it. Its label anchor is the box's centre.
+    for (const c of hidden) {
+      const st = M.stations.find(s => s.type === T.HIDE && P[c.id][0] >= s.x * S && P[c.id][0] <= (s.x + s.w) * S && P[c.id][1] >= s.y * S && P[c.id][1] <= (s.y + s.h) * S);
+      if (!st) continue; const b = stationBox(st), rc = 0.4 * Math.min(b.w, b.h), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      Q[c.id] = [cx, cy];
+      drawCurl(ctx, c, cx, cy, rc); HIDB.push({ id: c.id, cx: cx + ox, cy: cy + oy, r: rc, box: { x: b.x + ox, y: b.y + oy, w: b.w, h: b.h } });
+    }
     const tall = [];
     for (const st of M.stations) {
       let x = st.x * S, y = st.y * S, w = st.w * S, h = st.h * S;
@@ -7856,19 +7885,29 @@ const ROOM = (() => {
     layer.sort((a, b) => a[0] - b[0]);
     for (const [, draw] of layer) draw();
     const sorted = sim.cats.slice().sort((a, b) => Q[a.id][1] - Q[b.id][1]);
-    const icons = [];   // drawn after the name tags, so no tag or later cat ever covers one
+    const labels = [], toC = (x, y) => [x + ox, y + oy];   // labels are placed and drawn in canvas coordinates
+    const tailR = R * 2.2 + R * 0.17 + 1;
     for (const c of sorted) {
-      const [x, y] = Q[c.id], inf = actInfo(sim, c), col = TK.activity[inf.cat];
-      if (c === UI.selected) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, ringR + 3, 0, 7); ctx.stroke(); }
-      // A cat hiding in a box is not drawn; the selected one shows through as a faint outline so it
-      // stays findable. Its hiding is also said by the activity icon over it.
-      if (!hidden.has(c)) drawCat(ctx, c, x, y, now, inf);
-      else if (c === UI.selected) { ctx.globalAlpha = 0.45; drawCat(ctx, c, x, y, now, inf); ctx.globalAlpha = 1; }
-      // the activity, as an icon over the cat. The words live in the readout, where they can be read.
-      // The selected cat's sits just outside its selection ring, so the ring never runs through it.
-      const type = c.act ? c.act.type : A.REST, size = Math.max(14, R * 0.9), off = c === UI.selected ? (ringR + 3 + size / 2) / Math.SQRT2 : ringR * 0.75;
-      icons.push([type, x + off, y - off, size, col]);
+      const [x, y] = Q[c.id], inf = actInfo(sim, c), col = TK.activity[inf.cat], sel = c === UI.selected;
+      if (sel && !hidden.has(c)) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, ringR + 3, 0, 7); ctx.stroke(); }
+      // A hiding cat is already drawn under its box; the selected one also shows through as a dashed
+      // outline of its curl, so it stays findable.
+      const hb = hidden.has(c) && HIDB.find(q => q.id === c.id);
+      if (!hidden.has(c)) { drawCat(ctx, c, x, y, now, inf); nseq++; const hr = Math.max(tailR, sel ? ringR + 3 + 1.5 : 0); SPRB.push({ kind: 'cat', id: c.id, x: x + ox - hr, y: y + oy - hr, w: 2 * hr, h: 2 * hr }); }
+      else if (hb && sel) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(x, y, hb.r + 2, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+      // the activity, as a bubble by the cat. The words live in the readout, where they can be read.
+      // The selected cat's (and a hidden cat's) starts just outside its ring; the others overlap the body's edge.
+      const type = c.act ? c.act.type : A.REST, size = Math.max(14, R * 0.9), body = hb ? hb.r + 2 : sel ? ringR + 3 : ringR * 0.75;
+      const [ax, ay] = toC(x, y), outer = sel || hb;
+      labels.push({ key: 'i' + c.id, kind: 'icon', pri: 2, ax, ay, w: size, h: size, clear: outer ? body : Math.max(0, (body - size / 2) * Math.SQRT2),
+        dirs: ['NE', 'NW', 'SE', 'SW', 'N', 'S', 'E', 'W'], body, draw: (bx, by) => SPR.drawActivityIcon(ctx, type, bx + size / 2, by + size / 2, size, col) });
     }
+    for (const h of people) { const [hx, hy] = DH.get(h), r = headPx(S); SPRB.push({ kind: 'person', x: hx + ox - r, y: hy + oy - r, w: 2 * r, h: 2 * r });
+      // what a staff member is doing with their hands (the scoop, the litter scoop, the vacuum) is said by a bubble
+      const prop = personOf(h).prop, type = { scoop: 'eat', litter: 'litter', vacuum: 'vacuum' }[prop];
+      if (type) { const size = Math.max(14, R * 0.9), ax = hx + ox, ay = hy + oy, body = r * 0.55;
+        labels.push({ key: 'p' + h.id, kind: 'icon', pri: 2, ax, ay, w: size, h: size, clear: body, dirs: ['NE', 'NW', 'SE', 'SW', 'N', 'S', 'E', 'W'], body, draw: (bx, by) => SPR.drawActivityIcon(ctx, type, bx + size / 2, by + size / 2, size, TK.person.uniform) }); } }
+    seq.sprite = ++nseq;
     // The room names sit over the cats on a light backing, so a cat walking past never hides one.
     ctx.font = `${TK.font.weight.bold} ${TK.font.size.ui}px ${TK.font.stack}`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -7880,43 +7919,45 @@ const ROOM = (() => {
     }
     // the selected cat and the hovered cat are named on the room; nobody else is
     ctx.font = `${TK.font.weight.bold} ${TK.font.size.ui}px ${TK.font.stack}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const nameTags = [];
-    for (const c of [UI.selected, hoverCat]) {
+    const pill = (text, h, pri, key, ax, ay, clear, dirs) => { const w = Math.ceil(ctx.measureText(text).width + 2 * TK.space.sm);
+      labels.push({ key, kind: key[0] === 'n' ? 'tag' : 'tip', pri, ax, ay, w, h, clear, dirs, body: clear, text, draw: (bx, by) => {
+        if (key === 'tip') { SPR.drawTooltip(ctx, text, bx - 12, by + h + 8, W, H); return; }   // the sprite library's pill, at the placed spot
+        SPR.rr(ctx, bx, by, w, h, TK.radius.sm); ctx.fillStyle = TK.room.tooltipBg; ctx.fill();
+        ctx.font = `${TK.font.weight.bold} ${TK.font.size.ui}px ${TK.font.stack}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = TK.room.tooltipInk; ctx.fillText(text, bx + w / 2, by + h / 2); } }); };
+    for (const c of [UI.selected, hoverCat === UI.selected ? null : hoverCat]) {
       if (!c || !sim.cats.includes(c)) continue;
-      const [x, y] = Q[c.id], w = ctx.measureText(c.name).width + 2 * TK.space.sm, h = TK.font.line.ui + 6;
-      const bx = Math.max(0, Math.min(W - w, x - w / 2)), by = Math.max(0, y + ringR + 4);
-      SPR.rr(ctx, bx, by, w, h, TK.radius.sm); ctx.fillStyle = TK.room.tooltipBg; ctx.fill();
-      ctx.fillStyle = TK.room.tooltipInk; ctx.fillText(c.name, bx + w / 2, by + h / 2);
-      nameTags.push({ x: bx, y: by, w, h });
+      const [ax, ay] = toC(...Q[c.id]), hb = HIDB.find(q => q.id === c.id);
+      pill(c.name, TK.font.line.ui + 6, 0, 'n' + c.id, ax, ay, hb ? hb.r + 4 : ringR + 4, ['S', 'N', 'E', 'W', 'SE', 'SW', 'NE', 'NW']);
     }
-    for (const [type, ix, iy, size, col] of icons) SPR.drawActivityIcon(ctx, type, ix, iy, size, col);
+    const tipH = TK.font.line.ui + 10, tipDirs = ['NE', 'NW', 'N', 'SE', 'SW', 'S', 'E', 'W'];
+    const tip = (text, x, y, clear) => pill(text, tipH, 1, 'tip', x, y, clear, tipDirs);
     if (drag && !drag.obj.mv) {
       const st = drag.obj, ok = sim.canPlaceStation(st, drag.x, drag.y);
       ctx.globalAlpha = 0.8; SPR.drawObject(ctx, st.type, drag.x * S, drag.y * S, st.w * S, st.h * S, lw); ctx.globalAlpha = 1;
       ctx.strokeStyle = ok ? TK.color.good : TK.color.alert; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
       ctx.strokeRect(drag.x * S, drag.y * S, st.w * S, st.h * S); ctx.setLineDash([]);
     } else if (hoverCat && hoverCat === UI.selected && !UI.pet && typeof sim.pet === 'function') {
-      const [x, y] = Q[hoverCat.id];
-      SPR.drawTooltip(ctx, tr('Click to pet'), x, y - ringR - 4, W, H);
+      tip(tr('Click to pet'), ...toC(...Q[hoverCat.id]), ringR + 4);
     } else if (hoverDoor) {
       const d = doorBox();
-      SPR.drawTooltip(ctx, tr(sim.doors.partition ? 'Quiet-room door: open. Click to close' : 'Quiet-room door: shut. Click to open'), d.x + d.w / 2, d.y, W, H);
+      tip(tr(sim.doors.partition ? 'Quiet-room door: open. Click to close' : 'Quiet-room door: shut. Click to open'), ...toC(d.x + d.w / 2, d.y + d.h / 2), Math.max(d.w, d.h) / 2);
     } else if (drag) {
       // a toy in the hand: it moves with the sim, so it is already drawn where it is
     } else if (hoverObject && hoverObject.mv) {
-      SPR.drawTooltip(ctx, tr('Toy: drag it and the cats chase it'), hoverObject.x * S, hoverObject.y * S, W, H);
+      tip(tr('Toy: drag it and the cats chase it'), ...toC(hoverObject.x * S, hoverObject.y * S), Math.max(4, S * 1.8) + 4);
     } else if (hoverObject) {
       // A litter box names how dirty it is, read off the sim's own soil on that station.
       const name = tr(SPR.OBJECT_NAME[hoverObject.type] || 'Object');
-      SPR.drawTooltip(ctx, hoverObject.type === T.LITTER ? tr('Litter box: {w} ({p}% soiled)', { w: tr(soilWord(hoverObject.soil)), p: Math.round(hoverObject.soil * 100) }) : name, (hoverObject.cx) * S, hoverObject.y * S, W, H);
+      tip(hoverObject.type === T.LITTER ? tr('Litter box: {w} ({p}% soiled)', { w: tr(soilWord(hoverObject.soil)), p: Math.round(hoverObject.soil * 100) }) : name, ...toC(hoverObject.cx * S, hoverObject.y * S), 6);
     } else if (!hoverCat && mouse && UI.markerBox && UI.marker && mouse[0] >= UI.markerBox.x && mouse[0] <= UI.markerBox.x + UI.markerBox.w && mouse[1] >= UI.markerBox.y && mouse[1] <= UI.markerBox.y + UI.markerBox.h) {
       // The marker's number is its line in the event log.
-      SPR.drawTooltip(ctx, tr('Event {n} in the event log', { n: UI.marker.index }), UI.markerBox.x + UI.markerBox.w / 2, UI.markerBox.y, W, H);
+      tip(tr('Event {n} in the event log', { n: UI.marker.index }), UI.markerBox.x + UI.markerBox.w / 2, UI.markerBox.y + UI.markerBox.h / 2, UI.markerBox.h / 2 + 2);
     } else if (!hoverCat && mouse) {
       // A person under the pointer is named by role, the way a cat is named.
-      const h = people.find(q => Math.hypot(DH.get(q)[0] - mouse[0], DH.get(q)[1] - mouse[1]) < personPx(S) / 2);
-      if (h) SPR.drawTooltip(ctx, tr(personOf(h).tag), DH.get(h)[0], DH.get(h)[1] - Math.max(13, 8 * S), W, H);
+      const mw = [mouse[0] - ox, mouse[1] - oy];
+      const h = people.find(q => Math.hypot(DH.get(q)[0] - mw[0], DH.get(q)[1] - mw[1]) < headR(S));
+      if (h) tip(tr(personOf(h).tag), ...toC(...DH.get(h)), Math.max(13, 8 * S));
     }
     if (UI.pet) {
       const p = UI.pet, c = p.cat, r = sim.petting;
@@ -7926,20 +7967,59 @@ const ROOM = (() => {
         const q = SPR.petPose(now - p.start, r.phase, x, y, ang, catR(), p.from[0], p.from[1]);
         SPR.drawHand(ctx, q.x, q.y - q.lift * catR() * 0.35, Math.max(28, catR() * 2.4), q.angle); }
     } else if (!UI.sweep && cv.style.cursor === 'none') cv.style.cursor = SPR.CURSOR.grab;   // a pet ended by Escape
+    // ---- the canvas layer: the hand of a sweep, the event marker, then every label on top of everything.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (UI.sweep) { const k = (now - UI.sweep.start) / SWEEP_MS;
       if (k >= 1 || !mouse) { UI.sweep = null; cv.style.cursor = SPR.CURSOR.grab; }
       else SPR.drawHand(ctx, mouse[0], mouse[1], Math.max(28, catR() * 2.4), 0.6 * Math.sin(k * 2 * Math.PI)); }
+    LBL = placeLabels(labels);
     // A marker points at its log row, so it is drawn only while the log is on screen (on phone landscape
-    // a picked cat's readout takes the log's column).
+    // a picked cat's readout takes the log's column). It keeps clear of the placed labels.
     if (UI.marker && now < UI.marker.until && SOL.byId.log) {
       const logSide = (rect && rect.x > 0) ? 'left' : 'right';     // the log sits behind that edge
-      UI.markerBox = SPR.drawMarker(ctx, UI.marker.kind, UI.marker.x * S, UI.marker.y * S, UI.marker.index, W, H, logSide, now / 1000, nameTags); UI.nameTags = nameTags;
+      UI.markerBox = SPR.drawMarker(ctx, UI.marker.kind, UI.marker.x * S + ox, UI.marker.y * S + oy, UI.marker.index, W, H, logSide, now / 1000, LBL); UI.nameTags = LBL.filter(l => l.kind === 'tag');
     } else if (UI.marker) { UI.marker = null; renderAll(); }
+    seq.label = ++nseq;
+    for (const l of LBL) {
+      if (l.lead) { const dx = l.x + l.w / 2 - l.ax, dy = l.y + l.h / 2 - l.ay, d = Math.hypot(dx, dy) || 1;
+        const ex = Math.max(l.x, Math.min(l.x + l.w, l.ax)), ey = Math.max(l.y, Math.min(l.y + l.h, l.ay));
+        ctx.strokeStyle = TK.room.tooltipBg; ctx.globalAlpha = 0.75; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(l.ax + dx / d * l.body, l.ay + dy / d * l.body); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1; }
+      l.draw(l.x, l.y);
+    }
+  }
+
+  // ---- label placement (canvas coordinates). Each label tries spots around its body (its own list of
+  // directions, at the body's clearance, then ring by ring further out), clamped inside the canvas, and
+  // takes the first that touches no label already placed. Last frame's spot is tried first while it is
+  // free, so nothing flickers. A label moved well away from its body gets a thin leader line to it.
+  // Order: name tags, the tooltip, then activity bubbles by cat id. Deterministic: no randomness.
+  const DIRV = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0], NE: [0.7071, -0.7071], NW: [-0.7071, -0.7071], SE: [0.7071, 0.7071], SW: [-0.7071, 0.7071] };
+  function placeLabels(L) {
+    const out = [], gap = 2, seen = new Set();
+    const hit = (x, y, w, h) => { let a = 0; for (const p of out) { const ix = Math.min(x + w, p.x + p.w) + gap - Math.max(x, p.x), iy = Math.min(y + h, p.y + p.h) + gap - Math.max(y, p.y); if (ix > 0 && iy > 0) a += ix * iy; } return a; };
+    L.sort((a, b) => a.pri - b.pri || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    for (const l of L) {
+      const nd = l.dirs.length, step = Math.max(10, Math.min(l.w, l.h));
+      const cand = k => { const ring = Math.floor(k / nd), [ux, uy] = DIRV[l.dirs[k % nd]], d = l.clear + ring * step;
+        let x = l.ax + ux * d + (Math.sign(ux) - 1) * l.w / 2, y = l.ay + uy * d + (Math.sign(uy) - 1) * l.h / 2;
+        x = Math.max(1, Math.min(W - 1 - l.w, x)); y = Math.max(1, Math.min(H - 1 - l.h, y)); return [x, y, ring]; };
+      const n = nd * 14, prev = lblPrev.get(l.key);
+      let best = null, bestA = Infinity;
+      for (let i = -1; i < n; i++) { const k = i < 0 ? prev : i; if (k == null || k >= n) continue;
+        const [x, y, ring] = cand(k), a = hit(x, y, l.w, l.h);
+        if (a < bestA) { bestA = a; best = [x, y, ring, k]; } if (a === 0) break; }
+      const [x, y, ring, k] = best; lblPrev.set(l.key, k); seen.add(l.key);
+      const far = Math.hypot(x + l.w / 2 - l.ax, y + l.h / 2 - l.ay) > l.clear + Math.max(l.w, l.h) * 1.3;
+      out.push(Object.assign(l, { x, y, lead: ring > 0 || far }));
+    }
+    for (const key of [...lblPrev.keys()]) if (!seen.has(key)) lblPrev.delete(key);
+    return out;
   }
 
   // ---- input. Nothing here changes a rectangle: the layout engine enumerates these pointer states
   // and asserts the geometry is identical in all of them.
-  const at = e => { const r = cv.getBoundingClientRect(), p = e.touches && e.touches[0] ? e.touches[0] : e; return [p.clientX - r.left, p.clientY - r.top]; };
+  const at = e => { const r = cv.getBoundingClientRect(), p = e.touches && e.touches[0] ? e.touches[0] : e; return [p.clientX - r.left - ox, p.clientY - r.top - oy]; };   // room coordinates
   function catAt(mx, my) { let b = null, bd = catR() * 1.8; for (const c of sim.cats) { const p = D[c.id] || [c.x * S, c.y * S], d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; b = c; } } return b; }
   // Petting: the sim decides (sim.pet); the room draws the one hand at the pose for the phase the sim reports.
   // The sim's live record is sim.petting ({ catId, phase, until }, null when idle); UI.pet only keeps what the
@@ -8000,7 +8080,9 @@ const ROOM = (() => {
     }
     downAt = null;
   }
-  return { attach, place, draw, get S() { return S; }, get declutter() { return dcOn; }, set declutter(v) { dcOn = !!v; dcOff.clear(); dcLast = null; }, declutterStats: () => dcStats, drawnAt: id => D[id], get W() { return W; }, get H() { return H; }, invalidate() { bg = null; } };
+  return { attach, place, draw, get S() { return S; }, get declutter() { return dcOn; }, set declutter(v) { dcOn = !!v; dcOff.clear(); dcLast = null; }, declutterStats: () => dcStats, drawnAt: id => D[id], get W() { return W; }, get H() { return H; }, invalidate() { bg = null; },
+    // what the last frame drew, in canvas coordinates, for the checks
+    origin: () => [ox, oy], labels: () => LBL.map(l => ({ key: l.key, kind: l.kind, x: l.x, y: l.y, w: l.w, h: l.h, lead: l.lead, text: l.text || null })), sprites: () => SPRB.slice(), hidden: () => HIDB.slice(), order: () => Object.assign({}, seq) };
 })();
 
 // A cat seen from above, drawn TK.size.catScale times true scale (true scale: nose to rump is 2.33 R, so
@@ -8134,6 +8216,19 @@ function drawStation(ctx, b, lw) {
   if (hoverObject === b.st) { ctx.strokeStyle = TK.color.accent; ctx.lineWidth = 2; SPR.rr(ctx, b.x - 2, b.y - 2, b.w + 4, b.h + 4, 6); ctx.stroke(); }
 }
 // A cat is hidden when it is hiding and its drawn position is inside a hide box: then the box covers it.
+// A hiding cat curled up in its box: a round body with the tail wrapped round it and the head tucked
+// on top, radius r in all (tail included), so the box drawn over it covers it whole.
+function drawCurl(g, c, x, y, r) {
+  const K = TK.coat[c.coat] || TK.coat.grey, CI = TK.cat, head = K.pattern === 'point' ? K.mark : K.base;
+  g.save(); g.translate(x, y); g.rotate(Math.atan2(c.fy, c.fx));
+  g.lineWidth = Math.max(1, r * 0.08); g.strokeStyle = CI.edge;
+  g.beginPath(); g.arc(0, 0, r * 0.74, 0, 7); g.fillStyle = K.base; g.fill(); g.stroke();
+  g.lineCap = 'round'; g.lineWidth = r * 0.22; g.strokeStyle = K.pattern === 'point' ? K.mark : K.base;
+  g.beginPath(); g.arc(0, 0, r * 0.86, 0.3, 2.9); g.stroke();
+  g.lineWidth = Math.max(1, r * 0.06); g.strokeStyle = CI.edge; g.beginPath(); g.arc(0, 0, r * 0.98, 0.3, 2.9); g.stroke();
+  g.beginPath(); g.arc(r * 0.38, -r * 0.1, r * 0.34, 0, 7); g.fillStyle = head; g.fill(); g.stroke();
+  g.restore();
+}
 function isHiddenCat(c, p, S) {
   if (!c.act || c.act.type !== A.HIDE) return false;
   return sim.map.stations.some(st => st.type === T.HIDE && p[0] >= st.x * S && p[0] <= (st.x + st.w) * S && p[1] >= st.y * S && p[1] <= (st.y + st.h) * S);
@@ -8159,76 +8254,72 @@ const PERSON_M = 0.58;
 // positions, speeds and distances are untouched.
 const PERSON_EXAG = 2.2;
 const personPx = S => Math.max(40, PERSON_M * TK.size.catScale * PERSON_EXAG / sim.cfg.tile * S);
-function drawPerson(g, h, x, y, m) {
-  const P = personOf(h), RM = TK.room, ink = TK.color.ink, k = m / PERSON_M;   // k: px per metre
+// A person is only a head seen from above. ASSUMPTION (display only): the drawn head's diameter is HEAD_PX
+// times a cat's drawn body length (CAT_BODY_R cat radii, nose to rump), so a person never dwarfs the cats;
+// it does not follow PERSON_EXAG. Drawn in head units: the head is an ellipse 1.0 long (the way the person
+// faces, +x) by 0.88 wide; every hair style stays within 1.08 of it, except a tail behind, at most 0.5 more.
+const HEAD_PX = 1.1, CAT_BODY_R = 2.2;
+const headR = S => 0.5 * HEAD_PX * CAT_BODY_R * Math.max(5, 3.85 * S * TK.size.catScale);   // px, the head's long radius
+const headPx = S => 1.5 * headR(S);   // px, the farthest anything of a person is drawn from its centre (a ponytail's tip)
+function drawPerson(g, h, x, y) {
+  const RM = TK.room, u = headR(ROOM.S);
   const dx = h.x - (h._px === undefined ? h.x : h._px), dy = h.y - (h._py === undefined ? h.y : h._py);
   if (Math.hypot(dx, dy) > 0.02) h._ang = Math.atan2(dy, dx); else if (h._ang === undefined) h._ang = 0;
   h._px = h.x; h._py = h.y;
-  const lw = Math.max(1, m * 0.025);
-  g.save(); g.translate(x, y); g.rotate(h._ang);          // +x is the way the person faces
-  g.fillStyle = RM.shadow; g.beginPath(); g.ellipse(-0.03 * k, 0.04 * k, 0.17 * k, 0.32 * k, 0, 0, 7); g.fill();
-  // The prop, held out in front: a food scoop, a litter scoop, or the vacuum pushed on its pole. Standing
-  // still (at a bowl or a litter box) the prop works back and forth; walking, it is carried steady.
-  const still = Math.hypot(dx, dy) <= 0.02, work = still && P.prop ? Math.sin(performance.now() / 180) * 0.05 * k : 0;
-  g.translate(work, 0);
-  g.fillStyle = RM.propInk; g.strokeStyle = RM.propInk; g.lineWidth = Math.max(1.5, 0.03 * k);
-  if (P.prop === 'scoop') { g.beginPath(); g.moveTo(0.1 * k, 0.24 * k); g.lineTo(0.3 * k, 0.2 * k); g.stroke(); g.beginPath(); g.arc(0.34 * k, 0.2 * k, 0.06 * k, 0, 7); g.fill(); }
-  else if (P.prop === 'litter') { g.beginPath(); g.moveTo(0.1 * k, 0.24 * k); g.lineTo(0.28 * k, 0.2 * k); g.stroke(); g.fillRect(0.28 * k, 0.14 * k, 0.12 * k, 0.12 * k); }
-  else if (P.prop === 'vacuum') { g.beginPath(); g.moveTo(0.12 * k, 0); g.lineTo(0.46 * k, 0); g.stroke(); g.fillRect(0.46 * k, -0.15 * k, 0.09 * k, 0.3 * k); }
-  g.translate(-work, 0);
-  // Arms hang at the sides, a little forward when holding something: a sleeve from the shoulder, then the
-  // bare forearm and the hand, slightly ahead of the shoulder line.
-  const L = lookOf(h), PT = TK.person, sw = L.male ? 0.225 : 0.195, fwd = P.prop ? 0.07 * k : 0.02 * k;
+  const L = lookOf(h), PT = TK.person, lw = Math.max(1, u * 0.07) / u, RY = 0.88;
+  const head = () => { g.beginPath(); g.ellipse(0, 0, 1, RY, 0, 0, 7); };
+  g.save(); g.translate(x, y); g.rotate(h._ang); g.scale(u, u);          // +x is the way the person faces
+  g.fillStyle = RM.shadow; g.beginPath(); g.ellipse(-0.05, 0.1, 1.05, 0.95, 0, 0, 7); g.fill();
   g.strokeStyle = PT.outline; g.lineWidth = lw;
-  for (const s of [-1, 1]) {
-    const ay = s * (sw + 0.02) * k, hx = fwd * (s > 0 ? 1.4 : 0.7) + 0.05 * k;
-    g.fillStyle = L.skin; g.beginPath(); g.ellipse(hx * 0.6, ay, 0.085 * k, 0.034 * k, 0, 0, 7); g.fill(); g.stroke();   // forearm
-    g.beginPath(); g.arc(hx + 0.05 * k, ay, 0.036 * k, 0, 7); g.fill(); g.stroke();                                     // hand
-    g.fillStyle = L.shirt; g.beginPath(); g.ellipse(-0.01 * k, ay * 0.97, 0.07 * k, 0.045 * k, 0, 0, 7); g.fill(); g.stroke();  // sleeve
-  }
-  // Shoulders and back: a rounded slab, broader on a man (0.45 m) than a woman (0.39 m), 0.25 m deep,
-  // with a collar at the neck on the side the person faces.
-  g.fillStyle = L.shirt; g.beginPath(); g.ellipse(0, 0, 0.125 * k, sw * k, 0, 0, 7); g.fill(); g.stroke();
-  g.fillStyle = L.collar; g.beginPath(); g.ellipse(0.035 * k, 0, 0.05 * k, 0.085 * k, 0, -Math.PI / 2, Math.PI / 2); g.fill();
-  // Ears either side of the head, then the head, then the nose tip pointing the way the person faces.
+  const st = L.hair;
+  // behind the head: a long style's short fall, a ponytail, a bun's knot (inside the bound)
+  g.fillStyle = L.hairCol;
+  if (st === 'long') { g.beginPath(); g.ellipse(-0.98, 0, 0.32, 0.5, 0, 0, 7); g.fill(); g.stroke(); }
+  if (st === 'ponytail') { g.beginPath(); g.ellipse(-1.12, 0, 0.36, 0.15, 0, 0, 7); g.fill(); g.stroke(); }
+  // ears either side, the head in skin (the face is what stays bare toward the front), the nose tip
   g.fillStyle = L.skin;
-  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(0.005 * k, s * 0.082 * k, 0.026 * k, 0.018 * k, 0, 0, 7); g.fill(); g.stroke(); }
-  g.beginPath(); g.ellipse(0.015 * k, 0, 0.1 * k, 0.078 * k, 0, 0, 7); g.fill(); g.stroke();
-  g.beginPath(); g.moveTo(0.1 * k, -0.02 * k); g.quadraticCurveTo(0.148 * k, 0, 0.1 * k, 0.02 * k); g.closePath(); g.fill(); g.stroke();
-  drawHair(g, L, k, lw);
+  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(0.1, s * 0.9, 0.13, 0.15, 0, 0, 7); g.fill(); g.stroke(); }
+  g.beginPath(); g.moveTo(0.95, -0.14); g.quadraticCurveTo(1.18, 0, 0.95, 0.14); g.closePath(); g.fill(); g.stroke();
+  head(); g.fill(); g.stroke();
+  // the hair over the back and sides of the head, clipped to it, with its front edge across the crown
+  if (st !== 'bald') {
+    const front = st === 'buzz' ? -0.05 : st === 'curly' ? 0.35 : 0.25;
+    g.save(); head(); g.clip();
+    g.fillStyle = L.hairCol; if (st === 'buzz') g.globalAlpha = 0.75;
+    g.beginPath(); g.moveTo(front, -1); g.quadraticCurveTo(front + 0.25, 0, front, 1); g.lineTo(-1.2, 1); g.lineTo(-1.2, -1); g.closePath(); g.fill();
+    g.restore();
+    if (st === 'curly') {   // a bumpy edge on the head's outline: bumps of 0.16 centred at 0.92, so within 1.08
+      g.fillStyle = L.hairCol;
+      for (let i = 0; i <= 10; i++) { const t = Math.PI * (0.42 + i * 1.16 / 10); g.beginPath(); g.arc(Math.cos(t) * 0.92, Math.sin(t) * 0.92 * RY, 0.16, 0, 7); g.fill(); g.stroke(); }
+      for (let i = 1; i <= 10; i++) { const t = -Math.PI * (0.42 + i * 1.16 / 10); g.beginPath(); g.arc(Math.cos(t) * 0.92, Math.sin(t) * 0.92 * RY, 0.16, 0, 7); g.fill(); g.stroke(); }
+    }
+    if (st === 'bun') { g.fillStyle = L.hairCol; g.beginPath(); g.arc(-0.72, 0, 0.26, 0, 7); g.fill(); g.stroke(); }
+    head(); g.stroke();
+  }
+  // Staff wear a uniform cap: a green crown patch over the top of the head and a short brim toward the
+  // face, so hair shows at the back and sides and the ears and nose stay in view.
+  if (personOf(h).staff) {
+    g.fillStyle = PT.uniform;
+    g.beginPath(); g.ellipse(0.42, 0, 0.26, 0.42, 0, -Math.PI / 2, Math.PI / 2); g.fill(); g.stroke();   // brim
+    g.beginPath(); g.ellipse(-0.08, 0, 0.56, 0.52, 0, 0, 7); g.fill(); g.stroke();                       // crown
+    g.fillStyle = PT.outline; g.beginPath(); g.arc(-0.08, 0, 0.07, 0, 7); g.fill();                        // button
+  }
   g.restore();
-}
-// Hair over the crown and the back of the head, by style. The face side (+x) is left bare.
-function drawHair(g, L, k, lw) {
-  const st = L.hair, fill = () => { g.fill(); g.stroke(); };
-  g.fillStyle = L.hairCol; g.strokeStyle = TK.person.outline; g.lineWidth = lw * 0.8;
-  if (st === 'bald') return;
-  if (st === 'long') { g.beginPath(); g.ellipse(-0.075 * k, 0, 0.075 * k, 0.12 * k, 0, 0, 7); fill(); }       // falls onto the shoulders
-  if (st === 'ponytail') { g.beginPath(); g.ellipse(-0.16 * k, 0, 0.075 * k, 0.03 * k, 0, 0, 7); fill(); }
-  if (st === 'bun') { g.beginPath(); g.arc(-0.1 * k, 0, 0.042 * k, 0, 7); fill(); }
-  if (st === 'curly') {
-    for (let i = 0; i < 9; i++) { const t = Math.PI * (0.45 + i * 1.1 / 8); g.beginPath(); g.arc(0.012 * k + Math.cos(t) * 0.085 * k, Math.sin(t) * 0.07 * k, 0.03 * k, 0, 7); fill(); }
-    for (let i = 0; i < 9; i++) { const t = -Math.PI * (0.45 + i * 1.1 / 8); g.beginPath(); g.arc(0.012 * k + Math.cos(t) * 0.085 * k, Math.sin(t) * 0.07 * k, 0.03 * k, 0, 7); fill(); }
-  }
-  // the cap of hair: a buzz cut is a thin, close crop; the rest reach further toward the brow
-  const front = st === 'buzz' ? 0.045 : st === 'short' || st === 'curly' ? 0.075 : 0.06;
-  if (st === 'buzz') g.globalAlpha = 0.75;
-  g.beginPath(); g.ellipse(0.015 * k, 0, 0.102 * k, 0.08 * k, 0, Math.acos(front / 0.102) , -Math.acos(front / 0.102));
-  g.closePath(); g.fill(); if (st !== 'buzz') g.stroke(); g.globalAlpha = 1;
-  if (st === 'long' || st === 'short' || st === 'ponytail' || st === 'bun') {   // a parting down the middle
-    g.strokeStyle = TK.person.outline; g.globalAlpha = 0.35; g.beginPath(); g.moveTo((0.015 + front) * k, 0); g.lineTo(-0.06 * k, 0); g.stroke(); g.globalAlpha = 1;
-  }
 }
 // Each person's look, from a hash of their id: no draw from the sim's random stream, so the same person
 // always looks the same and a headless run is unchanged. Staff wear the uniform; visitors their own shirt.
 const HAIR_STYLES = { male: ['short', 'short', 'buzz', 'bald', 'curly', 'short'], female: ['long', 'ponytail', 'bun', 'curly', 'short', 'long'] };
-const HAIR_COLS = ['black', 'brown', 'brown', 'blonde', 'red', 'grey'];
+const HAIR_COLS = ['black', 'brown', 'darkBrown', 'blonde', 'red', 'auburn', 'grey'];
+// Hair colour is a random pick per person when they first come into view (Math.random, never the sim's
+// stream), kept for that person object for as long as it is in the room.
+const HAIR_OF = new WeakMap();
+function hairOf(h) { let n = HAIR_OF.get(h); if (!n) { n = HAIR_COLS[Math.floor(Math.random() * HAIR_COLS.length)]; HAIR_OF.set(h, n); } return n; }
 function hashId(id) { let x = 2166136261; for (const ch of String(id)) { x ^= ch.charCodeAt(0); x = Math.imul(x, 16777619); } return x >>> 0; }
 function lookOf(h) {
   if (h._look && h._look.id === h.id && h._look.mode === h.mode) return h._look;
   const PT = TK.person; let x = hashId(h.id);
   const pick = arr => { x = Math.imul(x ^ (x >>> 15), 2246822507) >>> 0; x = (x ^ (x >>> 13)) >>> 0; return arr[x % arr.length]; };
-  const male = pick([true, false]), staff = personOf(h).staff, hairName = pick(HAIR_COLS);
+  const male = pick([true, false]), staff = personOf(h).staff, hairName = hairOf(h);
   const L = { id: h.id, mode: h.mode, male, hair: pick(male ? HAIR_STYLES.male : HAIR_STYLES.female), hairName, hairCol: PT.hair[hairName],
     skin: pick(PT.skin), shirt: staff ? PT.uniform : pick(PT.shirt) };
   L.collar = staff ? PT.trousers : L.skin;   // a staff polo's dark collar; a visitor's open neck
@@ -9006,7 +9097,7 @@ root.Play = {
   get view() { return UI.view; }, get form() { return FORM; },
   get layout() { return SOL; }, get statsLayout() { return STATS.solution; },
   get state() { return UI; },
-  S: () => ROOM.S,
+  S: () => ROOM.S, origin: () => ROOM.origin(), roomLabels: () => ROOM.labels(), roomSprites: () => ROOM.sprites(), roomHidden: () => ROOM.hidden(), roomOrder: () => ROOM.order(),
   // the render-time declutter: on/off (for a before/after), and the last frame's overlap, raw vs drawn
   get declutter() { return ROOM.declutter; }, set declutter(v) { ROOM.declutter = v; },
   declutterStats: () => ROOM.declutterStats(), drawnAt: id => ROOM.drawnAt(id), drawRoom: (now, f) => ROOM.draw(now, f),
